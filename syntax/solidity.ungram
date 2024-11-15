@@ -1,0 +1,439 @@
+// Rust Un-Grammar.
+//
+// This grammar specifies the structure of Rust's concrete syntax tree.
+// It does not specify parsing rules (ambiguities, precedence, etc are out of scope).
+// Tokens are processed -- contextual keywords are recognised, compound operators glued.
+//
+// Legend:
+//
+//   //          -- comment
+//   Name =      -- non-terminal definition
+//   'ident'     -- token (terminal)
+//   A B         -- sequence
+//   A | B       -- alternation
+//   A*          -- zero or more repetition
+//   A?          -- zero or one repetition
+//   (A)         -- same as A
+//   label:A     -- suggested name for field of AST node
+
+//*************************//
+// Names, Paths and Macros //
+//*************************//
+
+Name =
+  'ident'
+
+NameRef =
+  'ident'
+
+Path = 
+  'string'
+
+Symbol = 'ident'
+| '*'
+
+IdentPath = segment:NameRef*
+
+IdentPathType = segment:NameRef*
+
+DataLocation = 'memory'
+| 'storage'
+| 'calldata'
+
+UserDefineableOperator = '&'
+| '~'
+| '|'
+| '^'
+| '+'
+| '/'
+| '%'
+| '*'
+| '-'
+| '=='
+| '>'
+| '>='
+| '<'
+| '<='
+| '!='
+
+Literal =
+  StringLiteral
+| HexStringLiteral
+| DecimalNumberLiteral
+| HexNumberLiteral
+
+StringLiteral =
+  'string'*
+
+HexStringLiteral =
+  'hex_string'*
+
+DecimalNumberLiteral =
+  'decimal_number'
+
+HexNumberLiteral =
+  'hex_number'
+
+ElementaryType =
+  'elementary_type_ident' 'payable'?
+
+//*************************//
+//          Items          //
+//*************************//
+
+UnitSource =
+  Item*
+
+Item =
+  Pragma
+| Import
+| Using
+| Contract
+| NamedFunctionDefinition
+| StateVariableDeclaration
+| StructDefinition
+| EnumDefinition
+| UserDefinedValueTypeDefinition
+| ErrorDefinition
+| EventDefinition
+
+Pragma =
+  'pragma' data:PragmaData* ';'
+
+PragmaData =
+  'pragma_token'
+
+Import =
+  'import' ImportItem ';'
+
+ImportItem =
+  ImportPath
+| ImportSymbols
+
+ImportPath =
+  Path ('as' Name)?
+
+ImportSymbols =
+  (SymbolAliases | SymbolAlias) 'from' Path
+
+SymbolAliases =
+  '{' (SymbolAlias (',' SymbolAlias)*)? '}'
+
+SymbolAlias =
+  Symbol ('as' Name)?
+
+Using =
+  'using' UsingItem 'for' UsingTarget? 'global'? ';'
+
+UsingItem =
+  IdentPath
+| UsingAliases
+
+UsingAliases =
+  '{' (UsingAlias (',' UsingAlias)*)? '}'
+
+UsingAlias =
+  IdentPath ('as' UserDefineableOperator)?
+
+UsingTarget =
+  '*'
+| Type
+
+Type =
+  ElementaryType
+| FunctionType
+| MappingType
+| IdentPathType
+| ArrayType
+
+ArrayType = Type '[' Expr? ']'
+
+FunctionType =
+  'function' '(' ParameterList ')' FunctionModifier* Returns?
+
+FunctionModifier = 'internal'
+| 'external'
+| 'private'
+| 'public'
+| 'pure'
+| 'view'
+| 'payable'
+
+Returns =
+  'returns' '(' ParameterList? ')'
+
+ParameterList =
+  Parameter (',' Parameter)*
+
+Parameter =
+  type:Type
+  location:DataLocation?
+  name:Name
+
+MappingType =
+  'mapping' '(' key:MappingKey '->' val:MappingValue ')'
+
+MappingKey =
+  ty:Type Name?
+
+MappingValue =
+  ty:Type Name?
+
+MappingKeyType =
+  ElementaryType
+| IdentPath
+
+Expr =
+  IndexExpr
+| SliceExpr
+| MemberAccessExpr
+| NewExpr
+| InfixExpr
+| PrefixExpr
+| PostfixExpr
+| CallOptionsExpr
+| CallExpr
+| TernaryExpr
+| TupleExpr
+| IdentExpr
+| LiteralExpr
+| ElementaryType
+
+IdentExpr = NameRef
+
+LiteralExpr = Literal
+
+IndexExpr =
+  Expr '[' index:Expr? ']'
+
+SliceExpr =
+  Expr '[' start:Expr? ':' end:Expr? ']'
+
+MemberAccessExpr =
+  Expr '.' field:NameRef
+
+InfixExpr =
+  lhs:Expr
+  op:(
+    '.' | '**' | '*' | '/' | '%' | '+' | '-' | '>>' | '<<' | '&' | '^' | '|'
+  | '>' | '>=' | '<' | '<=' | '!=' | '==' | '&&' | '||' | '=' | '|=' | '^='
+  | '&=' | '<<=' | '>>=' | '+=' | '-=' | '*=' | '/=' | '%='
+  )
+  rhs:Expr
+
+NewExpr = 'new' ty:Type
+
+PrefixExpr =
+  op: ('delete' | '++' | '--' | '!' | '~' | '-')
+  rhs: Expr
+
+PostfixExpr =
+  op: ('++' | '--')
+  rhs: Expr
+
+TernaryExpr =
+  Expr '?' Expr ':' Expr
+
+CallOptionsExpr =
+  Expr options:CallOptions
+
+CallOptions =
+  '{' (CallOption (',' CallOption)*)? '}'
+
+CallOption =
+  NameRef ':' Expr
+
+CallExpr =
+  Expr '(' CallArgumentList ')'
+
+CallArgumentList =
+  CallArguments
+| NamedCallArguments
+
+CallArguments =
+  (Expr (',' Expr)*)?
+
+NamedCallArguments =
+  '{' (NamedCallArgument (',' NamedCallArgument)*)? '}'
+
+NamedCallArgument =
+  NameRef ':' Expr
+
+TupleExpr =
+  '(' (Expr (',' Expr)*)? ')'
+
+Contract =
+  'abstract'? ('contract' | 'interface' | 'library') Name Inheritance? '{' ContractItem* '}'
+
+Inheritance =
+  'is' (InheritanceSpecifier (',' InheritanceSpecifier)*)?
+
+InheritanceSpecifier =
+  IdentPath ('(' CallArgumentList ')')?
+
+ContractItem =
+  ConstructorDefinition
+| ModifierDefinition
+| NamedFunctionDefinition
+| FallbackFunctionDefinition
+| ReceiveFunctionDefinition
+| StructDefinition
+| EnumDefinition
+| UserDefinedValueTypeDefinition
+| StateVariableDeclaration
+| EventDefinition
+| ErrorDefinition
+| Using
+
+ConstructorDefinition =
+  'constructor' '(' ParameterList ')' FunctionAttribute* Block
+
+ModifierAttribute =
+  'virtual'
+| OverrideSpecifier
+
+ModifierDefinition =
+  'modifier' Name ('(' ParameterList ')')? ModifierAttribute* (Block | ';')
+
+NamedFunctionDefinition =
+  'function' (Name | 'fallback' | 'receive')? '(' ParameterList ')' FunctionAttribute* Returns? (Block | ';')?
+
+FallbackFunctionDefinition =
+  'fallback' '(' ParameterList? ')' FunctionAttribute* Returns? (Block | ';')
+
+ReceiveFunctionDefinition =
+  'receive' '(' ')' FunctionAttribute* (Block | ';')
+
+FunctionDefinition =
+  NamedFunctionDefinition
+| FallbackFunctionDefinition
+| ReceiveFunctionDefinition
+
+FunctionAttribute =
+  'internal'
+| 'external'
+| 'private'
+| 'public'
+| 'pure'
+| 'view'
+| 'payable'
+| 'virtual'
+| ModifierInvocation
+| OverrideSpecifier
+
+OverrideSpecifier =
+  'override' ('(' (IdentPath (',' IdentPath)*)? ')')?
+
+ModifierInvocation =
+  IdentPath ('(' CallArgumentList ')')?
+
+Block =
+  'unchecked'? '{' Stmt* '}'
+
+StructDefinition =
+  'struct' Name '{' StructMember* '}'
+
+StructMember =
+  Type Name ';'
+
+EnumDefinition =
+  'enum' Name '{' (EnumMember (',' EnumMember)*)? '}'
+
+EnumMember =
+  Name
+
+UserDefinedValueTypeDefinition =
+  'type' Name 'is' Type ';'
+
+StateVariableAttribute = 'internal'
+| 'external'
+| 'private'
+| 'public'
+| 'const'
+| 'immutable'
+| OverrideSpecifier
+
+StateVariableDeclaration =
+  Type StateVariableAttribute* Name ('=' Expr)? ';'
+
+EventDefinition =
+  'event' Name '(' (EventParameter (',' EventParameter)*)? ')' 'anonymous'? ';'
+
+EventParameter =
+  Type 'indexed'? Name?
+
+ErrorDefinition =
+  'error' Name '(' (ErrorParameter (',' ErrorParameter)*)? ')' ';'
+
+ErrorParameter =
+  Type Name?
+
+Stmt =
+  Block
+| ExprStmt
+| IfStmt
+| VariableDeclarationStmt
+| ForStmt
+| WhileStmt
+| DoWhileStmt
+| ContinueStmt
+| BreakStmt
+| TryStmt
+| ReturnStmt
+| EmitStmt
+| RevertStmt
+| AssemblyStmt
+
+ExprStmt =
+  Expr ';'
+
+IfStmt =
+  'if' '(' cond:Expr ')' body:Stmt ('else' elseBody:Stmt)?
+
+VariableDeclarationStmt = VariableDeclarationItem ('=' init:Expr)? ';'
+
+VariableDeclarationItem =
+  Parameter
+| VariableTupleDeclaration
+
+VariableTupleDeclaration =
+  '(' VariableTupleElement* ')'
+
+VariableTupleElement =
+  Parameter? ','?
+
+ForStmt =
+  'for' '(' (ExprStmt | VariableDeclarationStmt | ';') Expr? ';' Expr? ')' Stmt
+
+WhileStmt =
+  'while' '(' cond:Expr ')' Stmt
+
+DoWhileStmt =
+  'do' Stmt 'while' '(' cond:Expr ')' ';'
+
+ContinueStmt =
+  'continue' ';'
+
+BreakStmt =
+  'break' ';'
+
+TryStmt =
+  'try' Expr Returns? Block CatchClause*
+
+CatchClause =
+  'catch' NameRef ('(' ParameterList ')')? Block
+
+ReturnStmt =
+  'return' Expr? ';'
+
+EmitStmt =
+  'emit' Expr '(' CallArgumentList ')' ';'
+
+RevertStmt =
+  'revert' Expr '(' CallArgumentList ')' ';'
+
+AssemblyStmt =
+  'assembly' AssemblyFlag* '{' '}'
+
+AssemblyFlag =
+  'string'

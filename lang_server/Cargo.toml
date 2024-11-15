@@ -1,0 +1,20 @@
+[package]
+name = "lang_server"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+futures.workspace = true
+async-lsp = "0.2.0"
+tokio = { version = "1.41.0", features = ["full"] }
+tracing-subscriber = "0.3.18"
+tokio-util = { version = "0.7.12", features = ["compat"] }
+tower = "0.5.1"
+dashmap = "6.1.0"
+tracing.workspace = true
+base_db.workspace = true
+salsa.workspace = true
+hir_def.workspace = true
+rowan.workspace = true
+line-index.workspace = true
+ide.workspace = true

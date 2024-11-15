@@ -1,0 +1,26 @@
+[package]
+name = "hir_def"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+crate-type = ["lib"]
+
+[dependencies]
+vfs.workspace = true
+la-arena = "0.3.1"
+tracing = "0.1.40"
+syntax.workspace = true
+salsa.workspace = true
+rowan.workspace = true
+parser.workspace = true
+base_db.workspace = true
+span.workspace = true
+num-bigint.workspace = true
+indexmap.workspace = true
+derive_more.workspace = true
+sorted-vec.workspace = true
+line-index = "0.1.2"
+
+[dev-dependencies]
