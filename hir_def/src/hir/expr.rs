@@ -1,20 +1,23 @@
 use crate::hir::ident::Ident;
 use crate::hir::literal::Literal;
+use crate::hir::source_unit::Item;
 use crate::hir::type_name::{ElementaryTypeRef, TypeRef};
 use crate::hir::{BinaryOp, CallOption, PostfixOp, PrefixOp};
-use crate::item_tree::print::HirPrint;
-use crate::item_tree::DefWithBody;
-use crate::{lazy_field, FileAstPtr};
+use crate::items::HirPrint;
+use crate::{impl_has_origin, lazy_field, FileAstPtr};
+use rowan::ast::AstPtr;
 use salsa::Database;
 use std::fmt::Write;
 use syntax::ast::nodes;
+
+use super::type_name::walk_type_ref;
 
 #[salsa::tracked]
 pub struct ExprId<'db> {
     #[return_ref]
     pub kind: Expr<'db>,
 
-    pub node: Option<FileAstPtr<nodes::Expr>>,
+    pub node: Option<AstPtr<nodes::Expr>>,
 }
 
 impl HirPrint for ExprId<'_> {
@@ -23,37 +26,7 @@ impl HirPrint for ExprId<'_> {
     }
 }
 
-lazy_field!(ExprId<'db>, owner, set_owner, DefWithBody<'db>);
-
-fn walk_type_ref<'db>(
-    t: &TypeRef<'db>,
-    db: &'db dyn Database,
-    expr_fn: &mut impl FnMut(ExprId<'db>),
-) {
-    match t {
-        TypeRef::Elementary(_) => {}
-        TypeRef::Function { arguments, visibility: _, mutability: _, returns } => {
-            for a in arguments {
-                walk_type_ref(&a.ty(db), db, expr_fn);
-            }
-            for a in returns {
-                walk_type_ref(&a.ty(db), db, expr_fn);
-            }
-        }
-        TypeRef::Mapping { key_type, key_name: _, value_type, value_name: _ } => {
-            walk_type_ref(key_type, db, expr_fn);
-            walk_type_ref(value_type, db, expr_fn);
-        }
-        TypeRef::Path(_) => {}
-        TypeRef::Array { ty, len } => {
-            walk_type_ref(ty, db, expr_fn);
-            if let Some(len) = len {
-                len.walk(db, expr_fn);
-            }
-        }
-        TypeRef::Error => {}
-    }
-}
+lazy_field!(ExprId<'db>, owner, set_owner, Item<'db>);
 
 impl<'db> ExprId<'db> {
     pub fn walk(self, db: &'db dyn Database, expr_fn: &mut impl FnMut(Self)) {
@@ -132,7 +105,7 @@ impl<'db> ExprId<'db> {
         }
     }
 
-    pub fn set_owner_recursive(self, db: &'db dyn Database, owner: DefWithBody<'db>) {
+    pub fn set_owner_recursive(self, db: &'db dyn Database, owner: Item<'db>) {
         self.walk(db, &mut |e| e.set_owner(db, owner));
     }
 }

@@ -1,7 +1,8 @@
 use crate::hir::ident::Ident;
-use crate::item_tree::print::HirPrint;
-use crate::item_tree::DefSite;
-use crate::{lazy_field, FileAstPtr};
+use crate::hir::source_unit::ItemOrigin;
+use crate::items::HirPrint;
+use crate::{impl_has_origin, lazy_field, FileAstPtr};
+use rowan::ast::AstPtr;
 use salsa::Database;
 use std::fmt::Write;
 use syntax::ast::nodes;
@@ -12,10 +13,11 @@ pub struct EnumerationId<'db> {
     pub name: Ident<'db>,
     pub fields: Vec<EnumerationVariantId<'db>>,
 
-    pub node: FileAstPtr<nodes::EnumDefinition>,
+    pub node: AstPtr<nodes::EnumDefinition>,
 }
 
-lazy_field!(EnumerationId<'db>, def_site, set_def_site, DefSite<'db>);
+lazy_field!(EnumerationId<'db>, origin, set_origin, ItemOrigin<'db>);
+impl_has_origin!(EnumerationId<'db>);
 
 impl HirPrint for EnumerationId<'_> {
     fn write<T: Write>(&self, db: &dyn Database, w: &mut T, ident: usize) -> std::fmt::Result {

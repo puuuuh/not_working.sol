@@ -1,17 +1,15 @@
 use std::path::PathBuf;
 use std::sync::Arc;
+use camino::Utf8PathBuf;
 use line_index::LineIndex;
-use rowan::{TextRange, TextSize};
-use salsa::AsDynDatabase;
-use base_db::{BaseDb, File, Project};
+use rowan::TextSize;
+use base_db::{BaseDb, File, Project, TestDatabase};
 use hir_def::FilePosition;
-use crate::db::TestDatabase;
 use salsa::Setter;
 use vfs::VfsPath;
 
-mod db;
 mod goto_definition;
-mod fixture;
+mod navigation_target;
 
 pub struct AnalysisHost {
     db: TestDatabase,
@@ -21,25 +19,26 @@ pub struct AnalysisHost {
 impl AnalysisHost {
     pub fn new() -> Self {
         let db = TestDatabase::default();
-        let project = Project::new(db.as_dyn_database(), vec![]) ;
+        let project = Project::new(&db, vec![], vec![]) ;
         Self {
             db,
             project
         }
     }
 
-    pub fn change_roots(&mut self, roots: ()) {
-        self.project.set_import_paths(&mut self.db).to(vec![
-            VfsPath::from_path("C:\\Users\\user\\Documents\\s-game\\".into()),
-            VfsPath::from_path("C:\\Users\\user\\Documents\\s-game\\node_modules\\".into()),
-        ]);
+    pub fn change_roots(&mut self, roots: Vec<VfsPath>) {
+        self.project.set_import_paths(&mut self.db).to(roots);
     }
 
     pub fn line_index(&self, file: File) -> Arc<LineIndex> {
         hir_def::q_line_index(&self.db, file)
     }
 
+    pub fn file(&self, file: PathBuf) -> Option<File> {
+        self.db.file(&VfsPath::from_path(Utf8PathBuf::from_path_buf(file).unwrap()))
+    }
+
     pub fn goto_definition(&self, file: File, pos: TextSize) {
-        goto_definition::goto_definition(&self.db, FilePosition { file, position: pos });
+        goto_definition::goto_definition(&self.db, self.project, FilePosition { file, position: pos });
     }
 }

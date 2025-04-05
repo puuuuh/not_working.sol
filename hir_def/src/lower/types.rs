@@ -1,14 +1,14 @@
 use crate::hir::ident::Ident;
 use crate::hir::type_name::{ElementaryTypeRef, TypeRef};
 use crate::hir::{StateMutability, Visibility};
-use crate::lower::Ctx;
+use crate::lower::LowerCtx;
 use rowan::ast::AstNode;
 use std::str::FromStr;
 use syntax::ast::nodes;
 use syntax::ast::nodes::{ElementaryType, FunctionType};
 use syntax::T;
 
-impl<'db> Ctx<'db> {
+impl<'db> LowerCtx<'db> {
     pub fn lower_type_ref(&mut self, ty: nodes::Type) -> TypeRef<'db> {
         match ty {
             nodes::Type::ElementaryType(t) => {
@@ -29,7 +29,7 @@ impl<'db> Ctx<'db> {
 
     fn lower_ident_type_name(&mut self, p: nodes::IdentPathType) -> TypeRef<'db> {
         let mut res: Vec<Ident> =
-            p.segment().map(|a| Ident::from_name_ref(self.db.as_dyn_database(), Some(a))).collect();
+            p.segment().map(|a| Ident::from_name_ref(self.db, Some(a))).collect();
         res.shrink_to_fit();
         TypeRef::Path(res)
     }
@@ -39,14 +39,14 @@ impl<'db> Ctx<'db> {
             .key()
             .map(|k| {
                 let ty = k.ty().map(|ty| self.lower_type_ref(ty)).unwrap_or(TypeRef::Error);
-                (ty, Ident::from_name_opt(self.db.as_dyn_database(), k.name()))
+                (ty, Ident::from_name_opt(self.db, k.name()))
             })
             .unwrap_or((TypeRef::Error, None));
         let val = p
             .val()
             .map(|k| {
                 let ty = k.ty().map(|ty| self.lower_type_ref(ty)).unwrap_or(TypeRef::Error);
-                (ty, Ident::from_name_opt(self.db.as_dyn_database(), k.name()))
+                (ty, Ident::from_name_opt(self.db, k.name()))
             })
             .unwrap_or((TypeRef::Error, None));
 

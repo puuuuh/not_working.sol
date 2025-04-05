@@ -1,9 +1,10 @@
 use crate::hir::argument::ArgumentId;
 use crate::hir::expr::ExprId;
 use crate::hir::ident::Ident;
-use crate::item_tree::print::HirPrint;
-use crate::item_tree::DefWithBody;
-use crate::{lazy_field, FileAstPtr};
+use crate::hir::source_unit::Item;
+use crate::items::HirPrint;
+use crate::{impl_has_origin, lazy_field, FileAstPtr};
+use rowan::ast::AstPtr;
 use salsa::Database;
 use std::fmt::Write;
 use syntax::ast::nodes;
@@ -13,13 +14,13 @@ pub struct StatementId<'db> {
     #[return_ref]
     pub kind: Statement<'db>,
 
-    pub node: Option<FileAstPtr<nodes::Stmt>>,
+    pub node: Option<AstPtr<nodes::Stmt>>,
 }
 
-lazy_field!(StatementId<'db>, owner, set_owner, DefWithBody<'db>);
+lazy_field!(StatementId<'db>, owner, set_owner, Item<'db>);
 
 impl<'db> StatementId<'db> {
-    pub fn set_owner_recursive(self, db: &'db dyn Database, owner: DefWithBody<'db>) {
+    pub fn set_owner_recursive(self, db: &'db dyn Database, owner: Item<'db>) {
         self.set_owner(db, owner);
         match self.kind(db) {
             Statement::Missing => {}

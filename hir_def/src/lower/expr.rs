@@ -1,14 +1,13 @@
-use rowan::ast::AstNode;
+use rowan::ast::{AstNode, AstPtr};
+use crate::hir;
 use crate::hir::expr::{Expr, ExprId};
 use crate::hir::ident::Ident;
 use crate::hir::literal::Literal;
 use crate::hir::type_name::TypeRef;
-use crate::lower::Ctx;
-use crate::{hir, FileAstPtr};
+use crate::lower::LowerCtx;
 use syntax::ast::nodes;
-use crate::semantics::child_container::ChildSource;
 
-impl<'db> Ctx<'db> {
+impl<'db> LowerCtx<'db> {
     pub fn lower_expr2(&mut self, expr: Option<nodes::Expr>) -> ExprId<'db> {
         expr.map(|a| self.lower_expr(a)).unwrap_or(ExprId::new(self.db, Expr::Missing, None))
     }
@@ -28,7 +27,7 @@ impl<'db> Ctx<'db> {
                 },
                 nodes::Expr::MemberAccessExpr(i) => Expr::MemberAccess {
                     owner: self.lower_expr2(i.expr()),
-                    member_name: Ident::from_name_ref(self.db.as_dyn_database(), i.field()),
+                    member_name: Ident::from_name_ref(self.db, i.field()),
                 },
                 nodes::Expr::InfixExpr(i) => Expr::BinaryOp {
                     lhs: self.lower_expr2(i.lhs()),
@@ -72,7 +71,7 @@ impl<'db> Ctx<'db> {
                     Expr::Tuple { content }
                 }
                 nodes::Expr::IdentExpr(i) => Expr::Ident {
-                    name_ref: Ident::from_name_ref(self.db.as_dyn_database(), i.name_ref()),
+                    name_ref: Ident::from_name_ref(self.db, i.name_ref()),
                 },
                 nodes::Expr::LiteralExpr(lit) => Expr::Literal {
                     data: lit.literal().map(|l| self.lower_literal(l)).unwrap_or(Literal::Error),
@@ -84,10 +83,10 @@ impl<'db> Ctx<'db> {
                     ty: new.ty().map(|a| self.lower_type_ref(a)).unwrap_or(TypeRef::Error),
                 },
             },
-            Some(FileAstPtr::new(self.file, &expr)),
+            Some(AstPtr::new(&expr)),
         );
-        self.save_span(expr.syntax().text_range(), ChildSource::Expr(res));
         
+        self.save_expr(expr, res);
         res
     }
 }

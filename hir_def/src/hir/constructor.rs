@@ -1,29 +1,36 @@
 use crate::hir::argument::ArgumentId;
 use crate::hir::function::ModifierInvocation;
+use crate::hir::source_unit::ItemOrigin;
 use crate::hir::statement::StatementId;
 use crate::hir::{StateMutability, Visibility};
-use crate::item_tree::print::HirPrint;
-use crate::item_tree::DefSite;
-use crate::{lazy_field, FileAstPtr};
+use crate::items::HirPrint;
+use crate::{impl_has_origin, lazy_field, FileAstPtr};
+use rowan::ast::AstPtr;
 use salsa::{tracked, Database};
 use std::fmt::Write;
-use syntax::ast::nodes;
+use syntax::ast::nodes::{self, ConstructorDefinition};
 
 #[tracked]
 pub struct ConstructorId<'db> {
+    #[salsa::tracked]
     pub info: Constructor<'db>,
-    pub body: Option<StatementId<'db>>,
+    
+    #[salsa::tracked]
+    pub body: Option<AstPtr<nodes::Block>>,
 
-    pub node: FileAstPtr<nodes::ConstructorDefinition>,
+    #[salsa::tracked]
+    pub node: AstPtr<nodes::ConstructorDefinition>,
 }
 
-lazy_field!(ConstructorId<'db>, def_site, set_def_site, DefSite<'db>);
+lazy_field!(ConstructorId<'db>, origin, set_origin, ItemOrigin<'db>);
+
+impl_has_origin!(ConstructorId<'db>);
 
 impl HirPrint for ConstructorId<'_> {
     fn write<T: Write>(&self, db: &dyn Database, w: &mut T, ident: usize) -> std::fmt::Result {
         self.info(db).write(db, w, ident)?;
         if let Some(body) = self.body(db) {
-            body.write(db, w, ident)?;
+            w.write_str("{}")?;
         } else {
             w.write_str(";")?;
         }

@@ -1,14 +1,14 @@
 use crate::hir::ident::{Ident, IdentPath};
 use crate::hir::modifier::{Modifier, ModifierId};
-use crate::lower::Ctx;
+use crate::hir::source_unit::Item;
+use crate::lower::LowerCtx;
 use crate::FileAstPtr;
-use rowan::ast::AstNode;
+use rowan::ast::{AstNode, AstPtr};
 use syntax::ast::nodes::ModifierAttribute;
 use syntax::ast::{nodes, AstChildren};
 use syntax::T;
-use crate::semantics::child_container::ChildSource;
 
-impl<'db> Ctx<'db> {
+impl<'db> LowerCtx<'db> {
     // TODO: use function attrs maybe?
     pub fn lower_modifier_attrs(
         &mut self,
@@ -21,7 +21,7 @@ impl<'db> Ctx<'db> {
             if let Some(i) = m.override_specifier() {
                 overrides = Some(
                     i.ident_paths()
-                        .map(|p| IdentPath::from(self.db.as_dyn_database(), p))
+                        .map(|p| IdentPath::from(self.db, p))
                         .collect::<Vec<_>>(),
                 );
             } else {
@@ -40,7 +40,7 @@ impl<'db> Ctx<'db> {
         e: nodes::ModifierDefinition,
     ) -> ModifierId<'db> {
         let (over, virt) = self.lower_modifier_attrs(e.modifier_attributes());
-        let name = Ident::from_name(self.db.as_dyn_database(), e.name());
+        let name = Ident::from_name(self.db, e.name());
         let res = ModifierId::new(
             self.db,
             name,
@@ -52,10 +52,10 @@ impl<'db> Ctx<'db> {
                 overrides: over,
                 is_virtual: virt,
             },
-            self.lower_stmt2(e.block().map(nodes::Stmt::Block)),
-            FileAstPtr::new(self.file, &e),
+            e.block().map(|b| AstPtr::new(&b)),
+            AstPtr::new(&e),
         );
-        self.save_span(e.syntax().text_range(), ChildSource::Modifier(res));
+        self.save_span(e.syntax().text_range(), Item::Modifier(res));
         res
     }
 }

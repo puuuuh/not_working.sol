@@ -1,9 +1,10 @@
 use crate::hir::argument::ArgumentId;
 use crate::hir::ident::{Ident, IdentPath};
+use crate::hir::source_unit::ItemOrigin;
 use crate::hir::statement::StatementId;
-use crate::item_tree::print::HirPrint;
-use crate::item_tree::DefSite;
-use crate::{lazy_field, FileAstPtr};
+use crate::items::HirPrint;
+use crate::{impl_has_origin, lazy_field, FileAstPtr};
+use rowan::ast::AstPtr;
 use salsa::{tracked, Database};
 use std::fmt::Write;
 use syntax::ast::nodes;
@@ -13,21 +14,23 @@ pub struct ModifierId<'db> {
     #[id]
     pub name: Ident<'db>,
     pub info: Modifier<'db>,
-    pub body: StatementId<'db>,
+    pub body: Option<AstPtr<nodes::Block>>,
 
-    pub node: FileAstPtr<nodes::ModifierDefinition>,
+    pub node: AstPtr<nodes::ModifierDefinition>,
 }
 
 impl HirPrint for ModifierId<'_> {
     fn write<T: Write>(&self, db: &dyn Database, w: &mut T, ident: usize) -> std::fmt::Result {
         w.write_str("modifier ")?;
         self.name(db).write(db, w, ident)?;
-        self.info(db).write(db, w, ident)?;
-        self.body(db).write(db, w, ident)
+        self.info(db).write(db, w, ident)
+        
+        //self.body(db).write(db, w, ident)
     }
 }
 
-lazy_field!(ModifierId<'db>, def_site, set_def_site, DefSite<'db>);
+lazy_field!(ModifierId<'db>, origin, set_origin, ItemOrigin<'db>);
+impl_has_origin!(ModifierId<'db>);
 
 #[derive(Eq, PartialEq, Debug, Clone, Hash, salsa::Update)]
 pub struct Modifier<'db> {

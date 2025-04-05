@@ -1,13 +1,12 @@
-use rowan::ast::AstNode;
+use rowan::ast::{AstNode, AstPtr};
 use crate::hir::ident::Ident;
 use crate::hir::statement::{CatchClause, Statement, StatementId};
-use crate::lower::Ctx;
+use crate::lower::LowerCtx;
 use crate::FileAstPtr;
 use syntax::ast::nodes;
 use syntax::ast::nodes::VariableDeclarationItem;
-use crate::semantics::child_container::ChildSource;
 
-impl<'db> Ctx<'db> {
+impl<'db> LowerCtx<'db> {
     pub fn lower_stmt2(&mut self, expr: Option<nodes::Stmt>) -> StatementId<'db> {
         expr.map(|a| self.lower_stmt(a)).unwrap_or(StatementId::new(
             self.db,
@@ -77,7 +76,7 @@ impl<'db> Ctx<'db> {
                         .map(|c| {
                             CatchClause::new(
                                 self.db,
-                                Ident::from_name_ref_opt(self.db.as_dyn_database(), c.name_ref()),
+                                Ident::from_name_ref_opt(self.db, c.name_ref()),
                                 c.parameter_list().map(|a| {
                                     a.parameters().map(|p| self.lower_parameter(p)).collect()
                                 }),
@@ -106,9 +105,10 @@ impl<'db> Ctx<'db> {
                 nodes::Stmt::AssemblyStmt(_) => Statement::Assembly {},
                 nodes::Stmt::BreakStmt(_) => Statement::Break {},
             },
-            Some(FileAstPtr::new(self.file, &expr)),
+            Some(AstPtr::new(&expr)),
         );
-        self.save_span(expr.syntax().text_range(), ChildSource::Statement(res));
+
+        self.save_stmt(expr, res);
         res
     }
 }

@@ -13,3 +13,4 @@ rowan.workspace = true
 line-index.workspace = true
 syntax.workspace = true
 vfs.workspace = true
+camino.workspace = true

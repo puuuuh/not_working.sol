@@ -10,16 +10,18 @@ use crate::hir::state_variable::StateVariableId;
 use crate::hir::structure::StructureId;
 use crate::hir::user_defined_value_type::UserDefinedValueTypeId;
 use crate::hir::using::UsingId;
-use crate::item_tree::print::HirPrint;
-use crate::item_tree::DefSite;
+use crate::hir::source_unit::ItemOrigin;
+use crate::items::HirPrint;
 use crate::scope::IndexMapUpdate;
-use crate::{lazy_field, FileAstPtr};
-use base_db::BaseDb;
+use crate::{impl_has_origin, lazy_field, AstPtr};
+use base_db::{BaseDb, Project};
 use salsa::Database;
 use std::fmt::Write;
-use syntax::ast::nodes;
+use std::sync::Arc;
+use syntax::ast::nodes::{self, Contract};
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, salsa::Update)]
+
+#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd, salsa::Update)]
 pub enum ContractItem<'db> {
     Constructor(ConstructorId<'db>),
     Function(FunctionId<'db>),
@@ -34,36 +36,36 @@ pub enum ContractItem<'db> {
 }
 
 impl<'db> ContractItem<'db> {
-    pub fn set_def_site(self, db: &'db dyn BaseDb, contract: ContractId<'db>) {
-        let db = db.as_dyn_database();
+    pub fn set_origin(self, db: &'db dyn BaseDb, contract: ContractId<'db>) {
+        let origin = ItemOrigin::Contract(contract);
         match self {
-            ContractItem::Constructor(i) => i.set_def_site(db, DefSite::Contract(contract)),
+            ContractItem::Constructor(i) => i.set_origin(db, origin),
             ContractItem::Function(i) => {
-                i.set_def_site(db, DefSite::Contract(contract));
+                i.set_origin(db, origin);
             }
             ContractItem::Modifier(i) => {
-                i.set_def_site(db, DefSite::Contract(contract));
+                i.set_origin(db, origin);
             }
             ContractItem::UserDefinedValueType(i) => {
-                i.set_def_site(db, DefSite::Contract(contract));
+                i.set_origin(db, origin);
             }
             ContractItem::StateVariable(i) => {
-                i.set_def_site(db, DefSite::Contract(contract));
+                i.set_origin(db, origin);
             }
             ContractItem::Struct(i) => {
-                i.set_def_site(db, DefSite::Contract(contract));
+                i.set_origin(db, origin);
             }
             ContractItem::Enum(i) => {
-                i.set_def_site(db, DefSite::Contract(contract));
+                i.set_origin(db, origin);
             }
             ContractItem::Event(i) => {
-                i.set_def_site(db, DefSite::Contract(contract));
+                i.set_origin(db, origin);
             }
             ContractItem::Error(i) => {
-                i.set_def_site(db, DefSite::Contract(contract));
+                i.set_origin(db, origin);
             }
             ContractItem::Using(i) => {
-                i.set_def_site(db, DefSite::Contract(contract));
+                i.set_origin(db, origin);
             }
         }
     }
@@ -105,17 +107,25 @@ impl HirPrint for ContractItem<'_> {
 pub struct ContractId<'db> {
     #[id]
     pub name: Ident<'db>,
+
+    #[tracked]
     pub is_abstract: bool,
+
+    #[tracked]
     #[return_ref]
     pub inheritance_chain: Vec<InheritanceSpecifier<'db>>,
 
+    #[tracked]
     #[return_ref]
     pub body: Vec<ContractItem<'db>>,
 
-    pub node: FileAstPtr<nodes::Contract>,
+    #[tracked]
+    pub node: AstPtr<nodes::Contract>,
 }
 
-lazy_field!(ContractId<'db>, def_site, set_def_site, DefSite<'db>);
+lazy_field!(ContractId<'db>, origin, set_origin, ItemOrigin<'db>);
+
+impl_has_origin!(ContractId<'db>);
 
 pub enum ContractType {
     Interface,
@@ -126,16 +136,16 @@ pub enum ContractType {
 #[salsa::tracked]
 impl<'db> ContractId<'db> {
     #[salsa::tracked]
-    pub fn scope(self, db: &'db dyn BaseDb) -> crate::scope::item::Scope<'db> {
+    pub fn scope(self, db: &'db dyn BaseDb, project: Project) -> crate::scope::ItemScope<'db> {
         let items = self
             .body(db)
             .iter()
-            .filter_map(|a| a.name(db.as_dyn_database()).map(|name| (name, (*a).into())))
+            .filter_map(|a| a.name(db).map(|name| (name, (*a).into())))
             .collect();
-        crate::scope::item::Scope::new(
+        crate::scope::ItemScope::new(
             db,
-            Some(self.def_site(db.as_dyn_database()).scope(db)),
-            IndexMapUpdate(items),
+            Some(self.origin(db).scope(db, project)),
+            Arc::new(IndexMapUpdate(items)),
         )
     }
 }

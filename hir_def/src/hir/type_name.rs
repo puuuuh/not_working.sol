@@ -2,9 +2,10 @@ use crate::hir::argument::ArgumentId;
 use crate::hir::expr::ExprId;
 use crate::hir::ident::Ident;
 use crate::hir::{StateMutability, Visibility};
-use crate::item_tree::print::HirPrint;
+use crate::items::HirPrint;
 use salsa::Database;
 use std::fmt::{Debug, Display, Formatter, Write};
+use crate::lazy_field;
 
 #[derive(Clone, Eq, PartialEq, Debug, Hash, salsa::Update)]
 pub enum ElementaryTypeRef {
@@ -82,6 +83,36 @@ pub enum TypeRef<'db> {
         len: Option<ExprId<'db>>,
     },
     Error,
+}
+
+pub fn walk_type_ref<'db>(
+    t: &TypeRef<'db>,
+    db: &'db dyn Database,
+    expr_fn: &mut impl FnMut(ExprId<'db>),
+) {
+    match t {
+        TypeRef::Elementary(_) => {}
+        TypeRef::Function { arguments, visibility: _, mutability: _, returns } => {
+            for a in arguments {
+                walk_type_ref(&a.ty(db), db, expr_fn);
+            }
+            for a in returns {
+                walk_type_ref(&a.ty(db), db, expr_fn);
+            }
+        }
+        TypeRef::Mapping { key_type, key_name: _, value_type, value_name: _ } => {
+            walk_type_ref(key_type, db, expr_fn);
+            walk_type_ref(value_type, db, expr_fn);
+        }
+        TypeRef::Path(_) => {}
+        TypeRef::Array { ty, len } => {
+            walk_type_ref(ty, db, expr_fn);
+            if let Some(len) = len {
+                len.walk(db, expr_fn);
+            }
+        }
+        TypeRef::Error => {}
+    }
 }
 
 impl HirPrint for TypeRef<'_> {

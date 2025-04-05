@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use crate::File;
 
@@ -14,12 +16,29 @@ impl AnchoredPath {
             path
         }
     }
+
+    pub fn path(&self) -> &String {
+        &self.path
+    }
 }
 
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Clone, Hash)]
 pub enum VfsPath {
     Path(Utf8PathBuf),
     Virtual(VirtualPath),
+}
+
+impl Display for VfsPath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VfsPath::Path(utf8_path_buf) => {
+                write!(f, "{utf8_path_buf}")
+            },
+            VfsPath::Virtual(virtual_path) => {
+                write!(f, "{}", virtual_path.0)
+            },
+        }
+    }
 }
 
 impl VfsPath {
@@ -29,6 +48,19 @@ impl VfsPath {
 
     pub fn from_virtual(data: String) -> Self {
         Self::Virtual(VirtualPath(data))
+    }
+
+    pub fn parent(&self) -> Option<Self> {
+        Some(match self {
+            VfsPath::Path(utf8_path_buf) => Self::Path(utf8_path_buf.parent()?.to_owned()),
+            VfsPath::Virtual(virtual_path) => {
+                let mut p = virtual_path.clone();
+                if !p.pop() {
+                    return None;
+                }
+                Self::Virtual(p)
+            }
+        })
     }
 
     pub fn join(&self, path: &str) -> Option<Self> {
@@ -48,7 +80,7 @@ impl VfsPath {
 }
 
 // Taken from https://github.com/rust-lang/rust-analyzer/blob/cf8f950baab30f335917b177536d2d73e0aaa1ae/crates/vfs/src/vfs_path.rs#L334
-#[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Clone, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct VirtualPath(String);
 
 impl VirtualPath {

@@ -1,5 +1,5 @@
 use crate::hir::literal::Literal;
-use crate::lower::Ctx;
+use crate::lower::LowerCtx;
 use num_bigint::BigInt;
 use syntax::ast::nodes;
 
@@ -10,7 +10,7 @@ pub fn decode_string_literal(data: &str) -> Vec<u8> {
     data.as_bytes().to_vec()
 }
 
-impl<'db> Ctx<'db> {
+impl<'db> LowerCtx<'db> {
     pub(crate) fn lower_literal(&mut self, value: nodes::Literal) -> Literal {
         match value {
             nodes::Literal::StringLiteral(s) => Literal::String(

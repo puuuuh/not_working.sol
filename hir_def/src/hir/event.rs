@@ -1,8 +1,9 @@
 use crate::hir::ident::Ident;
+use crate::hir::source_unit::ItemOrigin;
 use crate::hir::type_name::TypeRef;
-use crate::item_tree::print::HirPrint;
-use crate::item_tree::DefSite;
-use crate::{lazy_field, FileAstPtr};
+use crate::items::HirPrint;
+use crate::{impl_has_origin, lazy_field, FileAstPtr};
+use rowan::ast::AstPtr;
 use salsa::{tracked, Database};
 use std::fmt::Write;
 use syntax::ast::nodes;
@@ -14,10 +15,11 @@ pub struct EventId<'db> {
     pub is_anon: bool,
     pub parameters: Vec<EventParameterId<'db>>,
 
-    pub node: FileAstPtr<nodes::EventDefinition>,
+    pub node: AstPtr<nodes::EventDefinition>,
 }
 
-lazy_field!(EventId<'db>, def_site, set_def_site, DefSite<'db>);
+lazy_field!(EventId<'db>, origin, set_origin, ItemOrigin<'db>);
+impl_has_origin!(EventId<'db>);
 
 impl HirPrint for EventId<'_> {
     fn write<T: Write>(&self, db: &dyn Database, w: &mut T, ident: usize) -> std::fmt::Result {

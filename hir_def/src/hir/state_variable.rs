@@ -1,9 +1,10 @@
 use crate::hir::ident::{Ident, IdentPath};
+use crate::hir::source_unit::ItemOrigin;
 use crate::hir::type_name::TypeRef;
 use crate::hir::Visibility;
-use crate::item_tree::print::HirPrint;
-use crate::item_tree::DefSite;
-use crate::{lazy_field, FileAstPtr};
+use crate::items::HirPrint;
+use crate::{impl_has_origin, lazy_field, FileAstPtr};
+use rowan::ast::AstPtr;
 use salsa::{tracked, Database};
 use std::fmt::{Display, Formatter, Write};
 use syntax::ast::nodes;
@@ -15,10 +16,12 @@ pub struct StateVariableId<'db> {
     pub ty: TypeRef<'db>,
     pub info: StateVariableInfo<'db>,
 
-    pub node: FileAstPtr<nodes::StateVariableDeclaration>,
+    pub init: Option<AstPtr<nodes::Expr>>,
+    pub node: AstPtr<nodes::StateVariableDeclaration>,
 }
 
-lazy_field!(StateVariableId<'db>, def_site, set_def_site, DefSite<'db>);
+lazy_field!(StateVariableId<'db>, origin, set_origin, ItemOrigin<'db>);
+impl_has_origin!(StateVariableId<'db>);
 
 impl HirPrint for StateVariableId<'_> {
     fn write<T: Write>(&self, db: &dyn Database, w: &mut T, ident: usize) -> std::fmt::Result {

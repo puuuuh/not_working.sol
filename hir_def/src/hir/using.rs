@@ -1,9 +1,10 @@
 use crate::hir::ident::IdentPath;
 use crate::hir::op::UserDefineableOp;
+use crate::hir::source_unit::ItemOrigin;
 use crate::hir::TypeRef;
-use crate::item_tree::print::HirPrint;
-use crate::item_tree::DefSite;
-use crate::{lazy_field, FileAstPtr};
+use crate::items::HirPrint;
+use crate::{impl_has_origin, lazy_field, FileAstPtr};
+use rowan::ast::AstPtr;
 use salsa::{tracked, Database};
 use std::fmt::Write;
 use syntax::ast::nodes;
@@ -12,10 +13,11 @@ use syntax::ast::nodes;
 pub struct UsingId<'db> {
     pub data: UsingData<'db>,
 
-    pub node: FileAstPtr<nodes::Using>,
+    pub node: AstPtr<nodes::Using>,
 }
 
-lazy_field!(UsingId<'db>, def_site, set_def_site, DefSite<'db>);
+lazy_field!(UsingId<'db>, origin, set_origin, ItemOrigin<'db>);
+impl_has_origin!(UsingId<'db>);
 
 impl HirPrint for UsingId<'_> {
     fn write<T: Write>(&self, db: &dyn Database, w: &mut T, ident: usize) -> std::fmt::Result {

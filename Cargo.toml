@@ -2,7 +2,7 @@
 resolver = "1"
 
 members = [
-    "parser", "sourcegen", "syntax", "base_db", "hir_def", "span", "lang_server", "ide", "hir_ty", "vfs"]
+    "parser", "sourcegen", "syntax", "base_db", "hir_def", "span", "lang_server", "ide", "hir_ty", "vfs", "ide_db"]
 
 [workspace.dependencies]
 sourcegen = { path = "./sourcegen" }
@@ -24,3 +24,5 @@ tracing = "0.1.40"
 derive_more = { features = ["display"], version = "1.0.0" }
 sorted-vec = "0.8.4"
 line-index = "0.1.2"
+camino = "1.1.9"
+smallvec = "1.14"

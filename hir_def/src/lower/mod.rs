@@ -18,59 +18,67 @@ use crate::hir::contract::ContractType;
 use crate::hir::expr::ExprId;
 use crate::hir::ident::{Ident, IdentPath};
 use crate::hir::op::UserDefineableOp;
+use crate::hir::pragma::PragmaId;
+use crate::hir::source_unit::Item;
+use crate::hir::statement::StatementId;
 use crate::hir::using::{UsingAlias, UsingData, UsingId};
-use crate::item_tree::*;
+use crate::scope::IndexMapUpdate;
+use crate::source_map::span_map::SpanMapRange;
 use crate::FileAstPtr;
 use base_db::{BaseDb, File};
-use rowan::ast::AstNode;
-use syntax::ast::nodes;
+use rowan::ast::{AstNode, AstPtr};
+use syntax::ast::nodes::{self, Expr, Stmt};
 use syntax::TextRange;
-use crate::semantics::child_container::ChildSource;
-use crate::semantics::span_map::SpanMapRange;
 
-pub(crate) struct Ctx<'a> {
-    file: File,
+pub(crate) struct LowerCtx<'a> {
     db: &'a dyn BaseDb,
 
-    pub(crate) spans: Vec<(SpanMapRange, ChildSource<'a>)>,
+    pub(crate) spans: Vec<(SpanMapRange, Item<'a>)>,
+    pub(crate) exprs: IndexMapUpdate<AstPtr<Expr>, ExprId<'a>>,
+    pub(crate) stmts: IndexMapUpdate<AstPtr<Stmt>, StatementId<'a>>,
 }
 
-impl<'a> Ctx<'a> {
+impl<'a> LowerCtx<'a> {
     pub fn new(db: &'a dyn BaseDb, file: File) -> Self {
-        Self { file, db, spans: Vec::new() }
+        Self { db, spans: Vec::new(), exprs: Default::default(), stmts: Default::default() }
     }
 
-    pub fn save_span(&mut self, s: TextRange, data: ChildSource<'a>) {
+    pub fn save_span(&mut self, s: TextRange, data: Item<'a>) {
         self.spans.push((SpanMapRange(s.start(), s.end()), data));
     }
 
-    pub fn lower_source(&mut self, src: nodes::UnitSource) -> Vec<TopItem<'a>> {
+    pub fn save_expr(&mut self, s: nodes::Expr, data: ExprId<'a>) {
+        self.exprs.0.insert(AstPtr::new(&s), data);
+    }
+
+    pub fn save_stmt(&mut self, s: nodes::Stmt, data: StatementId<'a>) {
+        self.stmts.0.insert(AstPtr::new(&s), data);
+    }
+
+    pub fn lower_source(&mut self, src: nodes::UnitSource) -> Vec<Item<'a>> {
         src.items().map(|i| self.lower_item(i)).collect()
     }
 
-    pub fn lower_item(&mut self, i: nodes::Item) -> TopItem<'a> {
+    pub fn lower_item(&mut self, i: nodes::Item) -> Item<'a> {
         match i {
-            nodes::Item::Pragma(pragma) => TopItem::Pragma(self.lower_pragma(pragma)),
-            nodes::Item::Import(import) => TopItem::Import(self.lower_import(import)),
-            nodes::Item::Using(using) => TopItem::Using(self.lower_using(using)),
+            nodes::Item::Pragma(pragma) => Item::Pragma(self.lower_pragma(pragma)),
+            nodes::Item::Import(import) => Item::Import(self.lower_import(import)),
+            nodes::Item::Using(using) => Item::Using(self.lower_using(using)),
             nodes::Item::Contract(contract) => match self.lower_contract(contract) {
-                (ContractType::Contract, c) => TopItem::Contract(c),
-                (ContractType::Library, c) => TopItem::Library(c),
-                (ContractType::Interface, c) => TopItem::Interface(c),
+                (ContractType::Contract, c) => Item::Contract(c),
+                (ContractType::Library, c) => Item::Library(c),
+                (ContractType::Interface, c) => Item::Interface(c),
             },
-            nodes::Item::NamedFunctionDefinition(f) => {
-                TopItem::Function(self.lower_named_function_definition(f))
-            }
-            nodes::Item::StateVariableDeclaration(v) => {
-                TopItem::StateVariable(self.lower_state_variable(v))
-            }
-            nodes::Item::StructDefinition(s) => TopItem::Struct(self.lower_structure(s)),
-            nodes::Item::EnumDefinition(e) => TopItem::Enum(self.lower_enumeration(e)),
-            nodes::Item::UserDefinedValueTypeDefinition(t) => {
-                TopItem::UserDefinedValueType(self.lower_user_defined_value_type(t))
-            }
-            nodes::Item::ErrorDefinition(e) => TopItem::Error(self.lower_error(e)),
-            nodes::Item::EventDefinition(e) => TopItem::Event(self.lower_event(e)),
+            nodes::Item::NamedFunctionDefinition(f) =>
+                Item::Function(self.lower_named_function_definition(f)),
+            nodes::Item::StateVariableDeclaration(v) =>
+                Item::StateVariable(self.lower_state_variable(v)),
+            nodes::Item::StructDefinition(s) => Item::Struct(self.lower_structure(s)),
+            nodes::Item::EnumDefinition(e) => Item::Enum(self.lower_enumeration(e)),
+            nodes::Item::UserDefinedValueTypeDefinition(t) =>
+                Item::UserDefinedValueType(self.lower_user_defined_value_type(t)),
+            nodes::Item::ErrorDefinition(e) => Item::Error(self.lower_error(e)),
+            nodes::Item::EventDefinition(e) => Item::Event(self.lower_event(e)),
         }
     }
 
@@ -83,7 +91,7 @@ impl<'a> Ctx<'a> {
         let items = match s.using_item() {
             Some(nodes::UsingItem::IdentPath(p)) => {
                 vec![UsingAlias {
-                    path: IdentPath::from(self.db.as_dyn_database(), p),
+                    path: IdentPath::from(self.db, p),
                     as_name: None,
                 }]
             }
@@ -103,12 +111,12 @@ impl<'a> Ctx<'a> {
         });
 
         let using = UsingData { items, type_name: ty_name, is_global: s.global_token().is_some() };
-        UsingId::new(self.db, using, FileAstPtr::new(self.file, &s))
+        UsingId::new(self.db, using, AstPtr::new(&s))
     }
 
     pub fn lower_using_alias(&mut self, s: nodes::UsingAlias) -> UsingAlias<'a> {
         UsingAlias {
-            path: IdentPath::from_opt(self.db.as_dyn_database(), s.ident_path()),
+            path: IdentPath::from_opt(self.db, s.ident_path()),
             as_name: s
                 .user_defineable_operator()
                 .and_then(|t| t.syntax().first_token())
@@ -126,7 +134,7 @@ impl<'a> Ctx<'a> {
             nodes::CallArgumentList::NamedCallArguments(args) => args
                 .named_call_arguments()
                 .map(|arg| {
-                    let name = Ident::from_name_ref(self.db.as_dyn_database(), arg.name_ref());
+                    let name = Ident::from_name_ref(self.db, arg.name_ref());
                     let expr = self.lower_expr2(arg.expr());
                     (Some(name), expr)
                 })

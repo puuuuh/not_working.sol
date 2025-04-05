@@ -1,12 +1,9 @@
 mod path;
 
-use std::collections::BTreeMap;
 use std::sync::Arc;
-use camino::{Utf8Path};
 use dashmap::{DashMap, Entry};
 use salsa::Database;
 pub use crate::path::{AnchoredPath, VfsPath};
-use crate::VfsPath::Path;
 
 #[salsa::input]
 pub struct File {
@@ -32,7 +29,7 @@ impl Vfs {
     }
 
     pub fn with_files(files: impl Iterator<Item = (VfsPath, File)>) -> Self {
-        let mut t = Self::new();
+        let t = Self::new();
         for (p, f) in files {
             t.paths.insert(f, p.clone());
             t.files.insert(p.clone(), Some(f));
@@ -40,7 +37,7 @@ impl Vfs {
         t
     }
 
-    pub fn file(&self, db: &dyn Database, path: VfsPath) -> Option<File> {
+    pub fn file(&self, db: &dyn Database, path: &VfsPath) -> Option<File> {
         match self.files.entry(path.clone()) {
             Entry::Occupied(f) => {
                 *f.get()
@@ -50,7 +47,7 @@ impl Vfs {
                     VfsPath::Path(p) => {
                         let content = std::fs::read_to_string(p).ok().map(|a| File::new(db, Arc::from(a)));
                         if let Some(f) = &content {
-                            self.paths.insert(*f, path);
+                            self.paths.insert(*f, path.clone());
                         }
                         f.insert(content);
                         content
@@ -64,15 +61,15 @@ impl Vfs {
         }
     }
 
+    pub fn path(&self, file: File) -> VfsPath {
+        self.paths.get(&file).unwrap().clone()
+    }
+
     pub fn resolve_path(&self, db: &dyn Database, path: &AnchoredPath, roots: &[VfsPath]) -> Option<VfsPath> {
         let parent = self.paths.get(&path.parent)?;
-        let is_absolute = if parent.is_virtual() {
-            path.path.starts_with('/')
-        } else {
-            Utf8Path::new(&path.path).is_absolute()
-        };
-        if is_absolute || path.path.starts_with(".") {
-            let joined = parent.join(&path.path)?;
+        if path.path.starts_with(".") {
+            let joined = parent.parent()?.join(&path.path)?;
+
             if self.files.contains_key(&joined) {
                 return Some(joined);
             }
@@ -82,9 +79,7 @@ impl Vfs {
                     return Some(joined)
                 }
             }
-        }
-
-        if !is_absolute {
+        } else {
             for root in roots {
                 let Some(joined) = root.join(&path.path) else { continue };
                 if self.files.contains_key(&joined) {

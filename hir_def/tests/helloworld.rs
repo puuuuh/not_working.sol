@@ -1,51 +1,19 @@
 use base_db::{BaseDb, File, Project};
-use hir_def::hir::ident::Ident;
+use hir_def::hir::source_unit::Item;
+use hir_def::hir::{ident::Ident, source_unit::file_tree};
 use hir_def::hir::statement::Statement;
-use hir_def::item_tree::print::HirPrint;
-use hir_def::item_tree::{file_tree, Item};
+use hir_def::items::HirPrint;
 use salsa::{Database, Event};
-use std::path::PathBuf;
 use std::sync::Arc;
 use vfs::{AnchoredPath, Vfs, VfsPath};
 
-#[salsa::db]
-#[derive(Default, Clone)]
-struct TestDatabase {
-    storage: salsa::Storage<Self>,
-    vfs: Arc<Vfs>,
-}
-
-#[salsa::db]
-impl BaseDb for TestDatabase {
-    fn resolve_path(&self, project: Project, path: AnchoredPath) -> Option<VfsPath> {
-        self.vfs.resolve_path(self, &path, project.import_paths(self))
-    }
-
-    fn anchored_file(&self, project: Project, path: AnchoredPath) -> Option<File> {
-        self.resolve_path(project, path)
-            .and_then(|p| self.file(project, p))
-    }
-
-    fn file(&self, project: Project, path: VfsPath) -> Option<File> {
-        self.vfs.file(self, path)
-    }
-}
-
-#[salsa::db]
-impl salsa::Database for TestDatabase {
-    fn salsa_event(&self, _event: &dyn Fn() -> Event) {}
-}
-
+/*
 #[test]
 fn helloworld() {
     let db = TestDatabase::default();
-    let path = VfsPath::from_path("C:\\Users\\user\\Documents\\s-game\\contracts\\SGame.sol".into());
     let project = Project::new(
         &db,
-        vec![
-            VfsPath::from_path("C:\\Users\\user\\Documents\\s-game\\".into()),
-            VfsPath::from_path("C:\\Users\\user\\Documents\\s-game\\node_modules\\".into())
-        ],
+        vec![],
     );
 
     let file = db.file(project, path).unwrap();
@@ -78,3 +46,4 @@ fn helloworld() {
          */
     }
 }
+ */

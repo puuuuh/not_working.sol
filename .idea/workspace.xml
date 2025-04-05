@@ -1,0 +1,477 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="ALL" />
+  </component>
+  <component name="CargoProjects">
+    <cargoProject FILE="$PROJECT_DIR$/Cargo.toml" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="76e71342-8216-485b-8917-1646e819f13e" name="Changes" comment="init">
+      <change afterPath="$PROJECT_DIR$/hir_ty/src/tys.rs" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/ide_db/src/defs.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Cargo.lock" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/base_db/src/input.rs" beforeDir="false" afterPath="$PROJECT_DIR$/base_db/src/input.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/base_db/src/lib.rs" beforeDir="false" afterPath="$PROJECT_DIR$/base_db/src/lib.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/hir.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/hir.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/hir/argument.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/hir/argument.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/hir/constructor.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/hir/constructor.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/hir/contract.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/hir/contract.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/hir/enumeration.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/hir/enumeration.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/hir/error.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/hir/error.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/hir/event.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/hir/event.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/hir/expr.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/hir/expr.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/hir/function.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/hir/function.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/hir/ident.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/hir/ident.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/hir/import.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/hir/import.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/hir/modifier.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/hir/modifier.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/hir/state_variable.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/hir/state_variable.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/hir/statement.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/hir/statement.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/hir/structure.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/hir/structure.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/hir/type_name.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/hir/type_name.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/hir/user_defined_value_type.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/hir/user_defined_value_type.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/hir/using.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/hir/using.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/item_tree.rs" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/item_tree/print.rs" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/lib.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/lib.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/lower/constructor.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/lower/constructor.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/lower/contract.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/lower/contract.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/lower/enumeration.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/lower/enumeration.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/lower/error.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/lower/error.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/lower/event.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/lower/event.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/lower/expr.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/lower/expr.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/lower/function.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/lower/function.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/lower/import.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/lower/import.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/lower/literal.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/lower/literal.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/lower/mod.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/lower/mod.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/lower/modifier.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/lower/modifier.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/lower/state_varible.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/lower/state_varible.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/lower/stmt.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/lower/stmt.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/lower/structure.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/lower/structure.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/lower/types.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/lower/types.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/lower/user_defined_value_type.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/lower/user_defined_value_type.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/scope/expr.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/scope/expr.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/scope/item.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/scope/item.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/scope/mod.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/scope/mod.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/scope/resolver.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/src/scope/resolver.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/semantics.rs" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/semantics/child_container.rs" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/src/semantics/span_map.rs" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_def/tests/helloworld.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_def/tests/helloworld.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/hir_ty/src/lib.rs" beforeDir="false" afterPath="$PROJECT_DIR$/hir_ty/src/lib.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ide/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/ide/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ide/src/db.rs" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ide/src/fixture.rs" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/ide/src/goto_definition.rs" beforeDir="false" afterPath="$PROJECT_DIR$/ide/src/goto_definition.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/ide/src/lib.rs" beforeDir="false" afterPath="$PROJECT_DIR$/ide/src/lib.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/lang_server/src/server.rs" beforeDir="false" afterPath="$PROJECT_DIR$/lang_server/src/server.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/vfs/Cargo.toml" beforeDir="false" afterPath="$PROJECT_DIR$/vfs/Cargo.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/vfs/src/lib.rs" beforeDir="false" afterPath="$PROJECT_DIR$/vfs/src/lib.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/vfs/src/path.rs" beforeDir="false" afterPath="$PROJECT_DIR$/vfs/src/path.rs" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="ExecutionTargetManager" SELECTED_TARGET="RsBuildProfile:test" />
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Rust File" />
+      </list>
+    </option>
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="MacroExpansionManager">
+    <option name="directoryName" value="oxpik7wm" />
+  </component>
+  <component name="MarkdownSettingsMigration">
+    <option name="stateVersion" value="1" />
+  </component>
+  <component name="ProblemsViewState">
+    <option name="selectedTabId" value="ProjectErrors" />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 8
+}</component>
+  <component name="ProjectId" id="2Z7oHyfmsF4E8R8WEixdFUgnoak" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+    <option name="showMembers" value="true" />
+  </component>
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;Cargo.All Tests.executor&quot;: &quot;Run&quot;,
+    &quot;Cargo.Expand hir_def::hir::error.executor&quot;: &quot;Run&quot;,
+    &quot;Cargo.Expand hir_def::hir::expr.executor&quot;: &quot;Run&quot;,
+    &quot;Cargo.Expand hir_def::semantics::item.executor&quot;: &quot;Run&quot;,
+    &quot;Cargo.Run ide.executor&quot;: &quot;Run&quot;,
+    &quot;Cargo.Run lang_server.executor&quot;: &quot;Run&quot;,
+    &quot;Cargo.Run tmp.executor&quot;: &quot;Run&quot;,
+    &quot;Cargo.Test codegen.executor&quot;: &quot;Debug&quot;,
+    &quot;Cargo.Test contract::tests.executor&quot;: &quot;Run&quot;,
+    &quot;Cargo.Test expression::tests.executor&quot;: &quot;Run&quot;,
+    &quot;Cargo.Test goto_definition.executor&quot;: &quot;Run&quot;,
+    &quot;Cargo.Test goto_definition::tests.executor&quot;: &quot;Run&quot;,
+    &quot;Cargo.Test goto_definition::tests::basic_goto.executor&quot;: &quot;Run&quot;,
+    &quot;Cargo.Test helloworld (1).executor&quot;: &quot;Run&quot;,
+    &quot;Cargo.Test helloworld.executor&quot;: &quot;Run&quot;,
+    &quot;Cargo.Test lexer.executor&quot;: &quot;Run&quot;,
+    &quot;Cargo.Test lexer_tests (1).executor&quot;: &quot;Run&quot;,
+    &quot;Cargo.Test lexer_tests.executor&quot;: &quot;Run&quot;,
+    &quot;Cargo.Test parser::contract::tests::test_contract.executor&quot;: &quot;Run&quot;,
+    &quot;Cargo.Test parser::expression::tests::test_basic.executor&quot;: &quot;Run&quot;,
+    &quot;Cargo.Test parser::expression::tests::test_expressions.executor&quot;: &quot;Run&quot;,
+    &quot;Cargo.Test parser::import::tests::import_tests.executor&quot;: &quot;Run&quot;,
+    &quot;Cargo.Test parser::tests::test_basic.executor&quot;: &quot;Run&quot;,
+    &quot;Cargo.Test parser::type_name::tests::test_basic.executor&quot;: &quot;Run&quot;,
+    &quot;Cargo.Test parser_tests.executor&quot;: &quot;Run&quot;,
+    &quot;Cargo.Test solidity_ls.executor&quot;: &quot;Run&quot;,
+    &quot;Cargo.Test sourcegen_ast.executor&quot;: &quot;Run&quot;,
+    &quot;Cargo.Test tests::codegen::sourcegen_ast.executor&quot;: &quot;Run&quot;,
+    &quot;Cargo.Test tests::sourcegen_ast::sourcegen_ast.executor&quot;: &quot;Run&quot;,
+    &quot;Cargo.Tests in 'ide'.executor&quot;: &quot;Run&quot;,
+    &quot;Cargo.Tests in 'lang_server'.executor&quot;: &quot;Run&quot;,
+    &quot;Cargo.Tests in 'parser'.executor&quot;: &quot;Run&quot;,
+    &quot;Cargo.Tests in 'syntax'.executor&quot;: &quot;Run&quot;,
+    &quot;Cargo.Tests in 'vfs'.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.rust.reset.selective.auto.import&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;ignore.virus.scanning.warn.message&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;C:/Users/user/Documents/solidity_ls&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;org.rust.cargo.project.model.PROJECT_DISCOVERY&quot;: &quot;true&quot;,
+    &quot;org.rust.cargo.project.model.impl.CargoExternalSystemProjectAware.subscribe.first.balloon&quot;: &quot;&quot;,
+    &quot;org.rust.disableDetachedFileInspectionC:/Users/user/Documents/solidity_ls/hir_def/src/lower/constructor.rs&quot;: &quot;true&quot;,
+    &quot;org.rust.disableDetachedFileInspectionC:/Users/user/Documents/solidity_ls/hir_def/src/lower/expr.rs&quot;: &quot;true&quot;,
+    &quot;org.rust.disableDetachedFileInspectionC:/Users/user/Documents/solidity_ls/hir_def/src/lower/lower.rs&quot;: &quot;true&quot;,
+    &quot;org.rust.disableDetachedFileInspectionC:/Users/user/Documents/solidity_ls/hir_def/src/semantics/child_container.rs&quot;: &quot;true&quot;,
+    &quot;org.rust.disableDetachedFileInspectionC:/Users/user/Documents/solidity_ls/syntax/src/tests/codegen.rs&quot;: &quot;true&quot;,
+    &quot;org.rust.first.attach.projects&quot;: &quot;true&quot;,
+    &quot;org.rust.hideNoCargoProjectNotificationsC:/Users/user/Documents/solidity_ls/hir_def/Cargo.toml&quot;: &quot;true&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;language.rust&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  }
+}</component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="C:\Users\user\Documents\solidity_ls" />
+      <recent name="C:\Users\user\Documents\solidity_ls\hir_def\src\lower" />
+      <recent name="C:\Users\user\Documents\solidity_ls\hir_def" />
+      <recent name="C:\Users\user\Documents\solidity_ls\hir-def" />
+      <recent name="C:\Users\user\Documents\solidity_ls\parser\src\parser" />
+    </key>
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="C:\Users\user\Documents\solidity_ls" />
+      <recent name="C:\Users\user\Documents\solidity_ls\hir_def\src\lower" />
+      <recent name="C:\Users\user\Documents\solidity_ls\hir_def\src\context" />
+      <recent name="C:\Users\user\Documents\solidity_ls\hir_def\src\hir" />
+      <recent name="C:\Users\user\Documents\solidity_ls\syntax\src" />
+    </key>
+  </component>
+  <component name="RsExternalLinterProjectSettings">
+    <option name="channel" value="stable" />
+    <option name="runOnTheFly" value="true" />
+    <option name="tool" value="Clippy" />
+  </component>
+  <component name="RunManager" selected="Cargo.Test goto_definition::tests::basic_goto">
+    <configuration name="All Tests" type="CargoCommandRunConfiguration" factoryName="Cargo Command" temporary="true">
+      <option name="command" value="test" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <envs />
+      <option name="emulateTerminal" value="true" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="Expand hir_def::semantics::item" type="CargoCommandRunConfiguration" factoryName="Cargo Command" temporary="true">
+      <option name="command" value="expand --lib --color=always --theme=Dracula --tests semantics::item" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$/hir_def" />
+      <envs />
+      <option name="emulateTerminal" value="true" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="Test goto_definition" type="CargoCommandRunConfiguration" factoryName="Cargo Command" temporary="true">
+      <option name="command" value="test --package ide --lib goto_definition" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <envs />
+      <option name="emulateTerminal" value="true" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="Test goto_definition::tests::basic_goto" type="CargoCommandRunConfiguration" factoryName="Cargo Command" temporary="true">
+      <option name="buildProfileId" value="test" />
+      <option name="command" value="test --package ide --lib goto_definition::tests::basic_goto -- --exact" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <envs />
+      <option name="emulateTerminal" value="true" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="Test solidity_ls" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+      <option name="command" value="test --workspace" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <envs />
+      <option name="emulateTerminal" value="true" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <configuration name="Tests in 'syntax'" type="CargoCommandRunConfiguration" factoryName="Cargo Command" temporary="true">
+      <option name="command" value="test --package syntax" />
+      <option name="workingDirectory" value="file://$PROJECT_DIR$" />
+      <envs />
+      <option name="emulateTerminal" value="true" />
+      <option name="channel" value="DEFAULT" />
+      <option name="requiredFeatures" value="true" />
+      <option name="allFeatures" value="false" />
+      <option name="withSudo" value="false" />
+      <option name="buildTarget" value="REMOTE" />
+      <option name="backtrace" value="SHORT" />
+      <option name="isRedirectInput" value="false" />
+      <option name="redirectInputPath" value="" />
+      <method v="2">
+        <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+      </method>
+    </configuration>
+    <list>
+      <item itemvalue="Cargo.All Tests" />
+      <item itemvalue="Cargo.Expand hir_def::semantics::item" />
+      <item itemvalue="Cargo.Test goto_definition" />
+      <item itemvalue="Cargo.Test goto_definition::tests::basic_goto" />
+      <item itemvalue="Cargo.Test solidity_ls" />
+      <item itemvalue="Cargo.Tests in 'syntax'" />
+    </list>
+    <recent_temporary>
+      <list>
+        <item itemvalue="Cargo.Test goto_definition::tests::basic_goto" />
+        <item itemvalue="Cargo.Expand hir_def::semantics::item" />
+        <item itemvalue="Cargo.All Tests" />
+        <item itemvalue="Cargo.Test goto_definition" />
+        <item itemvalue="Cargo.Tests in 'syntax'" />
+      </list>
+    </recent_temporary>
+  </component>
+  <component name="RustProjectSettings">
+    <option name="toolchainHomeDirectory" value="$USER_HOME$/.cargo/bin" />
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="76e71342-8216-485b-8917-1646e819f13e" name="Changes" comment="" />
+      <created>1701782394543</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1701782394543</updated>
+      <workItem from="1701782395685" duration="466000" />
+      <workItem from="1701782870935" duration="670000" />
+      <workItem from="1701794310976" duration="8865000" />
+      <workItem from="1701807545209" duration="23081000" />
+      <workItem from="1701891394269" duration="1000" />
+      <workItem from="1701891402983" duration="1000" />
+      <workItem from="1701893853612" duration="3791000" />
+      <workItem from="1701972268350" duration="16854000" />
+      <workItem from="1702049019119" duration="39798000" />
+      <workItem from="1702216497710" duration="12840000" />
+      <workItem from="1702297800976" duration="38257000" />
+      <workItem from="1702843920777" duration="7425000" />
+      <workItem from="1704560545411" duration="22000" />
+      <workItem from="1704560739208" duration="34000" />
+      <workItem from="1704736741753" duration="7096000" />
+      <workItem from="1704759558193" duration="6615000" />
+      <workItem from="1704883566942" duration="10200000" />
+      <workItem from="1705253863274" duration="3648000" />
+      <workItem from="1705944134145" duration="92000" />
+      <workItem from="1707631816241" duration="13063000" />
+      <workItem from="1707756882972" duration="42403000" />
+      <workItem from="1708028253229" duration="2386000" />
+      <workItem from="1708522061555" duration="1000" />
+      <workItem from="1708522099327" duration="20000" />
+      <workItem from="1708522521806" duration="8765000" />
+      <workItem from="1708697794350" duration="87181000" />
+      <workItem from="1709034886811" duration="5676000" />
+      <workItem from="1709395226932" duration="29328000" />
+      <workItem from="1709653230049" duration="1077000" />
+      <workItem from="1709660676095" duration="10599000" />
+      <workItem from="1709743420428" duration="14676000" />
+      <workItem from="1709919115943" duration="50499000" />
+      <workItem from="1710193800641" duration="13444000" />
+      <workItem from="1710261104573" duration="7329000" />
+      <workItem from="1710436925927" duration="21713000" />
+      <workItem from="1710857652513" duration="6102000" />
+      <workItem from="1710894216458" duration="42746000" />
+      <workItem from="1711144506118" duration="7000" />
+      <workItem from="1711295587188" duration="934000" />
+      <workItem from="1711572461350" duration="55000" />
+      <workItem from="1711703556802" duration="412000" />
+      <workItem from="1712854521036" duration="9386000" />
+      <workItem from="1712940143096" duration="8201000" />
+      <workItem from="1713019364436" duration="7710000" />
+      <workItem from="1713048931874" duration="2000" />
+      <workItem from="1713128414573" duration="1806000" />
+      <workItem from="1713629385686" duration="14000" />
+      <workItem from="1715075012399" duration="1447000" />
+      <workItem from="1715860286302" duration="610000" />
+      <workItem from="1718122257215" duration="6000" />
+      <workItem from="1718122408013" duration="32000" />
+      <workItem from="1720271078707" duration="4000" />
+      <workItem from="1721261317058" duration="201000" />
+      <workItem from="1721732149578" duration="4000" />
+      <workItem from="1721928347996" duration="21000" />
+      <workItem from="1722268958110" duration="1000" />
+      <workItem from="1722269868414" duration="272000" />
+      <workItem from="1727177071890" duration="605000" />
+      <workItem from="1727177694769" duration="591000" />
+      <workItem from="1727178318069" duration="13279000" />
+      <workItem from="1727252033275" duration="25170000" />
+      <workItem from="1727503935466" duration="103370000" />
+      <workItem from="1727718821598" duration="100655000" />
+      <workItem from="1728086265993" duration="120586000" />
+      <workItem from="1728705672801" duration="10009000" />
+      <workItem from="1728723302477" duration="101365000" />
+      <workItem from="1729175583734" duration="42137000" />
+      <workItem from="1729527095308" duration="16892000" />
+      <workItem from="1729631563058" duration="131134000" />
+      <workItem from="1730466168666" duration="2509000" />
+      <workItem from="1730522034723" duration="30125000" />
+      <workItem from="1730981156912" duration="3122000" />
+      <workItem from="1731686663858" duration="1232000" />
+      <workItem from="1732101242111" duration="81000" />
+      <workItem from="1741524192196" duration="2264000" />
+      <workItem from="1741530101266" duration="25904000" />
+      <workItem from="1741722259477" duration="41968000" />
+      <workItem from="1741920298400" duration="28006000" />
+      <workItem from="1741999082403" duration="1545000" />
+      <workItem from="1742000649518" duration="742000" />
+      <workItem from="1742001401929" duration="59000" />
+      <workItem from="1742001469903" duration="90000" />
+      <workItem from="1742001760172" duration="432000" />
+      <workItem from="1742002208649" duration="389000" />
+      <workItem from="1742002612589" duration="217000" />
+      <workItem from="1742002840419" duration="200000" />
+      <workItem from="1742003053448" duration="723000" />
+      <workItem from="1742003804948" duration="217000" />
+      <workItem from="1742004035901" duration="1246000" />
+      <workItem from="1742005381679" duration="338000" />
+      <workItem from="1742005735308" duration="62000" />
+      <workItem from="1742005817386" duration="20000" />
+      <workItem from="1742005849967" duration="40000" />
+      <workItem from="1742005897547" duration="423000" />
+      <workItem from="1742006339182" duration="197000" />
+      <workItem from="1742006544293" duration="1754000" />
+      <workItem from="1742011125832" duration="265000" />
+      <workItem from="1742011402862" duration="136000" />
+      <workItem from="1742047613325" duration="295000" />
+      <workItem from="1742048553818" duration="241000" />
+      <workItem from="1742048806309" duration="1285000" />
+      <workItem from="1742453639596" duration="28000" />
+      <workItem from="1742657695796" duration="2000" />
+      <workItem from="1743270679537" duration="4000" />
+    </task>
+    <task id="LOCAL-00001" summary="init">
+      <option name="closed" value="true" />
+      <created>1701894429073</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1701894429073</updated>
+    </task>
+    <task id="LOCAL-00002" summary="init">
+      <option name="closed" value="true" />
+      <created>1704736809871</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1704736809871</updated>
+    </task>
+    <task id="LOCAL-00003" summary="init">
+      <option name="closed" value="true" />
+      <created>1704736825161</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1704736825161</updated>
+    </task>
+    <option name="localTasksCounter" value="4" />
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="init" />
+    <option name="LAST_COMMIT_MESSAGE" value="init" />
+  </component>
+  <component name="XSLT-Support.FileAssociations.UIState">
+    <expand />
+    <select />
+  </component>
+</project>

@@ -1,12 +1,12 @@
-use rowan::ast::AstNode;
+use rowan::ast::{AstNode, AstPtr};
 use crate::hir::contract::{ContractId, ContractItem, ContractType, InheritanceSpecifier};
 use crate::hir::ident::{Ident, IdentPath};
-use crate::lower::Ctx;
+use crate::hir::source_unit::Item;
+use crate::lower::LowerCtx;
 use crate::FileAstPtr;
 use syntax::ast::nodes;
-use crate::semantics::child_container::ChildSource;
 
-impl<'a> Ctx<'a> {
+impl<'a> LowerCtx<'a> {
     pub fn lower_contract_item(&mut self, i: nodes::ContractItem) -> Option<ContractItem<'a>> {
         Some(match i {
             nodes::ContractItem::ConstructorDefinition(i) => {
@@ -48,12 +48,15 @@ impl<'a> Ctx<'a> {
         if s.library_token().is_some() {
             t = ContractType::Library;
         }
-        let name = Ident::from_name(self.db.as_dyn_database(), s.name());
+        let name = Ident::from_name(self.db, s.name());
         let is_abstract = s.abstract_token().is_some();
-        let inheritance_chain =
-            s.inheritance().and_then(|s| self.lower_inheritance(s)).unwrap_or_default();
+        let inheritance_chain = s.inheritance()
+            .and_then(|s| self.lower_inheritance(s))
+            .unwrap_or_default();
 
-        let body = s.contract_items().filter_map(|t| self.lower_contract_item(t)).collect();
+        let body = s.contract_items()
+            .filter_map(|t| self.lower_contract_item(t))
+            .collect();
 
         let contract = ContractId::new(
             self.db,
@@ -61,12 +64,12 @@ impl<'a> Ctx<'a> {
             is_abstract,
             inheritance_chain,
             body,
-            FileAstPtr::new(self.file, &s),
+            AstPtr::new(&s),
         );
         
-        self.save_span(s.syntax().text_range(), ChildSource::Contract(contract));
+        self.save_span(s.syntax().text_range(), Item::Contract(contract));
         for i in contract.body(self.db) {
-            i.set_def_site(self.db, contract);
+            i.set_origin(self.db, contract);
         }
         (t, contract)
     }
@@ -86,7 +89,7 @@ impl<'a> Ctx<'a> {
         &mut self,
         s: nodes::InheritanceSpecifier,
     ) -> Option<InheritanceSpecifier<'a>> {
-        let path = IdentPath::from_opt(self.db.as_dyn_database(), s.ident_path());
+        let path = IdentPath::from_opt(self.db, s.ident_path());
         let args = s.call_argument_list().map(|list| self.lower_call_argument_list(list));
         Some(InheritanceSpecifier { path, args })
     }

@@ -3,19 +3,14 @@ use async_lsp::router::Router;
 use async_lsp::{ClientSocket, LanguageServer, ResponseError};
 use base_db::{BaseDb, Project};
 use futures::future::BoxFuture;
-use rowan::{TextRange, TextSize};
 use std::ops::ControlFlow;
-use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 use line_index::{WideEncoding, WideLineCol};
-use rowan::ast::AstNode;
 use tracing::info;
-use hir_def::parse;
-use hir_def::semantics::child_container::ChildSource;
 use ide::AnalysisHost;
 
 pub struct Server {
-    db: Arc<RwLock<ide::AnalysisHost>>,
+    db: Arc<RwLock<AnalysisHost>>,
 }
 
 struct TickEvent;
@@ -71,7 +66,7 @@ impl LanguageServer for Server {
         let db = self.db.read().unwrap();
         let db = &*db;
         let raw_path = p.text_document_position_params.text_document.uri.to_file_path().unwrap();
-        let f = db.get_file(raw_path);
+        let f = db.file(raw_path).unwrap();
 
         let line_index = db.line_index(f);
         let pos = line_index.to_utf8(WideEncoding::Utf16, wide_pos).unwrap();

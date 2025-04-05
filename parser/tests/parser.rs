@@ -19,7 +19,7 @@ fn enum_files(dir: impl AsRef<Path>, cb: &mut impl FnMut(PathBuf)) {
 fn parser_tests() {
     let mut n = 0;
     let start = std::time::Instant::now();
-    enum_files("C:\\Users\\user\\Documents\\s-game\\node_modules\\", &mut |path| {
+    enum_files("\\node_modules\\", &mut |path| {
         if path.extension().map(|f| f == "sol") != Some(true) {
             return;
         }

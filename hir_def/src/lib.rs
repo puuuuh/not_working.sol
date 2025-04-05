@@ -7,10 +7,12 @@ use salsa::Database;
 use std::sync::Arc;
 pub mod ast_id;
 pub mod hir;
-pub mod item_tree;
 pub mod lower;
 pub mod scope;
-pub mod semantics;
+pub mod source_map;
+pub mod items;
+pub mod resolution;
+pub mod resolver;
 
 pub use ast_id::*;
 use base_db::{BaseDb, File};
@@ -28,7 +30,7 @@ pub struct FilePosition {
 }
 
 
-#[derive(Debug, Clone, Eq, PartialEq, salsa::Update)]
+#[derive(Debug, Hash, Clone, Eq, PartialEq, salsa::Update)]
 pub struct FileAstPtr<N: AstNode + 'static> {
     pub file: File,
     pub ptr: AstPtr<N>,

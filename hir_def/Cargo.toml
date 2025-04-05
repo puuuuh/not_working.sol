@@ -21,6 +21,7 @@ num-bigint.workspace = true
 indexmap.workspace = true
 derive_more.workspace = true
 sorted-vec.workspace = true
+smallvec.workspace = true
 line-index = "0.1.2"
 
 [dev-dependencies]

@@ -1,8 +1,9 @@
-use crate::item_tree::print::HirPrint;
 use salsa::Database;
 use std::fmt::Write;
 use syntax::ast::nodes;
 use syntax::SyntaxToken;
+
+use crate::items::HirPrint;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, salsa::Update)]
 pub struct IdentPath<'db>(Vec<Ident<'db>>);

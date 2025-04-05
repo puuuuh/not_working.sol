@@ -1,16 +1,16 @@
 use crate::hir::ident::{Ident, IdentPath};
+use crate::hir::source_unit::Item;
 use crate::hir::state_variable::{StateVariableId, StateVariableInfo, StateVariableMutability};
 use crate::hir::type_name::TypeRef;
 use crate::hir::Visibility;
-use crate::lower::Ctx;
+use crate::lower::LowerCtx;
 use crate::FileAstPtr;
-use rowan::ast::AstNode;
+use rowan::ast::{AstNode, AstPtr};
 use syntax::ast::nodes::StateVariableAttribute;
 use syntax::ast::{nodes, AstChildren};
 use syntax::T;
-use crate::semantics::child_container::ChildSource;
 
-impl<'db> Ctx<'db> {
+impl<'db> LowerCtx<'db> {
     pub fn lower_state_variable_attrs(
         &mut self,
         e: AstChildren<StateVariableAttribute>,
@@ -23,7 +23,7 @@ impl<'db> Ctx<'db> {
             if let Some(i) = m.override_specifier() {
                 overrides = i
                     .ident_paths()
-                    .map(|p| IdentPath::from(self.db.as_dyn_database(), p))
+                    .map(|p| IdentPath::from(self.db, p))
                     .collect::<Vec<_>>();
             } else {
                 for t in m.syntax().children_with_tokens() {
@@ -51,12 +51,14 @@ impl<'db> Ctx<'db> {
         let info = StateVariableInfo { mutability, vis, overrides };
         let res = StateVariableId::new(
             self.db,
-            Ident::from_name(self.db.as_dyn_database(), s.name()),
+            Ident::from_name(self.db, s.name()),
             s.ty().map(|t| self.lower_type_ref(t)).unwrap_or(TypeRef::Error),
             info,
-            FileAstPtr::new(self.file, &s),
+
+            s.expr().map(|e| AstPtr::new(&e)),
+            AstPtr::new(&s),
         );
-        self.save_span(s.syntax().text_range(), ChildSource::StateVariable(res));
+        self.save_span(s.syntax().text_range(), Item::StateVariable(res));
         
         res
     }
