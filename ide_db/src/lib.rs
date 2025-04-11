@@ -1,16 +1,19 @@
+use std::sync::Arc;
+
+use base_db::File;
+
 pub mod defs;
 
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
+
+trait FileLineIndex {
+    fn line_index<'db>(self, db: &'db dyn base_db::BaseDb) -> Arc<line_index::LineIndex>;
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
+#[salsa::tracked]
+impl FileLineIndex for File {
+    #[salsa::tracked]
+    fn line_index(self, db: &dyn base_db::BaseDb) -> Arc<line_index::LineIndex> {
+        Arc::new(line_index::LineIndex::new(&*self.content(db)))
     }
 }

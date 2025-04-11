@@ -439,7 +439,9 @@ pub struct ParameterList {
     pub(crate) syntax: SyntaxNode,
 }
 impl ParameterList {
-    pub fn parameters(&self) -> AstChildren<Parameter> { support::children(&self.syntax) }
+    pub fn variable_declarations(&self) -> AstChildren<VariableDeclaration> {
+        support::children(&self.syntax)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -472,10 +474,10 @@ impl Returns {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Parameter {
+pub struct VariableDeclaration {
     pub(crate) syntax: SyntaxNode,
 }
-impl Parameter {
+impl VariableDeclaration {
     pub fn ty(&self) -> Option<Type> { support::child(&self.syntax) }
     pub fn location(&self) -> Option<DataLocation> { support::child(&self.syntax) }
     pub fn name(&self) -> Option<Name> { support::child(&self.syntax) }
@@ -1056,7 +1058,9 @@ pub struct VariableTupleElement {
     pub(crate) syntax: SyntaxNode,
 }
 impl VariableTupleElement {
-    pub fn parameter(&self) -> Option<Parameter> { support::child(&self.syntax) }
+    pub fn variable_declaration(&self) -> Option<VariableDeclaration> {
+        support::child(&self.syntax)
+    }
     pub fn comma_token(&self) -> Option<SyntaxToken> { support::token(&self.syntax, T![,]) }
 }
 
@@ -1198,7 +1202,7 @@ pub enum Stmt {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum VariableDeclarationItem {
-    Parameter(Parameter),
+    VariableDeclaration(VariableDeclaration),
     VariableTupleDeclaration(VariableTupleDeclaration),
 }
 impl AstNode for Name {
@@ -1669,9 +1673,9 @@ impl AstNode for Returns {
     }
     fn syntax(&self) -> &SyntaxNode { &self.syntax }
 }
-impl AstNode for Parameter {
+impl AstNode for VariableDeclaration {
     type Language = SolidityLang;
-    fn can_cast(kind: SyntaxKind) -> bool { kind == PARAMETER }
+    fn can_cast(kind: SyntaxKind) -> bool { kind == VARIABLE_DECLARATION }
     fn cast(syntax: SyntaxNode) -> Option<Self> {
         if Self::can_cast(syntax.kind()) {
             Some(Self { syntax })
@@ -2964,8 +2968,10 @@ impl AstNode for Stmt {
         }
     }
 }
-impl From<Parameter> for VariableDeclarationItem {
-    fn from(node: Parameter) -> VariableDeclarationItem { VariableDeclarationItem::Parameter(node) }
+impl From<VariableDeclaration> for VariableDeclarationItem {
+    fn from(node: VariableDeclaration) -> VariableDeclarationItem {
+        VariableDeclarationItem::VariableDeclaration(node)
+    }
 }
 impl From<VariableTupleDeclaration> for VariableDeclarationItem {
     fn from(node: VariableTupleDeclaration) -> VariableDeclarationItem {
@@ -2974,10 +2980,14 @@ impl From<VariableTupleDeclaration> for VariableDeclarationItem {
 }
 impl AstNode for VariableDeclarationItem {
     type Language = SolidityLang;
-    fn can_cast(kind: SyntaxKind) -> bool { matches!(kind, PARAMETER | VARIABLE_TUPLE_DECLARATION) }
+    fn can_cast(kind: SyntaxKind) -> bool {
+        matches!(kind, VARIABLE_DECLARATION | VARIABLE_TUPLE_DECLARATION)
+    }
     fn cast(syntax: SyntaxNode) -> Option<Self> {
         let res = match syntax.kind() {
-            PARAMETER => VariableDeclarationItem::Parameter(Parameter { syntax }),
+            VARIABLE_DECLARATION => {
+                VariableDeclarationItem::VariableDeclaration(VariableDeclaration { syntax })
+            }
             VARIABLE_TUPLE_DECLARATION => {
                 VariableDeclarationItem::VariableTupleDeclaration(VariableTupleDeclaration {
                     syntax,
@@ -2989,7 +2999,7 @@ impl AstNode for VariableDeclarationItem {
     }
     fn syntax(&self) -> &SyntaxNode {
         match self {
-            VariableDeclarationItem::Parameter(it) => &it.syntax,
+            VariableDeclarationItem::VariableDeclaration(it) => &it.syntax,
             VariableDeclarationItem::VariableTupleDeclaration(it) => &it.syntax,
         }
     }
@@ -3249,7 +3259,7 @@ impl std::fmt::Display for Returns {
         std::fmt::Display::fmt(self.syntax(), f)
     }
 }
-impl std::fmt::Display for Parameter {
+impl std::fmt::Display for VariableDeclaration {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         std::fmt::Display::fmt(self.syntax(), f)
     }

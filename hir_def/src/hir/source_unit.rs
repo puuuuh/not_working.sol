@@ -13,18 +13,18 @@ use crate::hir::structure::StructureId;
 use crate::hir::user_defined_value_type::UserDefinedValueTypeId;
 use crate::hir::using::UsingId;
 use crate::lower::LowerCtx;
-use crate::resolution::import::resolve_file;
+use crate::resolution::resolve_file;
 use crate::scope::expr::ExprScopeRoot;
 use crate::scope::{IndexMapUpdate, ItemScope, Scope};
 use crate::source_map::item_source_map::ItemSourceMap;
 use crate::source_map::span_map::SpanMap;
-use crate::{impl_has_origin, lazy_field, parse};
+use crate::{impl_has_origin, impl_major_item, lazy_field, FileExt};
 use base_db::{BaseDb, File, Project};
 use indexmap::IndexMap;
 use salsa::Database;
 
 use super::statement::StatementId;
-use super::user_defined_value_type;
+use super::{user_defined_value_type, HasOrigin};
 
 #[salsa::tracked]
 pub struct SourceUnit<'db> {
@@ -39,7 +39,7 @@ pub struct SourceUnit<'db> {
 
 #[salsa::tracked]
 pub fn file_tree<'db>(db: &'db dyn BaseDb, file: File) -> SourceUnit<'db> {
-    let input = parse(db, file).tree();
+    let input = file.tree(db);
     let mut lower = LowerCtx::new(db, file);
     let items = lower.lower_source(input);
 
@@ -153,7 +153,7 @@ pub struct ItemTreeData<'db> {
 }
 
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash, PartialOrd, Ord, salsa::Update)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, PartialOrd, Ord, salsa::Update)]
 pub enum Item<'db> {
     Import(ImportId<'db>),
     Pragma(PragmaId<'db>),
@@ -178,7 +178,6 @@ pub enum Item<'db> {
     Module(SourceUnit<'db>)
 }
 
-impl_has_origin!(Item<'db>);
 
 impl<'db> Item<'db> {
     pub fn set_origin(self, db: &'db dyn Database, origin: ItemOrigin) {
@@ -245,24 +244,24 @@ impl<'db> Item<'db> {
     }
 
     pub fn scope(self, db: &'db dyn BaseDb, project: Project) -> Option<Scope<'db>> {
-        Some(match self {
-            Item::Import(import_id) => todo!(),
-            Item::Pragma(pragma_id) => todo!(),
-            Item::Using(using_id) => todo!(),
+        Some(Scope::Item(match self {
+            Item::Import(import_id) => import_id.item_origin(db).scope(db, project),
+            Item::Pragma(pragma_id) => pragma_id.item_origin(db).scope(db, project),
+            Item::Using(using_id) => using_id.item_origin(db).scope(db, project),
             Item::Contract(contract_id) |
             Item::Library(contract_id) |
-            Item::Interface(contract_id) => Scope::Item(contract_id.scope(db, project)),
-            Item::Enum(enumeration_id) => todo!(),
-            Item::UserDefinedValueType(user_defined_value_type_id) => todo!(),
-            Item::Error(error_id) => todo!(),
-            Item::Event(event_id) => todo!(),
-            Item::Function(function_id) => todo!(),
-            Item::StateVariable(state_variable_id) => todo!(),
-            Item::Struct(structure_id) => todo!(),
-            Item::Constructor(constructor_id) => todo!(),
-            Item::Modifier(modifier_id) => todo!(),
-            Item::Module(source_unit) => todo!(),
-        })
+            Item::Interface(contract_id) => contract_id.scope(db, project),
+            Item::Enum(enumeration_id) => enumeration_id.item_origin(db).scope(db, project),
+            Item::UserDefinedValueType(user_defined_value_type_id) => user_defined_value_type_id.item_origin(db).scope(db, project),
+            Item::Error(error_id) => error_id.item_origin(db).scope(db, project),
+            Item::Event(event_id) => event_id.item_origin(db).scope(db, project),
+            Item::Function(function_id) => function_id.item_origin(db).scope(db, project),
+            Item::StateVariable(state_variable_id) => state_variable_id.item_origin(db).scope(db, project),
+            Item::Struct(structure_id) => structure_id.item_origin(db).scope(db, project),
+            Item::Constructor(constructor_id) => constructor_id.item_origin(db).scope(db, project),
+            Item::Modifier(modifier_id) => modifier_id.item_origin(db).scope(db, project),
+            Item::Module(source_unit) => source_unit.scope(db, project),
+        }))
     }
 
     pub fn body(self, db: &'db dyn BaseDb) -> Option<(StatementId<'db>, ItemSourceMap<'db>)> {
@@ -281,7 +280,7 @@ impl<'db> Item<'db> {
             Item::StateVariable(state_variable_id) => None,
             Item::Struct(structure_id) => None,
             Item::Constructor(constructor_id) => None,
-            Item::Modifier(modifier_id) => None,
+            Item::Modifier(modifier_id) => modifier_id.body(db),
             Item::Module(source_unit) => None,
         }
     }
@@ -304,7 +303,7 @@ impl<'db> From<ContractItem<'db>> for Item<'db> {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash, PartialOrd, Ord, salsa::Update)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, PartialOrd, Ord, salsa::Update)]
 pub enum ItemOrigin<'db> {
     Root(SourceUnit<'db>),
     Contract(ContractId<'db>),

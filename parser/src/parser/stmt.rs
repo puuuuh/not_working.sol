@@ -68,7 +68,7 @@ impl<'a> Parser<'a> {
     }
 
     fn variable_declaration(&mut self) {
-        self.builder.start_node(PARAMETER.into());
+        self.builder.start_node(VARIABLE_DECLARATION.into());
         'parse: {
             self.type_name();
             match peek!([CALLDATA_KW, MEMORY_KW, STORAGE_KW, CONSTANT_KW, IDENT], 'parse, self) {

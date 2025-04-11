@@ -10,7 +10,7 @@ use indexmap::IndexMap;
 use salsa::{Database, Update};
 use std::{hash::{Hash, Hasher}, ops::{Deref, DerefMut}};
 
-use crate::hir::{expr::ExprId, ident::Ident};
+use crate::hir::{ExprId, Ident};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IndexMapUpdate<T: Hash + Eq, T1: PartialOrd>(pub IndexMap<T, T1>);
@@ -61,7 +61,7 @@ where
     }
 }
 
-#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, PartialOrd, Ord, salsa::Supertype)]
+#[derive(Copy, Clone, Hash, Eq, PartialEq, PartialOrd, Ord, salsa::Supertype)]
 pub enum Scope<'db> {
     Item(ItemScope<'db>),
     Expr(ExprScopeRoot<'db>)

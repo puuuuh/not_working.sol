@@ -1,9 +1,9 @@
 use rowan::ast::{AstNode, AstPtr};
 use crate::hir;
-use crate::hir::expr::{Expr, ExprId};
-use crate::hir::ident::Ident;
-use crate::hir::literal::Literal;
-use crate::hir::type_name::TypeRef;
+use crate::hir::{Expr, ExprId};
+use crate::hir::Ident;
+use crate::hir::Literal;
+use crate::hir::TypeRef;
 use crate::lower::LowerCtx;
 use syntax::ast::nodes;
 
@@ -31,7 +31,7 @@ impl<'db> LowerCtx<'db> {
                 },
                 nodes::Expr::InfixExpr(i) => Expr::BinaryOp {
                     lhs: self.lower_expr2(i.lhs()),
-                    op: i.op().map(hir::op::BinaryOp::from),
+                    op: i.op().map(hir::BinaryOp::from),
                     rhs: self.lower_expr2(i.rhs()),
                 },
                 nodes::Expr::PostfixExpr(i) => i
@@ -39,7 +39,7 @@ impl<'db> LowerCtx<'db> {
                     .zip(i.expr())
                     .map(|(op, expr)| Expr::PostfixOp {
                         expr: self.lower_expr(expr),
-                        op: hir::op::PostfixOp::from(op),
+                        op: hir::PostfixOp::from(op),
                     })
                     .unwrap_or(Expr::Missing),
                 nodes::Expr::PrefixExpr(i) => i
@@ -47,7 +47,7 @@ impl<'db> LowerCtx<'db> {
                     .zip(i.expr())
                     .map(|(op, expr)| Expr::PrefixOp {
                         expr: self.lower_expr(expr),
-                        op: hir::op::PrefixOp::from(op),
+                        op: hir::PrefixOp::from(op),
                     })
                     .unwrap_or(Expr::Missing),
                 nodes::Expr::CallOptionsExpr(i) => Expr::CallOptions {

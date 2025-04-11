@@ -1,6 +1,6 @@
-use crate::hir::ident::Ident;
-use crate::hir::import::{ImportId, ImportKind, SymbolAlias};
-use crate::hir::source_unit::Item;
+use crate::hir::Ident;
+use crate::hir::{ImportId, ImportKind, SymbolAlias};
+use crate::hir::Item;
 use crate::lower::literal::decode_string_literal;
 use crate::lower::LowerCtx;
 use crate::FileAstPtr;

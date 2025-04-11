@@ -1,1 +1,2 @@
-pub mod import;
+mod import;
+pub use import::*;

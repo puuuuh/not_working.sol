@@ -1,111 +1,45 @@
-use std::env::args;
-
 use rowan::ast::{AstNode, AstPtr};
 use base_db::{BaseDb, Project};
-use hir_def::{hir::{expr::Expr, ident::Ident, source_unit::{file_tree, Item}, HasFile as _}, parse, scope::expr::DefinitionSite, FilePosition};
-use syntax::{ast::nodes, SyntaxKind};
+use hir_def::{hir::{file_tree, Ident, Item}, scope::expr::DefinitionSite, source_map::span_map, FileExt, FilePosition};
+use syntax::{ast::nodes::{self, FunctionDefinition}, SyntaxKind};
 
 use crate::navigation_target::NavigationTarget;
 
-pub fn goto_definition(db: &dyn BaseDb, project: Project, pos: FilePosition) -> Option<NavigationTarget> {
-    let t = hir_def::parse(db, pos.file);
+pub fn goto_definition(db: &dyn BaseDb, project: Project, pos: FilePosition) -> Option<Vec<NavigationTarget>> {
+    let t = pos.file.tree(db);
     let parsed = file_tree(db, pos.file);
-    let token = t.tree().syntax().token_at_offset(pos.position).next()?;
-    if token.kind() != SyntaxKind::IDENT {
-        return None;
-    }
+    let token = t.syntax().token_at_offset(pos.position).find(|t| t.kind() == SyntaxKind::IDENT)?;
+    let expr = token.parent_ancestors().filter_map(|t| nodes::Expr::cast(t)).next();
     let item = parsed.span_map(db).find(token.text_range())?;
     let scope = item.scope(db, project)?;
-    let Some((_, map)) = item.body(db) else {
-        if let Some(defsite) = scope.lookup(db, Ident::new(db, token.text())) {
-            let ptr = match defsite {
-                DefinitionSite::Item(item) => {
-                    match item {
-                        Item::Contract(contract_id) |
-                            Item::Library(contract_id) |
-                            Item::Interface(contract_id) => {
-                            let node = contract_id.node(db);
-                            let f = parse(db, contract_id.file(db));
-                            let ptr = contract_id.node(db).to_node(&f.syntax_node());
-                            ptr.name()?.syntax().text_range();
-                        },
-                        /* 
-                        Item::Enum(enumeration_id) => {
-
-                        },
-                        Item::UserDefinedValueType(user_defined_value_type_id) => user_defined_value_type_id.node(db),
-                        Item::Error(error_id) => error_id.node(db),
-                        Item::Event(event_id) => event_id.node(db),
-                        Item::Function(function_id) => function_id.node(db),
-                        Item::StateVariable(state_variable_id) => state_variable_id.node(db),
-                        Item::Struct(structure_id) => structure_id.node(db),
-                        Item::Modifier(modifier_id) => modifier_id.node(db),
-                        Item::Import(_) |
-                        Item::Pragma(_) |
-                        Item::Using(_) |
-                        Item::Constructor(_) => todo!(),
-                        Item::Module(_) => {return None}
-                        */
-                        _ => {todo!()}
-                    }
-                },
-                _ => todo!()
-            };
-
-        }
-        return None;
+    let body = match item {
+        Item::Function(function_id) => Some((function_id.body(db), function_id.scope(db, project))),
+        Item::Constructor(constructor_id) => Some((constructor_id.body(db), constructor_id.scope(db, project))),
+        Item::Modifier(modifier_id) => Some((modifier_id.body(db), modifier_id.scope(db, project))),
+        _ => None,
     };
 
-    for ancestor in token.parent_ancestors() {
-        if nodes::Expr::can_cast(ancestor.kind()) {
-            let t = map.expr_map.0.get(&AstPtr::new(&nodes::Expr::cast(ancestor)?))?;
-            let expr = match t.kind(db) {
-                Expr::MemberAccess { owner, member_name } => todo!(),
-                Expr::Call { callee, args } => todo!(),
-                Expr::Ident { name_ref } => {
-                    name_ref
-                },
-                Expr::Literal { data } => todo!(),
-                _ => {
-                    return None;
-                }
-            };
-
-            scope.lookup_in_expr(db, *t, *expr);
-        } else if let Some(a) = nodes::Stmt::cast(ancestor) {
-            todo!();
+    if let Some((Some((_, source_map)), scopes))= body {
+        if let Some(expr) = expr {
+            if let Some(e) = source_map.expr_map.get(&AstPtr::new(&expr)) {
+                return Some(scopes.lookup(db, *e, Ident::new(db, token.text()))
+                    .into_iter()
+                    .flat_map(|defsite| match defsite {
+                        DefinitionSite::Item(item) => NavigationTarget::from_item(db, item),
+                        DefinitionSite::Local(variable_declaration) => NavigationTarget::from_local(db, variable_declaration, pos.file),
+                    })
+                    .collect());
+            }
         }
     }
 
-    let ident_path = token.parent_ancestors().filter_map(nodes::Expr::cast).next()?;
-
-    match item {
-        Item::Constructor(_) => {}
-        Item::Contract(_) => {}
-        Item::Enum(_) => {}
-        Item::Error(_) => {}
-        Item::Event(e) => {
-        }
-        Item::Function(f) => {
-            let scope = f.scope(db, project);
-            let (body, map) = f.body(db)?;
-            let t = map.expr_map.0.get(&AstPtr::new(&ident_path))?;
-            
-            scope.lookup(db, *t, f.name(db).unwrap());
-        }
-        Item::Import(_) => {}
-        Item::Modifier(_) => {}
-        Item::Struct(_) => {}
-        Item::Using(_) => {}
-        Item::UserDefinedValueType(_) => {}
-        _ => {}
-    }
-
-    None
-}
-
-fn goto_definition_expr(db: &dyn BaseDb) {
-
+    return Some(scope.lookup(db, Ident::new(db, token.text()))
+        .into_iter()
+        .flat_map(|defsite| match defsite {
+            DefinitionSite::Item(item) => NavigationTarget::from_item(db, item),
+            DefinitionSite::Local(variable_declaration) => NavigationTarget::from_local(db, variable_declaration, pos.file),
+        })
+        .collect());
 }
 
 #[cfg(test)]
@@ -121,18 +55,23 @@ mod tests {
             contract ReentrancyGuardUpgradeable {}
             
             contract Test is
-                ReentrancyGu$0ardUpgradeable,
+                ReentrancyGuardUpgradeable,
                 ERC2771ContextUpgradeable(address(0))
             {
-                function helloWorld(IERC20 tmp) {
-                    uint256 help = tmp.ReentrancyGuardUpgradeable.Hello(address(0));
+                modifier temp(IERC20 memory tmp) {
+                    return tm$0p;
+                }
+
+                function helloWorld(IERC20 memory tmp) {
+                    uint256 test = 1;
+                    uint256 help = test.ReentrancyGuardUpgradeable.Hello(address(0));
                 }
             }
         ");
         let pos = fixture.position.unwrap();
         let (db, file) = TestDatabase::from_fixture(fixture);
         db.attach(|db| {
-            goto_definition(db, Project::new(db, vec![], vec![]), FilePosition {position: pos, file} );
+            goto_definition(db, Project::new(db, vfs::VfsPath::from_virtual("".to_owned())), FilePosition {position: pos, file} );
         })
     }
 }

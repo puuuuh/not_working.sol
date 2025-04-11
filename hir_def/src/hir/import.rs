@@ -1,6 +1,6 @@
 use crate::hir::ident::Ident;
 use crate::hir::source_unit::{file_tree, ItemOrigin};
-use crate::{impl_has_origin, lazy_field, FileAstPtr};
+use crate::{impl_major_item, lazy_field, FileAstPtr};
 use base_db::{AnchoredPath, BaseDb, File, Project};
 use rowan::ast::AstPtr;
 use smallvec::{smallvec, SmallVec};
@@ -9,7 +9,7 @@ use salsa::tracked;
 
 use super::source_unit::Item;
 
-#[derive(Debug, Hash, Clone, Eq, PartialEq, salsa::Update)]
+#[derive(Hash, Clone, Eq, PartialEq, salsa::Update)]
 pub enum ImportKind<'db> {
     Path { name: Option<Ident<'db>>, path: String },
     Aliases { symbol_aliases: Vec<SymbolAlias<'db>>, path: String },
@@ -17,7 +17,7 @@ pub enum ImportKind<'db> {
     Error,
 }
 
-#[derive(Debug, Hash, Clone, Eq, PartialEq, salsa::Update)]
+#[derive(Hash, Clone, Eq, PartialEq, salsa::Update)]
 pub struct SymbolAlias<'db> {
     pub(crate) name: Ident<'db>,
     pub(crate) as_name: Option<Ident<'db>>,
@@ -33,7 +33,6 @@ pub struct ImportId<'db> {
 }
 
 lazy_field!(ImportId<'db>, origin, set_origin, ItemOrigin<'db>);
-impl_has_origin!(ImportId<'db>);
 
 #[salsa::tracked]
 impl<'db> ImportId<'db> {

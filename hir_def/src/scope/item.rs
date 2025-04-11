@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use crate::hir::ident::Ident;
-use crate::hir::source_unit::Item;
+use crate::hir::Ident;
+use crate::hir::Item;
 use crate::scope::IndexMapUpdate;
 use salsa::Database;
 

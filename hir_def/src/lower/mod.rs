@@ -14,14 +14,14 @@ mod structure;
 pub mod types;
 mod user_defined_value_type;
 
-use crate::hir::contract::ContractType;
-use crate::hir::expr::ExprId;
-use crate::hir::ident::{Ident, IdentPath};
-use crate::hir::op::UserDefineableOp;
-use crate::hir::pragma::PragmaId;
-use crate::hir::source_unit::Item;
-use crate::hir::statement::StatementId;
-use crate::hir::using::{UsingAlias, UsingData, UsingId};
+use crate::hir::ContractType;
+use crate::hir::ExprId;
+use crate::hir::{Ident, IdentPath};
+use crate::hir::UserDefineableOp;
+use crate::hir::PragmaId;
+use crate::hir::Item;
+use crate::hir::StatementId;
+use crate::hir::{UsingAlias, UsingData, UsingId};
 use crate::scope::IndexMapUpdate;
 use crate::source_map::span_map::SpanMapRange;
 use crate::FileAstPtr;
@@ -84,7 +84,7 @@ impl<'a> LowerCtx<'a> {
 
     pub fn lower_pragma(&mut self, s: nodes::Pragma) -> PragmaId<'a> {
         let data = s.data_string();
-        PragmaId::new(self.db, data)
+        PragmaId::new(self.db, data, AstPtr::new(&s))
     }
 
     pub fn lower_using(&mut self, s: nodes::Using) -> UsingId<'a> {

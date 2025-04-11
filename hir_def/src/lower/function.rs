@@ -1,12 +1,16 @@
-use crate::hir::argument::ArgumentId;
-use crate::hir::expr::ExprId;
-use crate::hir::function::{Function, FunctionId, ModifierInvocation};
-use crate::hir::ident::{Ident, IdentPath};
-use crate::hir::source_unit::Item;
-use crate::hir::type_name::TypeRef;
-use crate::hir::{CallOption, StateMutability, Visibility};
+use crate::hir::VariableDeclaration;
+use crate::hir::CallOption;
+use crate::hir::ExprId;
+use crate::hir::VariableDeclarationOwner;
+use crate::hir::{Function, FunctionId, ModifierInvocation};
+use crate::hir::{Ident, IdentPath};
+use crate::hir::Item;
+use crate::hir::StateMutability;
+use crate::hir::TypeRef;
+use crate::hir::Visibility;
 use crate::lower::LowerCtx;
 use rowan::ast::{AstNode, AstPtr};
+use syntax::ast::nodes::FunctionDefinition;
 use syntax::ast::{nodes, AstChildren};
 use syntax::T;
 
@@ -23,7 +27,7 @@ impl<'db> LowerCtx<'db> {
 
     pub fn lower_function_attrs(
         &mut self,
-        e: AstChildren<nodes::FunctionAttribute>,
+        e: impl Iterator<Item = nodes::FunctionAttribute>,
     ) -> (
         Visibility,
         StateMutability,
@@ -69,8 +73,8 @@ impl<'db> LowerCtx<'db> {
         (visibility, mutability, modifiers, overrides, virt)
     }
 
-    pub fn lower_parameter(&mut self, p: nodes::Parameter) -> ArgumentId<'db> {
-        ArgumentId::new(
+    pub fn lower_parameter(&mut self, p: nodes::VariableDeclaration) -> VariableDeclaration<'db> {
+        VariableDeclaration::new(
             self.db,
             p.ty().map(|ty| self.lower_type_ref(ty)).unwrap_or(TypeRef::Error),
             p.location().map(Into::into),
@@ -107,26 +111,32 @@ impl<'db> LowerCtx<'db> {
         }
     }
 
-    pub fn lower_fallback_function_definition(
+    fn lower_function_definition_inner(
         &mut self,
-        e: nodes::FallbackFunctionDefinition,
+        attrs: impl Iterator<Item = nodes::FunctionAttribute>,
+        name: Option<nodes::Name>,
+        body: Option<nodes::Block>,
+        parameters: Option<nodes::ParameterList>,
+        returns: Option<nodes::ParameterList>,
+        node: nodes::FunctionDefinition,
     ) -> FunctionId<'db> {
-        let range = e.syntax().text_range();
-        let (vis, mu, mods, over, virt) = self.lower_function_attrs(e.function_attributes());
-        let name = None;
-        let body = e.block().map(|b| AstPtr::new(&b)); // .map(|a| self.lower_stmt(nodes::Stmt::Block(a)));
+        let range = node.syntax().text_range();
+        let (vis, mu, mods, over, virt) = self.lower_function_attrs(attrs);
+        let name = Ident::from_name(self.db, name);
+        let body = body.map(|a| AstPtr::new(&a));
+
+        let args: Vec<_> = parameters
+                    .map(|a| a.variable_declarations().map(|p| self.lower_parameter(p)).collect())
+                    .unwrap_or_default();
+        let returns: Option<Vec<_>> = returns
+                    .map(|a| a.variable_declarations().map(|p| self.lower_parameter(p)).collect());
+
         let f = FunctionId::new(
             self.db,
-            name,
+            Some(name),
             Function {
-                args: e
-                    .parameter_list()
-                    .map(|a| a.parameters().map(|p| self.lower_parameter(p)).collect())
-                    .unwrap_or_default(),
-                returns: e
-                    .returns()
-                    .and_then(|a| a.parameter_list())
-                    .map(|a| a.parameters().map(|p| self.lower_parameter(p)).collect()),
+                args: args.clone(),
+                returns: returns.clone(),
                 modifiers: mods,
                 overrides: over,
                 vis,
@@ -134,69 +144,49 @@ impl<'db> LowerCtx<'db> {
                 is_virtual: virt,
             },
             body,
-            AstPtr::new(&nodes::FunctionDefinition::FallbackFunctionDefinition(e)),
+            AstPtr::new(&node.clone().into()),
         );
+
         self.save_span(range, Item::Function(f));
+
         f
+    }
+
+    pub fn lower_fallback_function_definition(
+        &mut self,
+        e: nodes::FallbackFunctionDefinition,
+    ) -> FunctionId<'db> {
+        self.lower_function_definition_inner(
+            e.function_attributes(), 
+            None, 
+            e.block(), 
+            e.parameter_list(), 
+            e.returns().and_then(|e| e.parameter_list()), 
+            nodes::FunctionDefinition::FallbackFunctionDefinition(e))
     }
 
     pub fn lower_receive_function_definition(
         &mut self,
         e: nodes::ReceiveFunctionDefinition,
     ) -> FunctionId<'db> {
-        let range = e.syntax().text_range();
-        let (vis, mu, mods, over, virt) = self.lower_function_attrs(e.function_attributes());
-        let name = None;
-        let body = e.block().map(|a| AstPtr::new(&a));
-        let f = FunctionId::new(
-            self.db,
-            name,
-            Function {
-                args: vec![],
-                returns: None,
-                modifiers: mods,
-                overrides: over,
-                vis,
-                mutability: mu,
-                is_virtual: virt,
-            },
-            body,
-            AstPtr::new(&nodes::FunctionDefinition::ReceiveFunctionDefinition(e)),
-        );
-        self.save_span(range, Item::Function(f));
-        f
+        self.lower_function_definition_inner(
+            e.function_attributes(), 
+            None, 
+            e.block(), 
+            None,
+            None,
+            nodes::FunctionDefinition::ReceiveFunctionDefinition(e))
     }
     pub fn lower_named_function_definition(
         &mut self,
         e: nodes::NamedFunctionDefinition,
     ) -> FunctionId<'db> {
-        let range = e.syntax().text_range();
-        let (vis, mu, mods, over, virt) = self.lower_function_attrs(e.function_attributes());
-        let name = Ident::from_name(self.db, e.name());
-        let body = e.block().map(|a| AstPtr::new(&a));
-        let f = FunctionId::new(
-            self.db,
-            Some(name),
-            Function {
-                args: e
-                    .parameter_list()
-                    .map(|a| a.parameters().map(|p| self.lower_parameter(p)).collect())
-                    .unwrap_or_default(),
-                returns: e
-                    .returns()
-                    .and_then(|a| a.parameter_list())
-                    .map(|a| a.parameters().map(|p| self.lower_parameter(p)).collect()),
-                modifiers: mods,
-                overrides: over,
-                vis,
-                mutability: mu,
-                is_virtual: virt,
-            },
-            body,
-            AstPtr::new(&e.clone().into()),
-        );
-        self.save_span(range, Item::Function(f));
-
-        f
+        self.lower_function_definition_inner(
+            e.function_attributes(), 
+            e.name(), 
+            e.block(), 
+            e.parameter_list(),
+            e.returns().and_then(|e| e.parameter_list()),
+            nodes::FunctionDefinition::NamedFunctionDefinition(e))
     }
 }

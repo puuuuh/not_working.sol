@@ -1,11 +1,12 @@
-use crate::hir::argument::ArgumentId;
+use crate::hir::variable_declaration::VariableDeclaration;
 use crate::hir::expr::ExprId;
 use crate::hir::ident::Ident;
-use crate::hir::{StateMutability, Visibility};
 use crate::items::HirPrint;
 use salsa::Database;
 use std::fmt::{Debug, Display, Formatter, Write};
 use crate::lazy_field;
+
+use super::{state_mutability::StateMutability, visibility::Visibility};
 
 #[derive(Clone, Eq, PartialEq, Debug, Hash, salsa::Update)]
 pub enum ElementaryTypeRef {
@@ -62,14 +63,14 @@ impl HirPrint for ElementaryTypeRef {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Hash, salsa::Update)]
+#[derive(Clone, Eq, PartialEq, Hash, salsa::Update)]
 pub enum TypeRef<'db> {
     Elementary(ElementaryTypeRef),
     Function {
-        arguments: Vec<ArgumentId<'db>>,
+        arguments: Vec<VariableDeclaration<'db>>,
         visibility: Visibility,
         mutability: StateMutability,
-        returns: Vec<ArgumentId<'db>>,
+        returns: Vec<VariableDeclaration<'db>>,
     },
     Mapping {
         key_type: Box<TypeRef<'db>>,

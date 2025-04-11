@@ -1,7 +1,7 @@
 use crate::hir::ident::Ident;
 use crate::hir::source_unit::ItemOrigin;
 use crate::items::HirPrint;
-use crate::{impl_has_origin, lazy_field, FileAstPtr};
+use crate::{impl_major_item, lazy_field, FileAstPtr};
 use rowan::ast::AstPtr;
 use salsa::Database;
 use std::fmt::Write;
@@ -17,7 +17,6 @@ pub struct EnumerationId<'db> {
 }
 
 lazy_field!(EnumerationId<'db>, origin, set_origin, ItemOrigin<'db>);
-impl_has_origin!(EnumerationId<'db>);
 
 impl HirPrint for EnumerationId<'_> {
     fn write<T: Write>(&self, db: &dyn Database, w: &mut T, ident: usize) -> std::fmt::Result {

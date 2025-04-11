@@ -2,7 +2,7 @@ use crate::hir::ident::Ident;
 use crate::hir::source_unit::ItemOrigin;
 use crate::hir::type_name::TypeRef;
 use crate::items::HirPrint;
-use crate::{impl_has_origin, lazy_field, FileAstPtr};
+use crate::{impl_major_item, lazy_field, FileAstPtr};
 use rowan::ast::AstPtr;
 use salsa::{tracked, Database};
 use std::fmt::Write;
@@ -18,7 +18,6 @@ pub struct ErrorId<'db> {
 }
 
 lazy_field!(ErrorId<'db>, origin, set_origin, ItemOrigin<'db>);
-impl_has_origin!(ErrorId<'db>);
 
 impl HirPrint for ErrorId<'_> {
     fn write<T: Write>(&self, db: &dyn Database, w: &mut T, ident: usize) -> std::fmt::Result {
@@ -46,7 +45,7 @@ impl HirPrint for ErrorParameterId<'_> {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Hash, salsa::Update)]
+#[derive(Clone, Eq, PartialEq, Hash, salsa::Update)]
 pub struct ErrorParameter<'db> {
     pub name: Option<Ident<'db>>,
     pub ty: TypeRef<'db>,

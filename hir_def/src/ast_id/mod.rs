@@ -1,13 +1,14 @@
-use crate::parse;
 use base_db::{BaseDb, File};
 use rowan::ast::AstNode;
 use span::AstIdMap;
 use std::sync::Arc;
 
+use crate::FileExt;
+
 #[salsa::tracked]
 pub fn ast_id_map<'db>(db: &'db dyn BaseDb, file: File) -> Arc<AstIdMap> {
-    let f = parse(db, file);
-    let span_map = AstIdMap::from_source(f.tree().syntax());
+    let f = file.tree(db);
+    let span_map = AstIdMap::from_source(f.syntax());
     Arc::new(span_map)
 }
 

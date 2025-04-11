@@ -1,7 +1,7 @@
-use crate::hir::ident::{Ident, IdentPath};
-use crate::hir::source_unit::Item;
-use crate::hir::state_variable::{StateVariableId, StateVariableInfo, StateVariableMutability};
-use crate::hir::type_name::TypeRef;
+use crate::hir::{Ident, IdentPath};
+use crate::hir::Item;
+use crate::hir::{StateVariableId, StateVariableInfo, StateVariableMutability};
+use crate::hir::TypeRef;
 use crate::hir::Visibility;
 use crate::lower::LowerCtx;
 use crate::FileAstPtr;

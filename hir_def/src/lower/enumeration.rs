@@ -1,7 +1,7 @@
 use rowan::ast::{AstNode, AstPtr};
-use crate::hir::enumeration::{EnumerationId, EnumerationVariantId};
-use crate::hir::ident::Ident;
-use crate::hir::source_unit::Item;
+use crate::hir::{EnumerationId, EnumerationVariantId};
+use crate::hir::Ident;
+use crate::hir::Item;
 use crate::lower::LowerCtx;
 use crate::FileAstPtr;
 use syntax::ast::nodes;

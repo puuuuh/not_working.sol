@@ -4,6 +4,7 @@
 use rowan::ast::{AstNode, AstPtr};
 use salsa::Accumulator;
 use salsa::Database;
+use syntax::SyntaxNode;
 use std::sync::Arc;
 pub mod ast_id;
 pub mod hir;
@@ -11,8 +12,8 @@ pub mod lower;
 pub mod scope;
 pub mod source_map;
 pub mod items;
-pub mod resolution;
 pub mod resolver;
+pub mod resolution;
 
 pub use ast_id::*;
 use base_db::{BaseDb, File};
@@ -49,7 +50,7 @@ pub struct SyntaxError {
 }
 
 #[salsa::tracked]
-pub fn parse(db: &dyn BaseDb, file: File) -> Parse<UnitSource> {
+fn file_parse(db: &dyn BaseDb, file: File) -> Parse<UnitSource> {
     let data = &*file.content(db);
     let lexer = Lexer::new(data);
     let mut pos = 0;
@@ -68,7 +69,22 @@ pub fn parse(db: &dyn BaseDb, file: File) -> Parse<UnitSource> {
 }
 
 #[salsa::tracked]
-pub fn q_line_index(db: &dyn BaseDb, file: File) -> Arc<LineIndex> {
+pub fn file_line_index(db: &dyn BaseDb, file: File) -> Arc<LineIndex> {
     let c = &*file.content(db);
     Arc::new(LineIndex::new(c))
+}
+
+pub trait FileExt {
+    fn tree(self, db: &dyn BaseDb) -> UnitSource;
+    fn line_index(self, db: &dyn BaseDb) -> Arc<LineIndex>;
+}
+
+impl FileExt for File {
+    fn tree(self, db: &dyn BaseDb) -> UnitSource {
+        file_parse(db, self).tree()
+    }
+
+    fn line_index(self, db: &dyn BaseDb) -> Arc<LineIndex> {
+        file_line_index(db, self)
+    }
 }

@@ -5,7 +5,7 @@ use syntax::SyntaxToken;
 
 use crate::items::HirPrint;
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash, salsa::Update)]
+#[derive(Clone, Eq, PartialEq, Hash, salsa::Update)]
 pub struct IdentPath<'db>(Vec<Ident<'db>>);
 
 impl HirPrint for IdentPath<'_> {

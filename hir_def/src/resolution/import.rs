@@ -5,7 +5,7 @@ use indexmap::IndexMap;
 use smallvec::SmallVec;
 use vfs::{AnchoredPath, File, VfsPath};
 
-use crate::{hir::{ident::Ident, import::{ImportId, ImportKind}, source_unit::{file_tree, Item, SourceUnit}}, scope::IndexMapUpdate};
+use crate::{hir::{Ident, ImportId, ImportKind, file_tree, Item, SourceUnit}, scope::IndexMapUpdate};
 use salsa::Database;
 
 #[salsa::tracked]
@@ -153,6 +153,5 @@ fn helloworld() {
     let mut tmp = resolve_file(&db, project, file);
     db.attach(|_| {
         dbg!(tmp.errors(&db));
-        dbg!(tmp.items(&db).0.keys());
     });
 }

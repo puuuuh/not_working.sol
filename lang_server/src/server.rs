@@ -1,16 +1,20 @@
-use async_lsp::lsp_types::{DidChangeConfigurationParams, GotoDefinitionParams, GotoDefinitionResponse, HoverProviderCapability, InitializeParams, InitializeResult, Location, OneOf, Position, PositionEncodingKind, Range, ServerCapabilities, Url};
+use async_lsp::lsp_types::*;
 use async_lsp::router::Router;
 use async_lsp::{ClientSocket, LanguageServer, ResponseError};
-use base_db::{BaseDb, Project};
+use camino::Utf8PathBuf;
 use futures::future::BoxFuture;
+use ide::change::FileChange;
 use std::ops::ControlFlow;
-use std::sync::{Arc, RwLock};
-use line_index::{WideEncoding, WideLineCol};
+use std::sync::Arc;
+use line_index::LineIndex;
 use tracing::info;
 use ide::AnalysisHost;
 
+use crate::from_proto::ToCaminoPathBuf;
+use crate::{from_proto, to_proto};
+
 pub struct Server {
-    db: Arc<RwLock<AnalysisHost>>,
+    snap: AnalysisHost,
 }
 
 struct TickEvent;
@@ -18,14 +22,13 @@ struct TickEvent;
 impl Server {
     pub fn new_router(client: ClientSocket) -> Router<Self> {
         let mut router = Router::from_language_server(Self {
-            db: Arc::new(RwLock::new(AnalysisHost::new())),
+            snap: AnalysisHost::new(),
         });
         router.event(Self::on_tick);
         router
     }
 
     fn on_tick(&mut self, _: TickEvent) -> ControlFlow<async_lsp::Result<()>> {
-        info!("tick");
         ControlFlow::Continue(())
     }
 }
@@ -34,18 +37,23 @@ impl LanguageServer for Server {
     type Error = ResponseError;
     type NotifyResult = ControlFlow<async_lsp::Result<()>>;
 
+    
+
     fn initialize(
         &mut self,
         params: InitializeParams,
     ) -> BoxFuture<'static, Result<InitializeResult, Self::Error>> {
-        info!("Initialize with {params:?}");
-        self.db.write().unwrap().change_roots(());
+        info!("Initialize");
+        self.snap.reload_project(Utf8PathBuf::from_path_buf(params.root_uri.unwrap().to_file_path().unwrap()).unwrap());
+        info!("Initialized");
+
         Box::pin(async move {
             Ok(InitializeResult {
                 capabilities: ServerCapabilities {
-                    hover_provider: Some(HoverProviderCapability::Simple(true)),
                     definition_provider: Some(OneOf::Left(true)),
+                    type_definition_provider: Some(TypeDefinitionProviderCapability::Simple(true)),
                     position_encoding: Some(PositionEncodingKind::UTF16),
+                    text_document_sync: Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::INCREMENTAL)),
                     ..ServerCapabilities::default()
                 },
                 server_info: None,
@@ -57,31 +65,109 @@ impl LanguageServer for Server {
         &mut self,
         p: GotoDefinitionParams,
     ) -> BoxFuture<'static, Result<Option<GotoDefinitionResponse>, ResponseError>> {
+        info!("Definition");
         let pos = p.text_document_position_params.position;
-        let wide_pos = WideLineCol {
-            line: pos.line,
-            col: pos.character,
-        };
+        let snap = self.snap.clone();
 
-        let db = self.db.read().unwrap();
-        let db = &*db;
-        let raw_path = p.text_document_position_params.text_document.uri.to_file_path().unwrap();
-        let f = db.file(raw_path).unwrap();
-
-        let line_index = db.line_index(f);
-        let pos = line_index.to_utf8(WideEncoding::Utf16, wide_pos).unwrap();
-        let offset = line_index.offset(pos).unwrap();
-        let pos = db.goto_definition(f, offset);
-        
         Box::pin(async move {
-            Ok(None)
+            let raw_path = Utf8PathBuf::from_path_buf(p.text_document_position_params.text_document.uri.to_file_path().unwrap()).unwrap();
+            let f = snap.file(raw_path).unwrap();
+
+            let line_index = snap.line_index(f);
+            let pos = snap.goto_definition(f, from_proto::text_position(&line_index, pos));
+            let t = pos.into_iter().map(|p| {
+                let path = snap.path(p.file);
+                let l = snap.line_index(p.file);
+
+                LocationLink { 
+                    origin_selection_range: None, 
+                    target_uri: Url::from_file_path(path).unwrap(), 
+                    target_range: to_proto::text_range(&l, p.full_range), 
+                    target_selection_range: to_proto::text_range(&l, p.focus_range) 
+                }
+            }).collect();
+            Ok(Some(GotoDefinitionResponse::Link(t)))
         })
     }
 
-    fn did_change_configuration(
-        &mut self,
-        _: DidChangeConfigurationParams,
-    ) -> ControlFlow<async_lsp::Result<()>> {
+    fn did_open(&mut self, params: DidOpenTextDocumentParams,) -> ControlFlow<async_lsp::Result<()>> {
+        let raw_path = params.text_document.uri.to_utf8_path_buf().unwrap();
+        let f = self.snap.file_unchecked(raw_path);
+        
+        ControlFlow::Continue(())
+    }
+    fn did_close(&mut self, params: DidCloseTextDocumentParams) -> ControlFlow<async_lsp::Result<()>> {
+        ControlFlow::Continue(())
+    }
+    fn did_rename_files(&mut self, params: RenameFilesParams) -> ControlFlow<async_lsp::Result<()>> {
+        for f in params.files {
+            let old_path = f.old_uri.to_utf8_path_buf().unwrap();
+            let new_path = f.new_uri.to_utf8_path_buf().unwrap();
+            let f = self.snap.file_unchecked(old_path);
+
+            self.snap.apply_changes(
+                f, 
+                FileChange::Rename { new_file: self.snap.file_unchecked(new_path) }
+            );
+        }
+        ControlFlow::Continue(())
+    }
+    fn did_create_files(&mut self, params: CreateFilesParams) -> ControlFlow<async_lsp::Result<()>> {
+        for f in params.files {
+            let raw_path = f.uri.to_utf8_path_buf().unwrap();
+            let f = self.snap.file_unchecked(raw_path);
+
+            self.snap.apply_changes(
+                f, 
+                FileChange::Create {}
+            );
+        }
+
+        ControlFlow::Continue(())
+    }
+    fn did_delete_files(&mut self, params: DeleteFilesParams) -> ControlFlow<async_lsp::Result<()>> {
+        for f in params.files {
+            let raw_path = f.uri.to_utf8_path_buf().unwrap();
+            let f = self.snap.file_unchecked(raw_path);
+
+            self.snap.apply_changes(
+                f, 
+                FileChange::Delete {  }
+            );
+        }
+
+        ControlFlow::Continue(())
+    }
+    
+    fn did_change(&mut self,params: DidChangeTextDocumentParams) -> ControlFlow<async_lsp::Result<()>> {
+        let raw_path = params.text_document.uri.to_utf8_path_buf().unwrap();
+        let f = self.snap.file(raw_path).unwrap();
+        let mut new_content = self.snap.content(f).to_string();
+        let mut li: LineIndex;
+        for c in params.content_changes {
+            if let Some(range) = c.range {
+                li = LineIndex::new(&*new_content);
+                let range = from_proto::text_range(&li, range);
+                let start = &new_content[..range.start().into()];
+                let mid = c.text;
+                let end = &new_content[range.end().into()..];
+                new_content = format!("{start}{mid}{end}");
+            } else if c.range_length.is_none() {
+                new_content = c.text;
+            } else {
+                unimplemented!()
+            }
+        }
+
+        self.snap.apply_changes(
+            f, 
+            FileChange::SetContent { data: Arc::from(new_content) }
+        );
+
+        ControlFlow::Continue(())
+    }
+
+    fn did_save(&mut self, params: DidSaveTextDocumentParams) -> ControlFlow<async_lsp::Result<()>> {
         ControlFlow::Continue(())
     }
 }

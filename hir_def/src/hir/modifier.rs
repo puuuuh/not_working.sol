@@ -1,22 +1,60 @@
-use crate::hir::argument::ArgumentId;
+use crate::hir::variable_declaration::VariableDeclaration;
 use crate::hir::ident::{Ident, IdentPath};
 use crate::hir::source_unit::ItemOrigin;
 use crate::hir::statement::StatementId;
+use crate::hir::{HasFile, HasOrigin};
 use crate::items::HirPrint;
-use crate::{impl_has_origin, lazy_field, FileAstPtr};
+use crate::lower::LowerCtx;
+use crate::resolver::resolve_scopes;
+use crate::scope::ExprScopeRoot;
+use crate::source_map::item_source_map::ItemSourceMap;
+use crate::{impl_major_item, lazy_field, FileAstPtr, FileExt};
+use base_db::{BaseDb, Project};
 use rowan::ast::AstPtr;
+use rowan::ast::AstNode;
 use salsa::{tracked, Database};
 use std::fmt::Write;
-use syntax::ast::nodes;
+use syntax::ast::nodes::{self, Stmt};
 
 #[tracked]
 pub struct ModifierId<'db> {
     #[id]
     pub name: Ident<'db>,
     pub info: Modifier<'db>,
-    pub body: Option<AstPtr<nodes::Block>>,
+    pub body_node: Option<AstPtr<nodes::Block>>,
 
     pub node: AstPtr<nodes::ModifierDefinition>,
+}
+
+#[salsa::tracked]
+impl<'db> ModifierId<'db> {
+    #[salsa::tracked]
+    pub fn body(self, db: &'db dyn BaseDb) -> Option<(StatementId<'db>, ItemSourceMap<'db>)> {
+        let mut origin = self.origin(db);
+        let file = self.file(db);
+        let tree = file.tree(db);
+        let root = tree.syntax();
+        let node = self.body_node(db)?;
+        
+        let expr = node.to_node(&root);
+
+        let mut lowerer = LowerCtx::new(db, file);
+
+        let res = lowerer.lower_stmt(Stmt::Block(expr));
+
+        return Some((res, ItemSourceMap::new(lowerer.exprs, lowerer.stmts)));
+    }
+
+    #[salsa::tracked]
+    pub fn scope(self, db: &'db dyn BaseDb, project: Project) -> ExprScopeRoot<'db> {
+        resolve_scopes(
+            db, 
+            project, 
+            self.item_origin(db).scope(db, project), 
+            self.info(db).args.iter().copied(), 
+            self.body(db).map(|a| a.0)
+        )
+    }
 }
 
 impl HirPrint for ModifierId<'_> {
@@ -30,11 +68,10 @@ impl HirPrint for ModifierId<'_> {
 }
 
 lazy_field!(ModifierId<'db>, origin, set_origin, ItemOrigin<'db>);
-impl_has_origin!(ModifierId<'db>);
 
-#[derive(Eq, PartialEq, Debug, Clone, Hash, salsa::Update)]
+#[derive(Eq, PartialEq, Clone, Hash, salsa::Update)]
 pub struct Modifier<'db> {
-    pub args: Vec<ArgumentId<'db>>,
+    pub args: Vec<VariableDeclaration<'db>>,
     pub overrides: Option<Vec<IdentPath<'db>>>,
     pub is_virtual: bool,
 }

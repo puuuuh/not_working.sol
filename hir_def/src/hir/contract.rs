@@ -13,7 +13,7 @@ use crate::hir::using::UsingId;
 use crate::hir::source_unit::ItemOrigin;
 use crate::items::HirPrint;
 use crate::scope::IndexMapUpdate;
-use crate::{impl_has_origin, lazy_field, AstPtr};
+use crate::{impl_major_item, lazy_field, AstPtr};
 use base_db::{BaseDb, Project};
 use salsa::Database;
 use std::fmt::Write;
@@ -21,7 +21,7 @@ use std::sync::Arc;
 use syntax::ast::nodes::{self, Contract};
 
 
-#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd, salsa::Update)]
+#[derive(Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, salsa::Update)]
 pub enum ContractItem<'db> {
     Constructor(ConstructorId<'db>),
     Function(FunctionId<'db>),
@@ -125,8 +125,6 @@ pub struct ContractId<'db> {
 
 lazy_field!(ContractId<'db>, origin, set_origin, ItemOrigin<'db>);
 
-impl_has_origin!(ContractId<'db>);
-
 pub enum ContractType {
     Interface,
     Contract,
@@ -184,7 +182,7 @@ impl HirPrint for ContractId<'_> {
     }
 }
 
-#[derive(Eq, PartialEq, Debug, Clone, Hash, salsa::Update)]
+#[derive(Eq, PartialEq, Clone, Hash, salsa::Update)]
 pub struct InheritanceSpecifier<'db> {
     pub path: IdentPath<'db>,
     pub args: Option<Vec<(Option<Ident<'db>>, ExprId<'db>)>>,

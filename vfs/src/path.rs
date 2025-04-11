@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, path::PathBuf, str::FromStr};
 
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use crate::File;
@@ -84,6 +84,12 @@ impl VfsPath {
 pub struct VirtualPath(String);
 
 impl VirtualPath {
+    pub fn to_std_path_buf(&self) -> PathBuf {
+        PathBuf::from(&self.0)
+    }
+    pub fn to_path_buf(&self) -> Utf8PathBuf {
+        Utf8PathBuf::from_str(&self.0).unwrap()
+    }
     fn starts_with(&self, other: &VirtualPath) -> bool {
         self.0.starts_with(&other.0)
     }

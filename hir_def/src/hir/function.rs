@@ -1,19 +1,23 @@
-use crate::hir::argument::ArgumentId;
+use crate::hir::variable_declaration::VariableDeclaration;
 use crate::hir::ident::{Ident, IdentPath};
 use crate::hir::source_unit::{file_tree, ItemOrigin};
 use crate::hir::statement::StatementId;
-use crate::hir::{ExprId, StateMutability, Visibility};
+use crate::hir::{HasFile, HasOrigin};
 use crate::items::HirPrint;
 use crate::lower::LowerCtx;
-use crate::resolver::function_scopes;
+use crate::resolver::resolve_scopes;
 use crate::scope::expr::ExprScopeRoot;
 use crate::source_map::item_source_map::ItemSourceMap;
-use crate::{impl_has_origin, lazy_field, lower, parse, FileAstPtr};
+use crate::{impl_major_item, lazy_field, lower, FileAstPtr, FileExt};
 use base_db::{BaseDb, Project};
-use rowan::ast::AstPtr;
+use rowan::ast::{AstNode, AstPtr};
 use salsa::Database;
 use std::fmt::Write;
 use syntax::ast::nodes::{self, Stmt};
+
+use super::expr::ExprId;
+use super::state_mutability::StateMutability;
+use super::visibility::Visibility;
 
 #[salsa::tracked]
 pub struct FunctionId<'db> {
@@ -27,23 +31,17 @@ pub struct FunctionId<'db> {
 }
 
 lazy_field!(FunctionId<'db>, origin, set_origin, ItemOrigin<'db>);
-impl_has_origin!(FunctionId<'db>);
 
 #[salsa::tracked]
 impl<'db> FunctionId<'db> {
     #[salsa::tracked]
     pub fn body(self, db: &'db dyn BaseDb) -> Option<(StatementId<'db>, ItemSourceMap<'db>)> {
         let mut origin = self.origin(db);
-        let file = loop {
-            match origin {
-                ItemOrigin::Root(source_unit) => break source_unit.file(db),
-                ItemOrigin::Contract(contract_id) => origin = contract_id.origin(db),
-            }
-        };
         let node = self.body_node(db)?;
-        let tree = parse(db, file);
+        let file = self.file(db);
+        let root = file.tree(db);
+        let root = root.syntax();
         
-        let root = tree.syntax_node();
         let expr = node.to_node(&root);
 
         let mut lowerer = LowerCtx::new(db, file);
@@ -71,10 +69,10 @@ impl HirPrint for FunctionId<'_> {
     }
 }
 
-#[derive(Eq, PartialEq, Debug, Clone, Hash, salsa::Update)]
+#[derive(Eq, PartialEq, Clone, Hash, salsa::Update)]
 pub struct Function<'db> {
-    pub args: Vec<ArgumentId<'db>>,
-    pub returns: Option<Vec<ArgumentId<'db>>>,
+    pub args: Vec<VariableDeclaration<'db>>,
+    pub returns: Option<Vec<VariableDeclaration<'db>>>,
     pub modifiers: Vec<ModifierInvocation<'db>>,
     pub overrides: Option<Vec<IdentPath<'db>>>,
     pub vis: Visibility,
@@ -82,7 +80,7 @@ pub struct Function<'db> {
     pub is_virtual: bool,
 }
 
-#[derive(Eq, PartialEq, Debug, Clone, Hash, salsa::Update)]
+#[derive(Eq, PartialEq, Clone, Hash, salsa::Update)]
 pub struct ModifierInvocation<'db> {
     pub path: IdentPath<'db>,
     pub args: Option<Vec<(Option<Ident<'db>>, ExprId<'db>)>>,
@@ -109,7 +107,13 @@ impl HirPrint for ModifierInvocation<'_> {
 impl<'db> FunctionId<'db> {
     #[salsa::tracked]
     pub fn scope(self, db: &'db dyn BaseDb, project: Project) -> ExprScopeRoot<'db> {
-        function_scopes(db, project, self)
+        resolve_scopes(
+            db, 
+            project, 
+            self.item_origin(db).scope(db, project), 
+            self.info(db).args.iter().copied(), 
+            self.body(db).map(|a| a.0)
+        )
     }
 }
 

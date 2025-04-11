@@ -1,4 +1,4 @@
-use crate::hir::literal::Literal;
+use crate::hir::Literal;
 use crate::lower::LowerCtx;
 use num_bigint::BigInt;
 use syntax::ast::nodes;

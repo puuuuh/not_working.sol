@@ -5,16 +5,18 @@ use dashmap::{DashMap, Entry};
 use salsa::Database;
 pub use crate::path::{AnchoredPath, VfsPath};
 
-#[salsa::input]
+#[salsa::input(debug)]
 pub struct File {
+    pub exists: bool,
     pub content: Arc<str>,
 }
 
 #[derive(Default)]
 pub struct Vfs {
-    files: DashMap<VfsPath, Option<File>>,
+    files: DashMap<VfsPath, File>,
     paths: DashMap<File, VfsPath>,
 }
+
 
 impl Vfs {
     pub fn new() -> Self {
@@ -28,35 +30,39 @@ impl Vfs {
         }
     }
 
-    pub fn with_files(files: impl Iterator<Item = (VfsPath, File)>) -> Self {
+    pub fn with_files(db: &dyn Database, files: impl Iterator<Item = (VfsPath, Arc<str>)>) -> Self {
         let t = Self::new();
-        for (p, f) in files {
+        for (p, content) in files {
+            let f = File::new(db, true, content);
             t.paths.insert(f, p.clone());
-            t.files.insert(p.clone(), Some(f));
+            t.files.insert(p, f);
         }
         t
     }
 
-    pub fn file(&self, db: &dyn Database, path: &VfsPath) -> Option<File> {
+    pub fn file(&self, db: &dyn Database, path: &VfsPath) -> File{
         match self.files.entry(path.clone()) {
             Entry::Occupied(f) => {
                 *f.get()
             }
             Entry::Vacant(f) => {
-                match &path {
+                let t = match &path {
                     VfsPath::Path(p) => {
-                        let content = std::fs::read_to_string(p).ok().map(|a| File::new(db, Arc::from(a)));
-                        if let Some(f) = &content {
-                            self.paths.insert(*f, path.clone());
-                        }
-                        f.insert(content);
-                        content
+                        let (content, exists): (Arc<str>, bool) = if let Ok(content) = std::fs::read_to_string(p) {
+                            (Arc::from(&*content), true)
+                        } else {
+                            (Arc::from(""), false)
+                        };
+                        File::new(db, exists, content)
                     }
                     VfsPath::Virtual(_) => {
-                        f.insert(None);
-                        None
+                        File::new(db, false, Default::default())
                     }
-                }
+                };
+                self.paths.insert(t, path.clone());
+                f.insert(t);
+
+                t
             }
         }
     }

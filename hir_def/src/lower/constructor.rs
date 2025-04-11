@@ -1,6 +1,6 @@
 use rowan::ast::{AstNode, AstPtr};
-use crate::hir::constructor::{Constructor, ConstructorId};
-use crate::hir::source_unit::Item;
+use crate::hir::{Constructor, ConstructorId, VariableDeclaration, VariableDeclarationOwner};
+use crate::hir::Item;
 use crate::lower::LowerCtx;
 use crate::FileAstPtr;
 use syntax::ast::nodes;
@@ -12,13 +12,14 @@ impl<'db> LowerCtx<'db> {
     ) -> ConstructorId<'db> {
         let (vis, mu, mods, _over, _virt) = self.lower_function_attrs(e.function_attributes());
         let body = e.block().map(|a| AstPtr::new(&a));
+        let args: Vec<VariableDeclaration<'_>> = e
+                    .parameter_list()
+                    .map(|a| a.variable_declarations().map(|p| self.lower_parameter(p)).collect())
+                    .unwrap_or_default();
         let c = ConstructorId::new(
             self.db,
             Constructor {
-                args: e
-                    .parameter_list()
-                    .map(|a| a.parameters().map(|p| self.lower_parameter(p)).collect())
-                    .unwrap_or_default(),
+                args: args.clone(),
                 modifiers: mods,
                 vis,
                 mutability: mu,
@@ -26,6 +27,7 @@ impl<'db> LowerCtx<'db> {
             body,
             AstPtr::new(&e),
         );
+
         self.save_span(e.syntax().text_range(), Item::Constructor(c));
         c
     }

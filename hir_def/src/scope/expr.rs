@@ -1,20 +1,19 @@
-use crate::hir::argument::ArgumentId;
-use crate::hir::expr::ExprId;
-use crate::hir::ident::Ident;
-use crate::hir::source_unit::Item;
-use crate::hir::statement::StatementId;
+use crate::hir::VariableDeclaration;
+use crate::hir::ExprId;
+use crate::hir::Ident;
+use crate::hir::Item;
+use crate::hir::StatementId;
 use crate::scope::item::ItemScope;
 use crate::scope::IndexMapUpdate;
 use salsa::Database;
 
-#[derive(Clone, Copy, Eq, PartialEq, Debug, Hash, salsa::Update)]
+#[derive(Clone, Copy, Eq, PartialEq, Hash, salsa::Update)]
 pub enum DefinitionSite<'db> {
     Item(Item<'db>),
-    Statement(StatementId<'db>),
-    Argument(ArgumentId<'db>),
+    Local(VariableDeclaration<'db>),
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Hash, salsa::Update)]
+#[derive(Clone, Eq, PartialEq, Hash, salsa::Update)]
 pub struct ExprScopeData<'db> {
     pub parent: Option<usize>,
     pub items: Vec<(Ident<'db>, DefinitionSite<'db>)>,
@@ -54,6 +53,10 @@ impl<'db> ExprScopeRoot<'db> {
         let mut scope = Some(scope);
         while let Some(scope_id) = scope {
             let s = &self.expr_scopes(db)[scope_id];
+            dbg!(&s.parent);
+            for t in &s.items {
+                dbg!(t.0.data(db));
+            }
             if let Some(t) = s.items.iter().find(|(n, _)| *n == name) {
                 return Some(t.1);
             };

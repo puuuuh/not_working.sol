@@ -98,7 +98,8 @@ register_ast_id_node! {
     EventDefinition,
     ErrorDefinition,
     ParameterList,
-        Parameter,
+
+    VariableDeclaration,
     Block
 }
 

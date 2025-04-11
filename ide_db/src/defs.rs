@@ -25,7 +25,7 @@ impl<'db> ToDef<'db> for DefinitionSite<'db> {
         Some(match self {
             DefinitionSite::Item(item) => item.to_def()?,
             DefinitionSite::Statement(statement_id) => Definition::Local(*statement_id),
-            DefinitionSite::Argument(argument_id) => ,
+            DefinitionSite::Argument(argument_id) => Definition::Local(()),
         })
     }
 }

@@ -182,7 +182,6 @@ pub(crate) const KINDS_SRC: KindsSrc<'_> = KindsSrc {
         "NAMED_CALL_ARGUMENT",
         "ARGUMENT_LIST",
         "PARAMETER_LIST",
-        "PARAMETER",
         "RETURNS",
         "SYMBOL_ALIASES",
         "SYMBOL_ALIAS",

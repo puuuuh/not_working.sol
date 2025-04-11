@@ -1,6 +1,7 @@
-use crate::hir::ident::Ident;
-use crate::hir::type_name::{ElementaryTypeRef, TypeRef};
-use crate::hir::{StateMutability, Visibility};
+use crate::hir::Ident;
+use crate::hir::StateMutability;
+use crate::hir::{ElementaryTypeRef, TypeRef};
+use crate::hir::Visibility;
 use crate::lower::LowerCtx;
 use rowan::ast::AstNode;
 use std::str::FromStr;
@@ -60,12 +61,12 @@ impl<'db> LowerCtx<'db> {
     fn lower_function_name(&mut self, ty: FunctionType) -> TypeRef<'db> {
         let args = ty
             .parameter_list()
-            .map(|list| list.parameters().map(|a| self.lower_parameter(a)).collect())
+            .map(|list| list.variable_declarations().map(|a| self.lower_parameter(a)).collect())
             .unwrap_or_default();
         let returns = ty
             .returns()
             .and_then(|r| r.parameter_list())
-            .map(|list| list.parameters().map(|a| self.lower_parameter(a)).collect())
+            .map(|list| list.variable_declarations().map(|a| self.lower_parameter(a)).collect())
             .unwrap_or_default();
         let mut visibility = Visibility::Unknown;
         let mut mutability = StateMutability::NonPayable;

@@ -1,8 +1,12 @@
-use crate::hir::expr::ExprId;
-use crate::hir::function::FunctionId;
-use crate::hir::statement::{Statement, StatementId};
+use crate::hir::ExprId;
+use crate::hir::FunctionId;
+use crate::hir::HasOrigin;
+use crate::hir::HasSyntax;
+use crate::hir::VariableDeclaration;
+use crate::hir::{Statement, StatementId};
 use crate::scope::expr::{DefinitionSite, ExprScopeData, ExprScopeRoot};
 use crate::scope::IndexMapUpdate;
+use crate::scope::ItemScope;
 use base_db::{BaseDb, Project};
 use indexmap::IndexMap;
 use salsa::Database;
@@ -15,14 +19,11 @@ pub struct ScopeResolver<'db> {
     scope_by_stmt: IndexMap<StatementId<'db>, usize>,
 }
 
-#[salsa::tracked]
-pub fn function_scopes<'db>(db: &'db dyn BaseDb, project: Project, f: FunctionId<'db>) -> ExprScopeRoot<'db> {
-    let info = f.info(db);
-    let root_items = info
-        .args
-        .iter()
-        .filter_map(|a| a.name(db).map(move |n| (n, DefinitionSite::Argument(*a))))
+pub fn resolve_scopes<'db>(db: &'db dyn BaseDb, project: Project, parent: ItemScope<'db>, args: impl Iterator<Item = VariableDeclaration<'db>>, body: Option<StatementId<'db>>) -> ExprScopeRoot<'db> {
+    let root_items = args
+        .filter_map(|a| a.name(db).map(move |n| (n, DefinitionSite::Local(a))))
         .collect();
+
     let mut resolver = ScopeResolver {
         db,
         scopes: vec![ExprScopeData { parent: None, items: root_items }],
@@ -31,6 +32,10 @@ pub fn function_scopes<'db>(db: &'db dyn BaseDb, project: Project, f: FunctionId
         scope_by_stmt: Default::default(),
     };
 
+    if let Some(body) = body {
+        resolver.walk_stmt(body);
+    }
+
     if resolver.scope_item_cnt.last() == Some(&0) {
         resolver.scopes.pop();
     }
@@ -38,7 +43,12 @@ pub fn function_scopes<'db>(db: &'db dyn BaseDb, project: Project, f: FunctionId
     resolver.scope_by_expr.shrink_to_fit();
     resolver.scope_by_stmt.shrink_to_fit();
 
-    ExprScopeRoot::new(db, f.origin(db).scope(db, project), resolver.scopes, IndexMapUpdate(resolver.scope_by_expr), IndexMapUpdate(resolver.scope_by_stmt))
+    ExprScopeRoot::new(
+        db, 
+        parent,
+        resolver.scopes, 
+        IndexMapUpdate(resolver.scope_by_expr), 
+        IndexMapUpdate(resolver.scope_by_stmt))
 }
 
 impl<'db> ScopeResolver<'db> {
@@ -73,7 +83,7 @@ impl<'db> ScopeResolver<'db> {
                     .iter()
                     .flatten()
                     .filter_map(|a| {
-                        a.name(self.db).map(|name| (name, DefinitionSite::Argument(*a)))
+                        a.name(self.db).map(|name| (name, DefinitionSite::Local(*a)))
                     })
                     .collect();
 
@@ -143,7 +153,7 @@ impl<'db> ScopeResolver<'db> {
                     .iter()
                     .flatten()
                     .filter_map(|a| {
-                        a.name(self.db).map(|name| (name, DefinitionSite::Argument(*a)))
+                        a.name(self.db).map(|name| (name, DefinitionSite::Local(*a)))
                     })
                     .collect();
 
@@ -157,7 +167,7 @@ impl<'db> ScopeResolver<'db> {
                         .iter()
                         .flatten()
                         .filter_map(|a| {
-                            a.name(self.db).map(|name| (name, DefinitionSite::Argument(*a)))
+                            a.name(self.db).map(|name| (name, DefinitionSite::Local(*a)))
                         })
                         .collect();
                     self.scopes.last_mut().unwrap().items = new_items;

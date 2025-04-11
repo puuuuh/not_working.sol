@@ -166,7 +166,7 @@ impl<'a> Parser<'a> {
     pub(crate) fn parameter_list(&mut self) {
         self.builder.start_node(PARAMETER_LIST.into());
         loop {
-            self.builder.start_node(PARAMETER.into());
+            self.builder.start_node(VARIABLE_DECLARATION.into());
             self.type_name();
             if let Some(loc) = self.at_oneof(&[MEMORY_KW, CALLDATA_KW, STORAGE_KW]) {
                 self.builder.start_node(DATA_LOCATION.into());
@@ -257,7 +257,6 @@ mod tests {
         let tests = &["(, feedValue, , timestamp, )"];
         let mut pos = 0;
         for text in tests {
-            dbg!(text);
             let tokens = Lexer::new(text)
                 .map(move |t| {
                     let r = (t.kind, &text[pos..pos + t.len]);

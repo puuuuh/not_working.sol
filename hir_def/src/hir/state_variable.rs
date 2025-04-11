@@ -1,13 +1,14 @@
 use crate::hir::ident::{Ident, IdentPath};
 use crate::hir::source_unit::ItemOrigin;
 use crate::hir::type_name::TypeRef;
-use crate::hir::Visibility;
 use crate::items::HirPrint;
-use crate::{impl_has_origin, lazy_field, FileAstPtr};
+use crate::{impl_major_item, lazy_field, FileAstPtr};
 use rowan::ast::AstPtr;
 use salsa::{tracked, Database};
 use std::fmt::{Display, Formatter, Write};
 use syntax::ast::nodes;
+
+use super::visibility::Visibility;
 
 #[tracked]
 pub struct StateVariableId<'db> {
@@ -21,7 +22,6 @@ pub struct StateVariableId<'db> {
 }
 
 lazy_field!(StateVariableId<'db>, origin, set_origin, ItemOrigin<'db>);
-impl_has_origin!(StateVariableId<'db>);
 
 impl HirPrint for StateVariableId<'_> {
     fn write<T: Write>(&self, db: &dyn Database, w: &mut T, ident: usize) -> std::fmt::Result {
@@ -49,7 +49,7 @@ impl Display for StateVariableMutability {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Hash, salsa::Update)]
+#[derive(Clone, Eq, PartialEq, Hash, salsa::Update)]
 pub struct StateVariableInfo<'db> {
     pub mutability: StateVariableMutability,
     pub vis: Visibility,

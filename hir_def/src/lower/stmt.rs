@@ -1,6 +1,6 @@
 use rowan::ast::{AstNode, AstPtr};
-use crate::hir::ident::Ident;
-use crate::hir::statement::{CatchClause, Statement, StatementId};
+use crate::hir::Ident;
+use crate::hir::{CatchClause, Statement, StatementId};
 use crate::lower::LowerCtx;
 use crate::FileAstPtr;
 use syntax::ast::nodes;
@@ -32,12 +32,12 @@ impl<'db> LowerCtx<'db> {
                 nodes::Stmt::VariableDeclarationStmt(a) => {
                     let mut elements = Vec::new();
                     match a.variable_declaration_item() {
-                        Some(VariableDeclarationItem::Parameter(a)) => {
+                        Some(VariableDeclarationItem::VariableDeclaration(a)) => {
                             elements.push(Some(self.lower_parameter(a)))
                         }
                         Some(VariableDeclarationItem::VariableTupleDeclaration(a)) => {
                             for p in a.variable_tuple_elements() {
-                                elements.push(p.parameter().map(|p| self.lower_parameter(p)));
+                                elements.push(p.variable_declaration().map(|p| self.lower_parameter(p)));
                             }
                         }
                         None => {}
@@ -69,7 +69,7 @@ impl<'db> LowerCtx<'db> {
                     returns: a
                         .returns()
                         .and_then(|a| a.parameter_list())
-                        .map(|a| a.parameters().map(|p| self.lower_parameter(p)).collect()),
+                        .map(|a| a.variable_declarations().map(|p| self.lower_parameter(p)).collect()),
                     body: self.lower_stmt2(a.block().map(nodes::Stmt::Block)),
                     catch: a
                         .catch_clauses()
@@ -78,7 +78,7 @@ impl<'db> LowerCtx<'db> {
                                 self.db,
                                 Ident::from_name_ref_opt(self.db, c.name_ref()),
                                 c.parameter_list().map(|a| {
-                                    a.parameters().map(|p| self.lower_parameter(p)).collect()
+                                    a.variable_declarations().map(|p| self.lower_parameter(p)).collect()
                                 }),
                                 self.lower_stmt2(c.block().map(nodes::Stmt::Block)),
                             )

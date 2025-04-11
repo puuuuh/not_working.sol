@@ -1,6 +1,6 @@
-use crate::hir::ident::{Ident, IdentPath};
-use crate::hir::modifier::{Modifier, ModifierId};
-use crate::hir::source_unit::Item;
+use crate::hir::{Ident, IdentPath};
+use crate::hir::{Modifier, ModifierId};
+use crate::hir::Item;
 use crate::lower::LowerCtx;
 use crate::FileAstPtr;
 use rowan::ast::{AstNode, AstPtr};
@@ -47,7 +47,7 @@ impl<'db> LowerCtx<'db> {
             Modifier {
                 args: e
                     .parameter_list()
-                    .map(|a| a.parameters().map(|p| self.lower_parameter(p)).collect())
+                    .map(|a| a.variable_declarations().map(|p| self.lower_parameter(p)).collect())
                     .unwrap_or_default(),
                 overrides: over,
                 is_virtual: virt,

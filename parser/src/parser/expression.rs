@@ -330,7 +330,6 @@ mod tests {
         let tests = &["contr.method{gas: 1+2, unknownopt: (a,b,c)}  (arg, arg2)"];
         let mut pos = 0;
         for text in tests {
-            dbg!(text);
             let tokens = Lexer::new(text)
                 .map(move |t| {
                     let r = (t.kind, &text[pos..pos + t.len]);

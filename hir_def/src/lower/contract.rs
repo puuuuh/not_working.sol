@@ -1,7 +1,7 @@
 use rowan::ast::{AstNode, AstPtr};
-use crate::hir::contract::{ContractId, ContractItem, ContractType, InheritanceSpecifier};
-use crate::hir::ident::{Ident, IdentPath};
-use crate::hir::source_unit::Item;
+use crate::hir::{ContractId, ContractItem, ContractType, InheritanceSpecifier};
+use crate::hir::{Ident, IdentPath};
+use crate::hir::Item;
 use crate::lower::LowerCtx;
 use crate::FileAstPtr;
 use syntax::ast::nodes;

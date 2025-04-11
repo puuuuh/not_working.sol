@@ -2,14 +2,15 @@ use crate::hir::ident::Ident;
 use crate::hir::literal::Literal;
 use crate::hir::source_unit::Item;
 use crate::hir::type_name::{ElementaryTypeRef, TypeRef};
-use crate::hir::{BinaryOp, CallOption, PostfixOp, PrefixOp};
 use crate::items::HirPrint;
-use crate::{impl_has_origin, lazy_field, FileAstPtr};
+use crate::{impl_major_item, lazy_field, FileAstPtr};
 use rowan::ast::AstPtr;
 use salsa::Database;
 use std::fmt::Write;
 use syntax::ast::nodes;
 
+use super::call_options::CallOption;
+use super::op::{BinaryOp, PostfixOp, PrefixOp};
 use super::type_name::walk_type_ref;
 
 #[salsa::tracked]
@@ -110,7 +111,7 @@ impl<'db> ExprId<'db> {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Hash, salsa::Update)]
+#[derive(Clone, Eq, PartialEq, Hash, salsa::Update)]
 pub enum Expr<'db> {
     Index { target: ExprId<'db>, index: ExprId<'db> },
     Slice { base: ExprId<'db>, start: Option<ExprId<'db>>, end: Option<ExprId<'db>> },

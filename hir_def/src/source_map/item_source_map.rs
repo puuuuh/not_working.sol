@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 use rowan::ast::AstPtr;
 use syntax::ast::nodes::{Expr, Stmt};
-use crate::hir::expr::ExprId;
-use crate::hir::statement::StatementId;
+use crate::hir::ExprId;
+use crate::hir::StatementId;
 use crate::scope::IndexMapUpdate;
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq, salsa::Update)]
+#[derive(Clone, Hash, PartialEq, Eq, salsa::Update)]
 pub struct ItemSourceMap<'db> {
     pub expr_map: IndexMapUpdate<AstPtr<Expr>, ExprId<'db>>,
 

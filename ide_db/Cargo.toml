@@ -5,3 +5,6 @@ edition = "2021"
 
 [dependencies]
 hir_def.workspace = true
+salsa.workspace = true
+line-index.workspace = true
+base_db.workspace = true

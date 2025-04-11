@@ -1,7 +1,6 @@
 use base_db::{BaseDb, File, Project};
-use hir_def::hir::source_unit::Item;
-use hir_def::hir::{ident::Ident, source_unit::file_tree};
-use hir_def::hir::statement::Statement;
+use hir_def::hir::{Item, Ident, file_tree};
+use hir_def::hir::Statement;
 use hir_def::items::HirPrint;
 use salsa::{Database, Event};
 use std::sync::Arc;

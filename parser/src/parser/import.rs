@@ -113,7 +113,6 @@ mod tests {
         let tests = &["import {ident, ident as ident2, global } from \"path\";"];
         let mut pos = 0;
         for text in tests {
-            dbg!(text);
             let tokens = Lexer::new(text)
                 .map(move |t| {
                     let r = (t.kind, &text[pos..pos + t.len]);

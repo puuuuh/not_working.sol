@@ -163,9 +163,9 @@ Returns =
   'returns' '(' ParameterList? ')'
 
 ParameterList =
-  Parameter (',' Parameter)*
+  VariableDeclaration (',' VariableDeclaration)*
 
-Parameter =
+VariableDeclaration =
   type:Type
   location:DataLocation?
   name:Name
@@ -393,14 +393,14 @@ IfStmt =
 VariableDeclarationStmt = VariableDeclarationItem ('=' init:Expr)? ';'
 
 VariableDeclarationItem =
-  Parameter
+  VariableDeclaration
 | VariableTupleDeclaration
 
 VariableTupleDeclaration =
   '(' VariableTupleElement* ')'
 
 VariableTupleElement =
-  Parameter? ','?
+  VariableDeclaration? ','?
 
 ForStmt =
   'for' '(' (ExprStmt | VariableDeclarationStmt | ';') Expr? ';' Expr? ')' Stmt

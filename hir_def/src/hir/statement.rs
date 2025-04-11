@@ -1,13 +1,18 @@
-use crate::hir::argument::ArgumentId;
+use crate::hir::variable_declaration::VariableDeclaration;
 use crate::hir::expr::ExprId;
 use crate::hir::ident::Ident;
 use crate::hir::source_unit::Item;
 use crate::items::HirPrint;
-use crate::{impl_has_origin, lazy_field, FileAstPtr};
+use crate::{impl_has_syntax, impl_major_item, lazy_field, FileAstPtr, FileExt};
+use base_db::BaseDb;
 use rowan::ast::AstPtr;
 use salsa::Database;
+use vfs::File;
 use std::fmt::Write;
 use syntax::ast::nodes;
+use rowan::ast::AstNode;
+
+use super::{DataLocation, HasFile, HasSyntax, TypeRef};
 
 #[salsa::tracked]
 pub struct StatementId<'db> {
@@ -19,7 +24,17 @@ pub struct StatementId<'db> {
 
 lazy_field!(StatementId<'db>, owner, set_owner, Item<'db>);
 
+impl<'db> HasFile<'db> for StatementId<'db> {
+    fn file(self, db: &'db dyn base_db::BaseDb) -> File {
+        self.owner(db).file(db)
+    }
+}
+
 impl<'db> StatementId<'db> {
+    pub fn syntax(self, db: &'db dyn BaseDb) -> Option<nodes::Stmt> {
+        Some(self.node(db)?.to_node(self.file(db).tree(db).syntax()))
+    }
+
     pub fn set_owner_recursive(self, db: &'db dyn Database, owner: Item<'db>) {
         self.set_owner(db, owner);
         match self.kind(db) {
@@ -93,15 +108,15 @@ impl<'db> StatementId<'db> {
 pub struct CatchClause<'db> {
     pub name: Option<Ident<'db>>,
     #[return_ref]
-    pub args: Option<Vec<ArgumentId<'db>>>,
+    pub args: Option<Vec<VariableDeclaration<'db>>>,
     pub body: StatementId<'db>,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Hash, salsa::Update)]
+#[derive(Clone, Eq, PartialEq, Hash, salsa::Update)]
 pub enum Statement<'db> {
     Missing,
     VarDecl {
-        items: Vec<Option<ArgumentId<'db>>>,
+        items: Vec<Option<VariableDeclaration<'db>>>,
         init_expr: Option<ExprId<'db>>,
     },
     Expr {
@@ -132,7 +147,7 @@ pub enum Statement<'db> {
     },
     Try {
         expr: ExprId<'db>,
-        returns: Option<Vec<ArgumentId<'db>>>,
+        returns: Option<Vec<VariableDeclaration<'db>>>,
         body: StatementId<'db>,
         catch: Vec<CatchClause<'db>>,
     },

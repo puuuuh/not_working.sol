@@ -1,8 +1,8 @@
 use rowan::ast::{AstNode, AstPtr};
-use crate::hir::ident::Ident;
-use crate::hir::source_unit::Item;
-use crate::hir::type_name::TypeRef;
-use crate::hir::user_defined_value_type::UserDefinedValueTypeId;
+use crate::hir::Ident;
+use crate::hir::Item;
+use crate::hir::TypeRef;
+use crate::hir::UserDefinedValueTypeId;
 use crate::lower::LowerCtx;
 use crate::FileAstPtr;
 use syntax::ast::nodes;

@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 futures.workspace = true
-async-lsp = "0.2.0"
+async-lsp = "0.2.2"
 tokio = { version = "1.41.0", features = ["full"] }
 tracing-subscriber = "0.3.18"
 tokio-util = { version = "0.7.12", features = ["compat"] }
@@ -18,3 +18,4 @@ hir_def.workspace = true
 rowan.workspace = true
 line-index.workspace = true
 ide.workspace = true
+camino.workspace = true

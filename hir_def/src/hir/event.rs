@@ -2,7 +2,7 @@ use crate::hir::ident::Ident;
 use crate::hir::source_unit::ItemOrigin;
 use crate::hir::type_name::TypeRef;
 use crate::items::HirPrint;
-use crate::{impl_has_origin, lazy_field, FileAstPtr};
+use crate::{impl_major_item, lazy_field, FileAstPtr};
 use rowan::ast::AstPtr;
 use salsa::{tracked, Database};
 use std::fmt::Write;
@@ -19,7 +19,6 @@ pub struct EventId<'db> {
 }
 
 lazy_field!(EventId<'db>, origin, set_origin, ItemOrigin<'db>);
-impl_has_origin!(EventId<'db>);
 
 impl HirPrint for EventId<'_> {
     fn write<T: Write>(&self, db: &dyn Database, w: &mut T, ident: usize) -> std::fmt::Result {
@@ -55,7 +54,7 @@ impl HirPrint for EventParameterId<'_> {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Hash, salsa::Update)]
+#[derive(Clone, Eq, PartialEq, Hash, salsa::Update)]
 pub struct EventParameter<'db> {
     pub name: Option<Ident<'db>>,
     pub is_indexed: bool,
