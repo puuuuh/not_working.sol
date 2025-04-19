@@ -37,8 +37,6 @@ impl LanguageServer for Server {
     type Error = ResponseError;
     type NotifyResult = ControlFlow<async_lsp::Result<()>>;
 
-    
-
     fn initialize(
         &mut self,
         params: InitializeParams,
@@ -65,7 +63,6 @@ impl LanguageServer for Server {
         &mut self,
         p: GotoDefinitionParams,
     ) -> BoxFuture<'static, Result<Option<GotoDefinitionResponse>, ResponseError>> {
-        info!("Definition");
         let pos = p.text_document_position_params.position;
         let snap = self.snap.clone();
 

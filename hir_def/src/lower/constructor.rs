@@ -1,5 +1,5 @@
 use rowan::ast::{AstNode, AstPtr};
-use crate::hir::{Constructor, ConstructorId, VariableDeclaration, VariableDeclarationOwner};
+use crate::hir::{Constructor, ConstructorId, VariableDeclaration};
 use crate::hir::Item;
 use crate::lower::LowerCtx;
 use crate::FileAstPtr;

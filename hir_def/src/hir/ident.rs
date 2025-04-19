@@ -5,7 +5,7 @@ use syntax::SyntaxToken;
 
 use crate::items::HirPrint;
 
-#[derive(Clone, Eq, PartialEq, Hash, salsa::Update)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, salsa::Update)]
 pub struct IdentPath<'db>(Vec<Ident<'db>>);
 
 impl HirPrint for IdentPath<'_> {
@@ -35,7 +35,7 @@ impl<'db> IdentPath<'db> {
     }
 }
 
-#[salsa::interned]
+#[salsa::interned(debug)]
 pub struct Ident<'db> {
     #[return_ref]
     pub data: String,

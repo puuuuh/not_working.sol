@@ -20,10 +20,10 @@ pub struct Vfs {
 
 impl Vfs {
     pub fn new() -> Self {
-        Self::with_roots(Default::default())
+        Self::with_roots()
     }
 
-    pub fn with_roots(roots: Vec<VfsPath>) -> Self {
+    pub fn with_roots() -> Self {
         Self {
             paths: Default::default(),
             files: Default::default()

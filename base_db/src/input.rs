@@ -2,7 +2,7 @@ use vfs::VfsPath;
 
 use crate::BaseDb;
 
-#[salsa::input]
+#[salsa::input(debug)]
 pub struct Project {
     #[return_ref]
     pub root: VfsPath,
@@ -27,7 +27,7 @@ impl<'db> Project {
                 }
             }
         }
-        return dbg!(remappings);
+        return remappings;
     }
 
     #[salsa::tracked(return_ref)]

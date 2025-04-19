@@ -1,21 +1,22 @@
 #![allow(dead_code)]
 #![allow(unused)]
 
+use indexmap::IndexMap;
 use rowan::ast::{AstNode, AstPtr};
-use salsa::Accumulator;
+use rowan::Language;
+use salsa::{Accumulator, Update};
 use salsa::Database;
-use syntax::SyntaxNode;
+use syntax::{SolidityLang, SyntaxNode};
+use std::hash::{Hash, Hasher};
+use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
-pub mod ast_id;
 pub mod hir;
 pub mod lower;
-pub mod scope;
 pub mod source_map;
 pub mod items;
-pub mod resolver;
-pub mod resolution;
+pub mod nameres;
+pub mod walk;
 
-pub use ast_id::*;
 use base_db::{BaseDb, File};
 use line_index::LineIndex;
 use parser::parser::lexer::Lexer;
@@ -24,12 +25,11 @@ use syntax::ast::nodes::UnitSource;
 use syntax::parse::Parse;
 use syntax::{TextRange, TextSize};
 
-#[derive(Debug, Clone, Eq, PartialEq, salsa::Update)]
-pub struct FilePosition {
+#[derive(Debug, Hash, Clone, Eq, PartialEq, salsa::Update)]
+pub struct InFile<T: salsa::Update> {
     pub file: File,
-    pub position: TextSize,
+    pub data: T,
 }
-
 
 #[derive(Debug, Hash, Clone, Eq, PartialEq, salsa::Update)]
 pub struct FileAstPtr<N: AstNode + 'static> {
@@ -37,9 +37,13 @@ pub struct FileAstPtr<N: AstNode + 'static> {
     pub ptr: AstPtr<N>,
 }
 
-impl<N: AstNode> FileAstPtr<N> {
+impl<N: AstNode<Language = SolidityLang>> FileAstPtr<N> {
     pub fn new(file: File, ptr: &N) -> Self {
         Self { file, ptr: AstPtr::new(ptr) }
+    }
+
+    pub fn to_node(self, db: &'_ dyn BaseDb) -> N {
+        self.ptr.to_node(self.file.node(db).syntax())
     }
 }
 
@@ -75,16 +79,65 @@ pub fn file_line_index(db: &dyn BaseDb, file: File) -> Arc<LineIndex> {
 }
 
 pub trait FileExt {
-    fn tree(self, db: &dyn BaseDb) -> UnitSource;
+    fn node(self, db: &dyn BaseDb) -> UnitSource;
     fn line_index(self, db: &dyn BaseDb) -> Arc<LineIndex>;
 }
 
 impl FileExt for File {
-    fn tree(self, db: &dyn BaseDb) -> UnitSource {
-        file_parse(db, self).tree()
+    fn node(self, db: &dyn BaseDb) -> UnitSource {
+        file_parse(db, self).node()
     }
 
     fn line_index(self, db: &dyn BaseDb) -> Arc<LineIndex> {
         file_line_index(db, self)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IndexMapUpdate<T: Hash + Eq, T1: PartialOrd>(pub IndexMap<T, T1>);
+
+impl<T: Hash + Eq, T1: PartialOrd> Default for IndexMapUpdate<T, T1> {
+    fn default() -> Self {
+        Self(Default::default())
+    }
+}
+
+impl<T: Hash + Eq, T1: PartialOrd> Deref for IndexMapUpdate<T, T1> {
+    type Target = IndexMap<T, T1>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T: Hash + Eq, T1: PartialOrd> DerefMut for IndexMapUpdate<T, T1> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<T: Hash + Eq, T1: PartialOrd + Hash> Hash for IndexMapUpdate<T, T1> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        for (k, v) in self.0.iter() {
+            k.hash(state);
+            v.hash(state);
+        }
+    }
+}
+
+unsafe impl<K, V> Update for IndexMapUpdate<K, V>
+where
+    K: Hash + Eq,
+    V: PartialOrd<V>,
+{
+    unsafe fn maybe_update(old_pointer: *mut Self, new_value: Self) -> bool {
+        let old_map: &mut IndexMapUpdate<K, V> = unsafe { &mut *old_pointer };
+
+        if old_map.0 != new_value.0 {
+            *old_pointer = new_value;
+            return true;
+        }
+
+        false
     }
 }

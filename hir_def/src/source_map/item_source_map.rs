@@ -3,7 +3,7 @@ use rowan::ast::AstPtr;
 use syntax::ast::nodes::{Expr, Stmt};
 use crate::hir::ExprId;
 use crate::hir::StatementId;
-use crate::scope::IndexMapUpdate;
+use crate::IndexMapUpdate;
 
 #[derive(Clone, Hash, PartialEq, Eq, salsa::Update)]
 pub struct ItemSourceMap<'db> {

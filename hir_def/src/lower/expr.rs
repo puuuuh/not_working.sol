@@ -83,7 +83,7 @@ impl<'db> LowerCtx<'db> {
                     ty: new.ty().map(|a| self.lower_type_ref(a)).unwrap_or(TypeRef::Error),
                 },
             },
-            Some(AstPtr::new(&expr)),
+            Some(crate::AstPtr::new(&expr)),
         );
         
         self.save_expr(expr, res);

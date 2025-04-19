@@ -1,4 +1,4 @@
-use crate::{impl_has_syntax, FileExt};
+use crate::{impl_has_syntax, FileAstPtr, FileExt};
 use crate::{hir::data_location::DataLocation, lazy_field};
 use crate::hir::ident::Ident;
 use crate::hir::{Item, TypeRef};
@@ -13,31 +13,17 @@ use crate::items::HirPrint;
 
 use super::{HasFile, StatementId};
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, salsa::Update)]
-pub enum VariableDeclarationOwner<'db> {
-    // Parameter
-    Item(Item<'db>),
-    // VariableDeclarationStmt
-    Statement(StatementId<'db>),
-}
-
-#[salsa::tracked]
+#[salsa::tracked(debug)]
 pub struct VariableDeclaration<'db> {
-    #[salsa::tracked]
+    #[salsa::tracked(debug)]
     pub ty: TypeRef<'db>,
-    #[salsa::tracked]
+    #[salsa::tracked(debug)]
     pub location: Option<DataLocation>,
-    #[salsa::tracked]
+    #[salsa::tracked(debug)]
     pub name: Option<Ident<'db>>,
 
-    #[salsa::tracked]
+    #[salsa::tracked(debug)]
     pub node: AstPtr<nodes::VariableDeclaration>
-}
-
-impl<'db> VariableDeclaration<'db> {
-    pub fn syntax(self, db: &'db dyn BaseDb, file: File) -> nodes::VariableDeclaration {
-        self.node(db).to_node(&file.tree(db).syntax())
-    }
 }
 
 impl HirPrint for VariableDeclaration<'_> {

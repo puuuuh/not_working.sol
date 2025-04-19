@@ -22,9 +22,9 @@ use crate::hir::PragmaId;
 use crate::hir::Item;
 use crate::hir::StatementId;
 use crate::hir::{UsingAlias, UsingData, UsingId};
-use crate::scope::IndexMapUpdate;
 use crate::source_map::span_map::SpanMapRange;
 use crate::FileAstPtr;
+use crate::IndexMapUpdate;
 use base_db::{BaseDb, File};
 use rowan::ast::{AstNode, AstPtr};
 use syntax::ast::nodes::{self, Expr, Stmt};
@@ -65,9 +65,7 @@ impl<'a> LowerCtx<'a> {
             nodes::Item::Import(import) => Item::Import(self.lower_import(import)),
             nodes::Item::Using(using) => Item::Using(self.lower_using(using)),
             nodes::Item::Contract(contract) => match self.lower_contract(contract) {
-                (ContractType::Contract, c) => Item::Contract(c),
-                (ContractType::Library, c) => Item::Library(c),
-                (ContractType::Interface, c) => Item::Interface(c),
+                (_, c) => Item::Contract(c),
             },
             nodes::Item::NamedFunctionDefinition(f) =>
                 Item::Function(self.lower_named_function_definition(f)),

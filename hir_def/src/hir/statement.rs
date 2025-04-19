@@ -2,8 +2,9 @@ use crate::hir::variable_declaration::VariableDeclaration;
 use crate::hir::expr::ExprId;
 use crate::hir::ident::Ident;
 use crate::hir::source_unit::Item;
+use crate::hir::HasSourceUnit;
 use crate::items::HirPrint;
-use crate::{impl_has_syntax, impl_major_item, lazy_field, FileAstPtr, FileExt};
+use crate::{impl_has_syntax, impl_major_item, lazy_field, FileAstPtr, FileExt, InFile};
 use base_db::BaseDb;
 use rowan::ast::AstPtr;
 use salsa::Database;
@@ -14,7 +15,7 @@ use rowan::ast::AstNode;
 
 use super::{DataLocation, HasFile, HasSyntax, TypeRef};
 
-#[salsa::tracked]
+#[salsa::tracked(debug)]
 pub struct StatementId<'db> {
     #[return_ref]
     pub kind: Statement<'db>,
@@ -22,89 +23,16 @@ pub struct StatementId<'db> {
     pub node: Option<AstPtr<nodes::Stmt>>,
 }
 
-lazy_field!(StatementId<'db>, owner, set_owner, Item<'db>);
-
-impl<'db> HasFile<'db> for StatementId<'db> {
-    fn file(self, db: &'db dyn base_db::BaseDb) -> File {
-        self.owner(db).file(db)
-    }
-}
-
-impl<'db> StatementId<'db> {
-    pub fn syntax(self, db: &'db dyn BaseDb) -> Option<nodes::Stmt> {
-        Some(self.node(db)?.to_node(self.file(db).tree(db).syntax()))
-    }
-
-    pub fn set_owner_recursive(self, db: &'db dyn Database, owner: Item<'db>) {
-        self.set_owner(db, owner);
-        match self.kind(db) {
-            Statement::Missing => {}
-            Statement::VarDecl { items: _, init_expr } => {
-                if let Some(e) = init_expr {
-                    e.set_owner_recursive(db, owner)
-                }
-            }
-            Statement::Expr { expr } => {
-                expr.set_owner_recursive(db, owner);
-            }
-            Statement::Block { stmts, .. } => {
-                for s in stmts {
-                    s.set_owner_recursive(db, owner);
-                }
-            }
-            Statement::If { cond, body, else_body } => {
-                cond.set_owner_recursive(db, owner);
-                body.set_owner_recursive(db, owner);
-                if let Some(else_body) = else_body {
-                    else_body.set_owner_recursive(db, owner);
-                }
-            }
-            Statement::ForLoop { init, cond, finish_action, body } => {
-                if let Some(init) = init {
-                    init.set_owner_recursive(db, owner);
-                }
-                if let Some(cond) = cond {
-                    cond.set_owner_recursive(db, owner);
-                }
-                if let Some(finish_action) = finish_action {
-                    finish_action.set_owner_recursive(db, owner);
-                }
-                body.set_owner_recursive(db, owner);
-            }
-            Statement::WhileLoop { cond, body } => {
-                cond.set_owner_recursive(db, owner);
-                body.set_owner_recursive(db, owner);
-            }
-            Statement::DoWhileLoop { cond, body } => {
-                cond.set_owner_recursive(db, owner);
-                body.set_owner_recursive(db, owner);
-            }
-            Statement::Try { expr, returns: _, body, catch } => {
-                expr.set_owner_recursive(db, owner);
-                body.set_owner_recursive(db, owner);
-                for c in catch {
-                    c.body(db).set_owner_recursive(db, owner);
-                }
-            }
-            Statement::Return { expr } => {
-                if let Some(e) = expr {
-                    e.set_owner_recursive(db, owner);
-                }
-            }
-            Statement::Emit { event, args: _ } => {
-                event.set_owner_recursive(db, owner);
-            }
-            Statement::Revert { event, args: _ } => {
-                event.set_owner_recursive(db, owner);
-            }
-            Statement::Assembly {} => {}
-            Statement::Continue {} => {}
-            Statement::Break {} => {}
-        }
-    }
-}
-
 #[salsa::tracked]
+impl<'db> StatementId<'db> {
+    #[salsa::tracked]
+    pub fn owner(self, db: &'db dyn BaseDb, module: File) -> Item<'db> {
+        let node = self.node(db).unwrap();
+        module.source_unit(db).item_map(db).find(node.syntax_node_ptr().text_range()).unwrap()
+    }
+}
+
+#[salsa::tracked(debug)]
 pub struct CatchClause<'db> {
     pub name: Option<Ident<'db>>,
     #[return_ref]
@@ -112,7 +40,7 @@ pub struct CatchClause<'db> {
     pub body: StatementId<'db>,
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, salsa::Update)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, salsa::Update)]
 pub enum Statement<'db> {
     Missing,
     VarDecl {

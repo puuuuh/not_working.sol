@@ -1,27 +1,39 @@
 use crate::hir::ident::{Ident, IdentPath};
-use crate::hir::source_unit::ItemOrigin;
 use crate::hir::type_name::TypeRef;
+use crate::hir::{ContractId, HasSourceUnit};
 use crate::items::HirPrint;
+use crate::nameres::scope::ItemScope;
 use crate::{impl_major_item, lazy_field, FileAstPtr};
+use base_db::{BaseDb, Project};
 use rowan::ast::AstPtr;
 use salsa::{tracked, Database};
+use vfs::File;
 use std::fmt::{Display, Formatter, Write};
 use syntax::ast::nodes;
 
 use super::visibility::Visibility;
 
-#[tracked]
+#[tracked(debug)]
 pub struct StateVariableId<'db> {
     #[id]
     pub name: Ident<'db>,
     pub ty: TypeRef<'db>,
     pub info: StateVariableInfo<'db>,
 
-    pub init: Option<AstPtr<nodes::Expr>>,
     pub node: AstPtr<nodes::StateVariableDeclaration>,
 }
 
-lazy_field!(StateVariableId<'db>, origin, set_origin, ItemOrigin<'db>);
+lazy_field!(StateVariableId<'db>, origin, set_origin, Option<ContractId<'db>>, None);
+
+#[salsa::tracked]
+impl<'db> StateVariableId<'db> {
+    #[salsa::tracked]
+    pub fn scope(self, db: &'db dyn BaseDb, project: Project, module: File) -> ItemScope<'db> {
+        self.origin(db)
+            .map(|c| c.scope(db, project, module))
+            .unwrap_or_else(|| module.source_unit(db).scope(db, project, module))
+    }
+}
 
 impl HirPrint for StateVariableId<'_> {
     fn write<T: Write>(&self, db: &dyn Database, w: &mut T, ident: usize) -> std::fmt::Result {
@@ -49,7 +61,7 @@ impl Display for StateVariableMutability {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, salsa::Update)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, salsa::Update)]
 pub struct StateVariableInfo<'db> {
     pub mutability: StateVariableMutability,
     pub vis: Visibility,

@@ -26,6 +26,7 @@ mod call_options;
 mod state_mutability;
 
 use base_db::BaseDb;
+use rowan::TextSize;
 use syntax::ast::nodes;
 use vfs::File;
 
@@ -58,25 +59,27 @@ pub use source_unit::*;
 pub use call_options::*;
 pub use state_mutability::*;
 
+use crate::{nameres::body::Definition, source_map::item_source_map::ItemSourceMap};
+
+pub struct FilePosition {
+    pub file: File,
+    pub offset: TextSize,
+}
+
 #[macro_export]
 macro_rules! impl_major_item {
     ($($t:ty: $t1:ty),+) => {
         $(
-            $crate::impl_has_origin!($t);
             $crate::impl_has_syntax!($t, $t1);
         )+
     };
 }
 
 
-pub trait HasOrigin<'db> {
-    fn item_origin(self, db: &'db dyn BaseDb) -> ItemOrigin<'db>;
-}
-
 pub trait HasSyntax<'db> {
     type Node;
 
-    fn syntax(self, db: &'db dyn BaseDb) -> Self::Node;
+    fn syntax(self, db: &'db dyn BaseDb, module: vfs::File) -> Self::Node;
 }
 
 #[macro_export]
@@ -85,8 +88,8 @@ macro_rules! impl_has_syntax {
         impl<'db> crate::hir::HasSyntax<'db> for $t {
             type Node = $node_ty;
 
-            fn syntax(self, db: &'db dyn base_db::BaseDb) -> Self::Node {
-                let f = <base_db::File as $crate::FileExt>::tree(self.file(db), db);
+            fn syntax(self, db: &'db dyn base_db::BaseDb, module: vfs::File) -> Self::Node {
+                let f = <base_db::File as $crate::FileExt>::node(module, db);
                 let node = self.node(db).to_node(&<_ as $crate::AstNode>::syntax(&f));
                 node
             }
@@ -94,36 +97,9 @@ macro_rules! impl_has_syntax {
     }
 }
 
-#[macro_export]
-macro_rules! impl_has_origin {
-    ($t:ty) => {
-        impl<'db> crate::hir::HasOrigin<'db> for $t {
-            fn item_origin(self, db: &'db dyn base_db::BaseDb) -> ItemOrigin<'db> {
-                self.origin(db)
-            }
-        }
-    };
-}
-
 pub trait HasFile<'db> {
     fn file(self, db: &'db dyn BaseDb) -> File;
 }
-
-impl<'db, T: HasOrigin<'db>> HasFile<'db> for T {
-    fn file(self, db: &'db dyn BaseDb) -> File {
-        let mut o = self.item_origin(db);
-        loop {
-            match o {
-                ItemOrigin::Root(source_unit) => return source_unit.file(db),
-                ItemOrigin::Contract(contract_id) => {
-                    o = contract_id.origin(db);
-                },
-            }
-        }
-    }
-}
-
-impl_has_origin!(Item<'db>);
 
 impl_major_item!(
     ConstructorId<'db>: nodes::ConstructorDefinition,
@@ -138,5 +114,18 @@ impl_major_item!(
     StateVariableId<'db>: nodes::StateVariableDeclaration,
     StructureId<'db>: nodes::StructDefinition,
     UserDefinedValueTypeId<'db>: nodes::UserDefinedValueTypeDefinition,
-    UsingId<'db>: nodes::Using
+    UsingId<'db>: nodes::Using,
+    VariableDeclaration<'db>: nodes::VariableDeclaration
 );
+
+pub trait HasBody<'db> {
+    fn body(self, db: &'db dyn BaseDb, file: File) -> Option<(StatementId<'db>, ItemSourceMap<'db>)>;
+}
+
+pub trait HasSourceUnit<'db> {
+    fn source_unit(self, db: &'db dyn BaseDb) -> SourceUnit<'db>;
+}
+
+pub trait HasDefs<'db> {
+    fn defs(self, db: &'db dyn BaseDb, module: File) -> Vec<(Ident<'db>, Definition<'db>)>;
+}

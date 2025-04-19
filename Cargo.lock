@@ -448,6 +448,12 @@ dependencies = [
 [[package]]
 name = "hir_ty"
 version = "0.1.0"
+dependencies = [
+ "base_db",
+ "hir_def",
+ "indexmap 2.9.0",
+ "salsa 0.19.0",
+]
 
 [[package]]
 name = "icu_collections"
@@ -575,22 +581,13 @@ dependencies = [
  "camino",
  "dashmap",
  "hir_def",
+ "hir_ty",
  "line-index",
  "rowan",
  "salsa 0.19.0",
  "syntax",
  "tracing",
  "vfs",
-]
-
-[[package]]
-name = "ide_db"
-version = "0.1.0"
-dependencies = [
- "base_db",
- "hir_def",
- "line-index",
- "salsa 0.19.0",
 ]
 
 [[package]]

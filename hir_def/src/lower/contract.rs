@@ -68,7 +68,7 @@ impl<'a> LowerCtx<'a> {
         );
         
         self.save_span(s.syntax().text_range(), Item::Contract(contract));
-        for i in contract.body(self.db) {
+        for i in contract.items(self.db) {
             i.set_origin(self.db, contract);
         }
         (t, contract)

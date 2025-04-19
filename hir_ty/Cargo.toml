@@ -4,3 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+base_db.workspace = true
+hir_def.workspace = true
+salsa.workspace = true
+indexmap.workspace = true

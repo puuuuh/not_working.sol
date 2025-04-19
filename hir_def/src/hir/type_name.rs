@@ -8,7 +8,7 @@ use crate::lazy_field;
 
 use super::{state_mutability::StateMutability, visibility::Visibility};
 
-#[derive(Clone, Eq, PartialEq, Debug, Hash, salsa::Update)]
+#[derive(Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Debug, Hash, salsa::Update)]
 pub enum ElementaryTypeRef {
     Address { payable: bool },
     Bool,
@@ -63,7 +63,7 @@ impl HirPrint for ElementaryTypeRef {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, salsa::Update)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, salsa::Update)]
 pub enum TypeRef<'db> {
     Elementary(ElementaryTypeRef),
     Function {

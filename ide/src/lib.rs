@@ -1,14 +1,14 @@
-use std::path::PathBuf;
 use std::sync::Arc;
 use camino::Utf8PathBuf;
 use change::FileChange;
 use navigation_target::NavigationTarget;
 use rowan::TextSize;
 use base_db::{BaseDb, File, Project, TestDatabase};
-use hir_def::{FileExt, FilePosition};
+use hir_def::{hir::FilePosition, FileExt};
 use salsa::Setter;
 use tracing::warn;
 use vfs::VfsPath;
+use salsa::Database;
 
 mod goto_definition;
 mod navigation_target;
@@ -58,7 +58,9 @@ impl AnalysisHost {
     }
 
     pub fn goto_definition(&self, file: File, pos: TextSize) -> Vec<NavigationTarget> {
-        goto_definition::goto_definition(&self.db, self.project, FilePosition { file, position: pos }).unwrap_or(vec![])
+        self.db.attach(|_| {
+            goto_definition::goto_definition(&self.db, self.project, FilePosition { file, offset: pos }).unwrap_or(vec![])
+        })
     }
 
     pub fn apply_changes(&mut self, file: File, change: FileChange) {

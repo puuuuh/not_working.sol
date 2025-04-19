@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use crate::FileExt;
 
-#[salsa::tracked]
+#[salsa::tracked(debug)]
 pub fn ast_id_map<'db>(db: &'db dyn BaseDb, file: File) -> Arc<AstIdMap> {
     let f = file.tree(db);
     let span_map = AstIdMap::from_source(f.syntax());
@@ -13,7 +13,7 @@ pub fn ast_id_map<'db>(db: &'db dyn BaseDb, file: File) -> Arc<AstIdMap> {
 }
 
 /*
-#[salsa::tracked]
+#[salsa::tracked(debug)]
 pub fn span_map(db: &dyn BaseDb, file: File) -> Arc<SpanMap> {
     let mut pairs = vec![];
     let ast_id_map = ast_id_map(db, file);

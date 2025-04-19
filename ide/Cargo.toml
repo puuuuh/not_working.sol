@@ -14,3 +14,4 @@ syntax.workspace = true
 vfs.workspace = true
 camino.workspace = true
 line-index.workspace = true
+hir_ty.workspace = true

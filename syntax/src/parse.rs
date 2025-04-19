@@ -35,7 +35,7 @@ impl<T: AstNode<Language = SolidityLang>> Parse<T> {
         Parse { green: self.green, _ty: PhantomData }
     }
 
-    pub fn tree(&self) -> T {
+    pub fn node(&self) -> T {
         T::cast(self.syntax_node()).unwrap()
     }
 }

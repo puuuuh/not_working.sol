@@ -10,18 +10,54 @@ use crate::hir::state_variable::StateVariableId;
 use crate::hir::structure::StructureId;
 use crate::hir::user_defined_value_type::UserDefinedValueTypeId;
 use crate::hir::using::UsingId;
-use crate::hir::source_unit::ItemOrigin;
+use crate::hir::Item;
 use crate::items::HirPrint;
-use crate::scope::IndexMapUpdate;
-use crate::{impl_major_item, lazy_field, AstPtr};
+use crate::nameres::body::Definition;
+use crate::nameres::scope::ItemScope;
+use crate::{impl_major_item, lazy_field, AstPtr, IndexMapUpdate};
 use base_db::{BaseDb, Project};
 use salsa::Database;
+use vfs::File;
 use std::fmt::Write;
 use std::sync::Arc;
 use syntax::ast::nodes::{self, Contract};
 
+use super::{HasDefs, HasSourceUnit};
 
-#[derive(Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, salsa::Update)]
+#[salsa::tracked(debug)]
+pub struct ContractId<'db> {
+    #[id]
+    pub name: Ident<'db>,
+
+    #[tracked]
+    pub is_abstract: bool,
+
+    #[tracked]
+    #[return_ref]
+    pub inheritance_chain: Vec<InheritanceSpecifier<'db>>,
+
+    #[tracked]
+    #[return_ref]
+    pub items: Vec<ContractItem<'db>>,
+
+    #[tracked]
+    pub node: AstPtr<nodes::Contract>,
+}
+
+lazy_field!(ContractId<'db>, origin, set_origin, Option<ContractId<'db>>, None);
+
+#[salsa::tracked]
+impl<'db> HasDefs<'db> for ContractId<'db> {
+    #[salsa::tracked]
+    fn defs(self, db: &'db dyn BaseDb, module: File) -> Vec<(Ident<'db>, Definition<'db>)> {
+        self.items(db).iter()
+            .flat_map(|item| item.name(db)
+            .map(|name| (name, Definition::Item((module, Item::from(*item))))))
+            .collect()
+    }
+}
+
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, salsa::Update)]
 pub enum ContractItem<'db> {
     Constructor(ConstructorId<'db>),
     Function(FunctionId<'db>),
@@ -37,7 +73,7 @@ pub enum ContractItem<'db> {
 
 impl<'db> ContractItem<'db> {
     pub fn set_origin(self, db: &'db dyn BaseDb, contract: ContractId<'db>) {
-        let origin = ItemOrigin::Contract(contract);
+        let origin = Some(contract);
         match self {
             ContractItem::Constructor(i) => i.set_origin(db, origin),
             ContractItem::Function(i) => {
@@ -103,27 +139,6 @@ impl HirPrint for ContractItem<'_> {
     }
 }
 
-#[salsa::tracked]
-pub struct ContractId<'db> {
-    #[id]
-    pub name: Ident<'db>,
-
-    #[tracked]
-    pub is_abstract: bool,
-
-    #[tracked]
-    #[return_ref]
-    pub inheritance_chain: Vec<InheritanceSpecifier<'db>>,
-
-    #[tracked]
-    #[return_ref]
-    pub body: Vec<ContractItem<'db>>,
-
-    #[tracked]
-    pub node: AstPtr<nodes::Contract>,
-}
-
-lazy_field!(ContractId<'db>, origin, set_origin, ItemOrigin<'db>);
 
 pub enum ContractType {
     Interface,
@@ -134,16 +149,21 @@ pub enum ContractType {
 #[salsa::tracked]
 impl<'db> ContractId<'db> {
     #[salsa::tracked]
-    pub fn scope(self, db: &'db dyn BaseDb, project: Project) -> crate::scope::ItemScope<'db> {
-        let items = self
-            .body(db)
+    pub fn scope(self, db: &'db dyn BaseDb, project: Project, module: File) -> ItemScope<'db> {
+        let mut items: Vec<(Ident<'db>, (File, Item<'_>))> = self
+            .items(db)
             .iter()
-            .filter_map(|a| a.name(db).map(|name| (name, (*a).into())))
+            .filter_map(|a| a.name(db).map(|name| (name, (module, (*a).into()))))
             .collect();
-        crate::scope::ItemScope::new(
+
+        items.sort_by_key(|(name, _)| *name);
+
+        ItemScope::new(
             db,
-            Some(self.origin(db).scope(db, project)),
-            Arc::new(IndexMapUpdate(items)),
+            Some(self.origin(db)
+                .map(|c| c.scope(db, project, module))
+                .unwrap_or_else(|| module.source_unit(db).scope(db, project, module))),
+            Arc::new(items),
         )
     }
 }
@@ -170,7 +190,7 @@ impl HirPrint for ContractId<'_> {
 
         w.write_str(" {\n")?;
 
-        for i in self.body(db) {
+        for i in self.items(db) {
             w.write_str(&ident_str)?;
             i.write(db, w, ident)?;
             w.write_str("\n")?;
@@ -182,7 +202,7 @@ impl HirPrint for ContractId<'_> {
     }
 }
 
-#[derive(Eq, PartialEq, Clone, Hash, salsa::Update)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash, salsa::Update)]
 pub struct InheritanceSpecifier<'db> {
     pub path: IdentPath<'db>,
     pub args: Option<Vec<(Option<Ident<'db>>, ExprId<'db>)>>,

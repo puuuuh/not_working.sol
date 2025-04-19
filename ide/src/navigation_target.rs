@@ -1,6 +1,6 @@
 use base_db::BaseDb;
-use hir_def::{hir::{HasFile, HasSyntax, Item, VariableDeclaration}, scope::expr::DefinitionSite, FileExt};
-use syntax::{ast::nodes::{self, Name}, TextRange};
+use hir_def::{hir::{HasFile, HasSyntax, Item, VariableDeclaration}, FileExt};
+use syntax::{ast::nodes::{self, ModifierDefinition, Name}, TextRange};
 use rowan::ast::AstNode;
 use vfs::File;
 
@@ -13,54 +13,53 @@ pub struct NavigationTarget {
 }
 
 impl NavigationTarget {
-    pub fn from_local(db: &'_ dyn BaseDb, d: VariableDeclaration<'_>, origin_file: File) -> Option<NavigationTarget> {
-        let node = d.syntax(db, origin_file);
+    pub fn from_local(db: &'_ dyn BaseDb, d: VariableDeclaration<'_>, module: File) -> Option<NavigationTarget> {
+        let node = d.syntax(db, module);
         let full_range = node.syntax().text_range();
         Some(NavigationTarget {
-            file: origin_file,
+            file: module,
             full_range,
             focus_range: node.name().map(|n| n.syntax().text_range()).unwrap_or(full_range),
         })
     }
-    pub fn from_item(db: &'_ dyn BaseDb, d: Item<'_>) -> Option<NavigationTarget> {
+
+    pub fn from_item(db: &'_ dyn BaseDb, d: Item<'_>, module: File) -> Option<NavigationTarget> {
         let name_range = |n: Name| n.syntax().text_range();
         let (full_range, focus_range) = match d {
             Item::Import(import_id) => {
-                let node = import_id.syntax(db);
+                let node = import_id.syntax(db, module);
                 (node.syntax().text_range(), None)
             },
             Item::Pragma(pragma_id) => {
-                let node = pragma_id.syntax(db);
+                let node = pragma_id.syntax(db, module);
                 (node.syntax().text_range(), None)
             },
             Item::Using(using_id) => {
-                let node = using_id.syntax(db);
+                let node = using_id.syntax(db, module);
                 (node.syntax().text_range(), None)
             },
-            Item::Contract(contract_id) |
-                Item::Library(contract_id) |
-                Item::Interface(contract_id) => {
-                let node = contract_id.syntax(db);
+            Item::Contract(contract_id) => {
+                let node = contract_id.syntax(db, module);
                 (node.syntax().text_range(), node.name().map(name_range))
             },
             Item::Enum(enumeration_id) => {
-                let node = enumeration_id.syntax(db);
+                let node = enumeration_id.syntax(db, module);
                 (node.syntax().text_range(), node.name().map(name_range))
             },
             Item::UserDefinedValueType(user_defined_value_type_id) => {
-                let node = user_defined_value_type_id.syntax(db);
+                let node = user_defined_value_type_id.syntax(db, module,);
                 (node.syntax().text_range(), node.name().map(name_range))
             },
             Item::Error(error_id) => {
-                let node = error_id.syntax(db);
+                let node = error_id.syntax(db, module);
                 (node.syntax().text_range(), node.name().map(name_range))
             },
             Item::Event(event_id) => {
-                let node = event_id.syntax(db);
+                let node = event_id.syntax(db, module);
                 (node.syntax().text_range(), node.name().map(name_range))
             },
             Item::Function(function_id) => {
-                let node = function_id.syntax(db);
+                let node = function_id.syntax(db, module);
                 let focus = match &node {
                     nodes::FunctionDefinition::NamedFunctionDefinition(named_function_definition) => 
                         named_function_definition.name().map(name_range),
@@ -72,28 +71,28 @@ impl NavigationTarget {
                 (node.syntax().text_range(), focus)
             },
             Item::StateVariable(state_variable_id) => {
-                let node = state_variable_id.syntax(db);
+                let node = state_variable_id.syntax(db, module);
                 (node.syntax().text_range(), node.name().map(name_range))
             },
             Item::Struct(structure_id) => {
-                let node = structure_id.syntax(db);
+                let node = structure_id.syntax(db, module);
                 (node.syntax().text_range(), node.name().map(name_range))
             },
             Item::Constructor(constructor_id) => {
-                let node = constructor_id.syntax(db);
+                let node = constructor_id.syntax(db, module);
                 (node.syntax().text_range(), node.constructor_token().map(|t| t.text_range()))
             },
             Item::Modifier(modifier_id) => {
-                let node = modifier_id.syntax(db);
+                let node = modifier_id.syntax(db, module);
                 (node.syntax().text_range(), node.name().map(name_range))
             },
-            Item::Module(source_unit) => {
-                let node = source_unit.file(db).tree(db);
+            Item::Module(_source_unit) => {
+                let node = module.node(db);
                 (node.syntax().text_range(), None)
             },
         };
         Some(NavigationTarget {
-            file: d.file(db),
+            file: module,
             full_range,
             focus_range: focus_range.unwrap_or(full_range),
         })

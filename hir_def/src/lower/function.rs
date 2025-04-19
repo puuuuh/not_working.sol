@@ -1,7 +1,6 @@
 use crate::hir::VariableDeclaration;
 use crate::hir::CallOption;
 use crate::hir::ExprId;
-use crate::hir::VariableDeclarationOwner;
 use crate::hir::{Function, FunctionId, ModifierInvocation};
 use crate::hir::{Ident, IdentPath};
 use crate::hir::Item;
@@ -9,6 +8,7 @@ use crate::hir::StateMutability;
 use crate::hir::TypeRef;
 use crate::hir::Visibility;
 use crate::lower::LowerCtx;
+use crate::FileAstPtr;
 use rowan::ast::{AstNode, AstPtr};
 use syntax::ast::nodes::FunctionDefinition;
 use syntax::ast::{nodes, AstChildren};

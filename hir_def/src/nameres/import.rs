@@ -1,23 +1,23 @@
-use std::{collections::{hash_map::Entry, BTreeSet, HashMap, HashSet}, sync::Arc};
+use std::{collections::{hash_map::Entry, BTreeSet, HashMap, HashSet}, iter::once, sync::Arc};
 
 use base_db::{BaseDb, Project, TestDatabase};
 use indexmap::IndexMap;
 use smallvec::SmallVec;
 use vfs::{AnchoredPath, File, VfsPath};
 
-use crate::{hir::{Ident, ImportId, ImportKind, file_tree, Item, SourceUnit}, scope::IndexMapUpdate};
+use crate::{hir::{HasSourceUnit, Ident, ImportId, ImportKind, Item, SourceUnit}, FileExt, IndexMapUpdate};
 use salsa::Database;
 
-#[salsa::tracked]
+#[salsa::tracked(debug)]
 pub struct ImportResolution<'db> {
     #[return_ref]
-    pub items: Arc<IndexMapUpdate<Ident<'db>, Item<'db>>>,
+    pub items: Arc<Vec<(Ident<'db>, (File, Item<'db>))>>,
     #[return_ref]
     pub errors: SmallVec<[String; 1]>,
 }
 
 #[salsa::tracked]
-pub fn resolve_file<'db>(db: &'db dyn BaseDb, project: Project, file: File) -> ImportResolution<'db> {
+fn resolve_file<'db>(db: &'db dyn BaseDb, project: Project, file: File) -> ImportResolution<'db> {
     let mut ctx = ImportResolutionCtx {
         imported: Default::default(),
         modules: Default::default(),
@@ -33,14 +33,22 @@ pub fn resolve_file<'db>(db: &'db dyn BaseDb, project: Project, file: File) -> I
     }
     ctx.resolve_items_inner(db, project, file, None);
     ctx.resolve_items(db, project);
-    ImportResolution::new(db, Arc::new(IndexMapUpdate(ctx.items)), ctx.errors)
+    let items = ctx.items.into_iter()
+        .flat_map(|(name, data)| data.into_iter().map(move |item| (name, item)));
+    ImportResolution::new(db, Arc::new(items.collect()), ctx.errors)
+}
+
+impl<'db> ImportResolution<'db> {
+    pub fn from_file(db: &'db dyn BaseDb, project: Project, module: File) -> Self {
+        resolve_file(db, project, module)
+    }
 }
 
 struct ImportResolutionCtx<'db> {
     // Already resolved items
     imported: HashMap<VfsPath, Option<HashMap<Ident<'db>, Ident<'db>>>>,
     modules: IndexMap<Ident<'db>, SourceUnit<'db>>,
-    items: IndexMap<Ident<'db>, Item<'db>>,
+    items: IndexMap<Ident<'db>, HashSet<(File, Item<'db>)>>,
     explicit_imports: Vec<(Ident<'db>, ImportId<'db>)>,
     queue: BTreeSet<File>,
     errors: SmallVec<[String; 1]>,
@@ -59,20 +67,36 @@ impl<'db> ImportResolutionCtx<'db> {
     }
     
     fn resolve_items_inner(&mut self, db: &'db dyn BaseDb, project: Project, f: File, remappings: Option<HashMap<Ident<'db>, Ident<'db>>>) {
-        let tree = file_tree(db, f);
+        let tree = f.source_unit(db);
         if let Some(remappings) = remappings {
             for i in tree.named_items(db) {
                 if let Some(rename) = remappings.get(&i.0) {
-                    self.items.insert(*rename, i.1);
+                    match self.items.entry(*rename) {
+                        indexmap::map::Entry::Occupied(mut occupied_entry) => {
+                            occupied_entry.get_mut().insert((f, *i.1));
+                        },
+                        indexmap::map::Entry::Vacant(vacant_entry) => {
+                            vacant_entry.insert(once((f, *i.1)).collect());
+                        },
+                    }
                 }
             }
         } else {
-            self.items.extend(tree.named_items(db));
+            for (name, item) in tree.named_items(db) {
+                match self.items.entry(*name) {
+                    indexmap::map::Entry::Occupied(mut occupied_entry) => {
+                        occupied_entry.get_mut().insert((f, *item));
+                    },
+                    indexmap::map::Entry::Vacant(vacant_entry) => {
+                        vacant_entry.insert(once((f, *item)).collect());
+                    },
+                }
+            }
         }
     }
 
     fn resolve_imports_inner(&mut self, db: &'db dyn BaseDb, project: Project, f: File, filter: &Option<HashSet<Ident<'db>>>) {
-        let tree = file_tree(db, f);
+        let tree = f.source_unit(db);
         let imports = tree.data(db).imports(db);
         for (mut path, import) in imports.into_iter().flat_map(|i| i.path(db).map(|p| (p, i))) {
             for (from, to) in self.remappings {
@@ -94,7 +118,7 @@ impl<'db> ImportResolutionCtx<'db> {
             match import.kind(db) {
                 ImportKind::Path { name: Some(as_name), .. } 
                     | ImportKind::Glob { as_name, .. } => {
-                    self.modules.insert(as_name, file_tree(db, file));
+                    self.modules.insert(as_name, file.source_unit(db));
                 },
                 ImportKind::Path { .. } => {
                     root_changed = self.imported.insert(path.clone(), None) != Some(None);
@@ -128,30 +152,4 @@ impl<'db> ImportResolutionCtx<'db> {
             }
         }
     }
-}
-
-#[test]
-fn helloworld() {
-    let db = TestDatabase::default();
-    let path = VfsPath::from_path("Test.sol".into());
-    let project = Project::new(
-        &db,
-        vec![
-            VfsPath::from_path("\\src\\".into()),
-            VfsPath::from_path("\\".into()),
-        ],
-        vec![
-            ("@openzeppelin-contracts-upgradeable/".to_owned(),"dependencies/@openzeppelin-contracts-upgradeable-5.2.0/".to_owned()),
-            ("@openzeppelin-contracts/".to_owned(),"dependencies/@openzeppelin-contracts-5.2.0/".to_owned()),
-            ("@openzeppelin-mocks/".to_owned(),"dependencies/@openzeppelin-mocks-5.2.0/contracts/mocks/".to_owned()),
-            ("@openzeppelin/contracts-upgradeable/".to_owned(),"dependencies/@openzeppelin-contracts-upgradeable-5.2.0/".to_owned()),
-            ("@openzeppelin/contracts/".to_owned(),"dependencies/@openzeppelin-contracts-5.2.0/".to_owned()),
-        ]
-    );
-
-    let file = db.file(&path).unwrap();
-    let mut tmp = resolve_file(&db, project, file);
-    db.attach(|_| {
-        dbg!(tmp.errors(&db));
-    });
 }

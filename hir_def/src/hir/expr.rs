@@ -3,7 +3,8 @@ use crate::hir::literal::Literal;
 use crate::hir::source_unit::Item;
 use crate::hir::type_name::{ElementaryTypeRef, TypeRef};
 use crate::items::HirPrint;
-use crate::{impl_major_item, lazy_field, FileAstPtr};
+use crate::{impl_major_item, lazy_field, FileAstPtr, FileExt};
+use base_db::BaseDb;
 use rowan::ast::AstPtr;
 use salsa::Database;
 use std::fmt::Write;
@@ -13,7 +14,7 @@ use super::call_options::CallOption;
 use super::op::{BinaryOp, PostfixOp, PrefixOp};
 use super::type_name::walk_type_ref;
 
-#[salsa::tracked]
+#[salsa::tracked(debug)]
 pub struct ExprId<'db> {
     #[return_ref]
     pub kind: Expr<'db>,
@@ -26,8 +27,6 @@ impl HirPrint for ExprId<'_> {
         self.kind(db).write(db, w, ident)
     }
 }
-
-lazy_field!(ExprId<'db>, owner, set_owner, Item<'db>);
 
 impl<'db> ExprId<'db> {
     pub fn walk(self, db: &'db dyn Database, expr_fn: &mut impl FnMut(Self)) {
@@ -105,13 +104,9 @@ impl<'db> ExprId<'db> {
             Expr::Missing => {}
         }
     }
-
-    pub fn set_owner_recursive(self, db: &'db dyn Database, owner: Item<'db>) {
-        self.walk(db, &mut |e| e.set_owner(db, owner));
-    }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, salsa::Update)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, salsa::Update)]
 pub enum Expr<'db> {
     Index { target: ExprId<'db>, index: ExprId<'db> },
     Slice { base: ExprId<'db>, start: Option<ExprId<'db>>, end: Option<ExprId<'db>> },

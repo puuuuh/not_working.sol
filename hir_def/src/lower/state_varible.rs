@@ -55,7 +55,6 @@ impl<'db> LowerCtx<'db> {
             s.ty().map(|t| self.lower_type_ref(t)).unwrap_or(TypeRef::Error),
             info,
 
-            s.expr().map(|e| AstPtr::new(&e)),
             AstPtr::new(&s),
         );
         self.save_span(s.syntax().text_range(), Item::StateVariable(res));

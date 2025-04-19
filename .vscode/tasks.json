@@ -10,7 +10,8 @@
 				"--lib",
 				"--",
 				"goto_definition::tests",
-				"--show-output"
+				"--show-output",
+				"--nocapture"
 			],
 			"problemMatcher": [
 				"$rustc"

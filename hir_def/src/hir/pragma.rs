@@ -1,9 +1,11 @@
+use base_db::{BaseDb, Project};
 use rowan::ast::AstPtr;
 use syntax::ast::nodes;
+use vfs::File;
 
-use crate::{hir::source_unit::ItemOrigin, impl_major_item, lazy_field};
+use crate::{hir::{ContractId, HasSourceUnit}, impl_major_item, lazy_field, nameres::scope::ItemScope};
 
-#[salsa::tracked]
+#[salsa::tracked(debug)]
 pub struct PragmaId<'db> {
     #[return_ref]
     pub data: String,
@@ -11,4 +13,10 @@ pub struct PragmaId<'db> {
     pub node: AstPtr<nodes::Pragma>,
 }
 
-lazy_field!(PragmaId<'db>, origin, set_origin, ItemOrigin<'db>);
+#[salsa::tracked]
+impl<'db> PragmaId<'db> {
+    #[salsa::tracked]
+    pub fn scope(self, db: &'db dyn BaseDb, project: Project, module: File) -> ItemScope<'db> {
+        module.source_unit(db).scope(db, project, module)
+    }
+}

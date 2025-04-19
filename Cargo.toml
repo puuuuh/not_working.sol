@@ -2,10 +2,21 @@
 resolver = "1"
 
 members = [
-    "parser", "sourcegen", "syntax", "base_db", "hir_def", "span", "lang_server", "ide", "hir_ty", "vfs", "ide_db"]
+    "parser", 
+    "sourcegen", 
+    "syntax", 
+    "base_db", 
+    "hir_def", 
+    "span", 
+    "lang_server", 
+    "ide", 
+    "hir_ty", 
+    "vfs", 
+]
 
 [workspace.dependencies]
 hir_def = { path = "./hir_def" }
+hir_ty = { path = "./hir_ty" }
 sourcegen = { path = "./sourcegen" }
 parser = { path = "./parser" }
 syntax = { path = "./syntax" }

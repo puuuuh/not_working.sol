@@ -1,13 +1,19 @@
 use crate::hir::ident::Ident;
-use crate::hir::source_unit::ItemOrigin;
+use crate::hir::{ContractId, HasSourceUnit};
 use crate::items::HirPrint;
+use crate::nameres::body::Definition;
+use crate::nameres::scope::ItemScope;
 use crate::{impl_major_item, lazy_field, FileAstPtr};
+use base_db::{BaseDb, Project};
 use rowan::ast::AstPtr;
 use salsa::Database;
+use vfs::File;
 use std::fmt::Write;
 use syntax::ast::nodes;
 
-#[salsa::tracked]
+use super::HasDefs;
+
+#[salsa::tracked(debug)]
 pub struct EnumerationId<'db> {
     #[id]
     pub name: Ident<'db>,
@@ -16,7 +22,28 @@ pub struct EnumerationId<'db> {
     pub node: AstPtr<nodes::EnumDefinition>,
 }
 
-lazy_field!(EnumerationId<'db>, origin, set_origin, ItemOrigin<'db>);
+lazy_field!(EnumerationId<'db>, origin, set_origin, Option<ContractId<'db>>, None);
+
+#[salsa::tracked]
+impl<'db> EnumerationId<'db> {
+    #[salsa::tracked]
+    pub fn scope(self, db: &'db dyn BaseDb, project: Project, module: File) -> ItemScope<'db> {
+        self.origin(db)
+            .map(|c| c.scope(db, project, module))
+            .unwrap_or_else(|| module.source_unit(db).scope(db, project, module))
+    }
+}
+
+#[salsa::tracked]
+impl<'db> HasDefs<'db> for EnumerationId<'db> {
+    #[salsa::tracked]
+    fn defs(self, db: &'db dyn BaseDb, module: File) -> Vec<(Ident<'db>, Definition<'db>)> {
+        self.fields(db)
+            .iter()
+            .map(|item| (item.name(db), Definition::EnumVariant(*item)))
+            .collect()
+    }
+}
 
 impl HirPrint for EnumerationId<'_> {
     fn write<T: Write>(&self, db: &dyn Database, w: &mut T, ident: usize) -> std::fmt::Result {
@@ -38,7 +65,7 @@ impl HirPrint for EnumerationId<'_> {
     }
 }
 
-#[salsa::tracked]
+#[salsa::tracked(debug)]
 pub struct EnumerationVariantId<'db> {
     pub name: Ident<'db>,
 }
