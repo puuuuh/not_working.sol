@@ -22,20 +22,22 @@ use crate::hir::PragmaId;
 use crate::hir::Item;
 use crate::hir::StatementId;
 use crate::hir::{UsingAlias, UsingData, UsingId};
-use crate::source_map::span_map::SpanMapRange;
+use crate::source_map::span_map::SpanMap;
 use crate::FileAstPtr;
 use crate::IndexMapUpdate;
 use base_db::{BaseDb, File};
+use indexmap::IndexMap;
 use rowan::ast::{AstNode, AstPtr};
+use rowan::TextSize;
 use syntax::ast::nodes::{self, Expr, Stmt};
 use syntax::TextRange;
 
 pub(crate) struct LowerCtx<'a> {
     db: &'a dyn BaseDb,
 
-    pub(crate) spans: Vec<(SpanMapRange, Item<'a>)>,
-    pub(crate) exprs: IndexMapUpdate<AstPtr<Expr>, ExprId<'a>>,
-    pub(crate) stmts: IndexMapUpdate<AstPtr<Stmt>, StatementId<'a>>,
+    pub(crate) spans: Vec<(TextRange, Item<'a>)>,
+    pub(crate) exprs: IndexMap<AstPtr<Expr>, ExprId<'a>>,
+    pub(crate) stmts: IndexMap<AstPtr<Stmt>, StatementId<'a>>,
 }
 
 impl<'a> LowerCtx<'a> {
@@ -43,16 +45,16 @@ impl<'a> LowerCtx<'a> {
         Self { db, spans: Vec::new(), exprs: Default::default(), stmts: Default::default() }
     }
 
-    pub fn save_span(&mut self, s: TextRange, data: Item<'a>) {
-        self.spans.push((SpanMapRange(s.start(), s.end()), data));
+    pub fn save_span(&mut self, range: TextRange, data: Item<'a>) {
+        self.spans.push((range, data));
     }
 
     pub fn save_expr(&mut self, s: nodes::Expr, data: ExprId<'a>) {
-        self.exprs.0.insert(AstPtr::new(&s), data);
+        self.exprs.insert(AstPtr::new(&s), data);
     }
 
     pub fn save_stmt(&mut self, s: nodes::Stmt, data: StatementId<'a>) {
-        self.stmts.0.insert(AstPtr::new(&s), data);
+        self.stmts.insert(AstPtr::new(&s), data);
     }
 
     pub fn lower_source(&mut self, src: nodes::UnitSource) -> Vec<Item<'a>> {

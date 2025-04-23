@@ -439,7 +439,6 @@ dependencies = [
  "salsa 0.19.0",
  "smallvec",
  "sorted-vec",
- "span",
  "syntax",
  "tracing",
  "vfs",
@@ -1277,15 +1276,6 @@ name = "sourcegen"
 version = "0.1.0"
 dependencies = [
  "xshell",
-]
-
-[[package]]
-name = "span"
-version = "0.1.0"
-dependencies = [
- "base_db",
- "rowan",
- "syntax",
 ]
 
 [[package]]

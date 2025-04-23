@@ -28,7 +28,7 @@ impl<'db> StatementId<'db> {
     #[salsa::tracked]
     pub fn owner(self, db: &'db dyn BaseDb, module: File) -> Item<'db> {
         let node = self.node(db).unwrap();
-        module.source_unit(db).item_map(db).find(node.syntax_node_ptr().text_range()).unwrap()
+        module.source_unit(db).source_map(db).find(node.syntax_node_ptr().text_range()).unwrap()
     }
 }
 

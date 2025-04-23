@@ -2,7 +2,7 @@ use crate::hir::ident::Ident;
 use crate::hir::type_name::TypeRef;
 use crate::hir::{ContractId, HasSourceUnit};
 use crate::items::HirPrint;
-use crate::nameres::body::Definition;
+use crate::nameres::scope::body::Definition;
 use crate::nameres::scope::ItemScope;
 use crate::{impl_major_item, lazy_field, FileAstPtr};
 use base_db::{BaseDb, Project};

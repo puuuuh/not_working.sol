@@ -10,6 +10,7 @@ impl<'db> LowerCtx<'db> {
         &mut self,
         e: nodes::ConstructorDefinition,
     ) -> ConstructorId<'db> {
+        let prev = self.spans.last();
         let (vis, mu, mods, _over, _virt) = self.lower_function_attrs(e.function_attributes());
         let body = e.block().map(|a| AstPtr::new(&a));
         let args: Vec<VariableDeclaration<'_>> = e

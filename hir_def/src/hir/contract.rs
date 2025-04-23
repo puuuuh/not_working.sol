@@ -12,7 +12,7 @@ use crate::hir::user_defined_value_type::UserDefinedValueTypeId;
 use crate::hir::using::UsingId;
 use crate::hir::Item;
 use crate::items::HirPrint;
-use crate::nameres::body::Definition;
+use crate::nameres::scope::body::Definition;
 use crate::nameres::scope::ItemScope;
 use crate::{impl_major_item, lazy_field, AstPtr, IndexMapUpdate};
 use base_db::{BaseDb, Project};
@@ -150,7 +150,7 @@ pub enum ContractType {
 impl<'db> ContractId<'db> {
     #[salsa::tracked]
     pub fn scope(self, db: &'db dyn BaseDb, project: Project, module: File) -> ItemScope<'db> {
-        let mut items: Vec<(Ident<'db>, (File, Item<'_>))> = self
+        let mut items: Box<[(Ident<'db>, (File, Item<'_>))]> = self
             .items(db)
             .iter()
             .filter_map(|a| a.name(db).map(|name| (name, (module, (*a).into()))))
@@ -163,7 +163,7 @@ impl<'db> ContractId<'db> {
             Some(self.origin(db)
                 .map(|c| c.scope(db, project, module))
                 .unwrap_or_else(|| module.source_unit(db).scope(db, project, module))),
-            Arc::new(items),
+            items.into(),
         )
     }
 }

@@ -1,5 +1,5 @@
 use base_db::BaseDb;
-use hir_def::{hir::{HasFile, HasSyntax, Item, VariableDeclaration}, FileExt};
+use hir_def::{hir::{EnumerationVariantId, HasFile, HasSyntax, Item, StructureFieldId, VariableDeclaration}, FileExt};
 use syntax::{ast::nodes::{self, ModifierDefinition, Name}, TextRange};
 use rowan::ast::AstNode;
 use vfs::File;
@@ -13,6 +13,34 @@ pub struct NavigationTarget {
 }
 
 impl NavigationTarget {
+    pub fn from_variant(db: &'_ dyn BaseDb, d: EnumerationVariantId<'_>, module: File) -> Option<NavigationTarget> {
+        let node = d.parent(db).syntax(db, module);
+        let name = d.name(db).data(db);
+        let variable = node.enum_members()
+            .find(|e| e.name().and_then(|n| n.ident_token()).map(|n| n.text() == name) == Some(true))?;
+        let full_range = node.syntax().text_range();
+        let focus_range = variable.syntax().text_range();
+        Some(NavigationTarget {
+            file: module,
+            full_range,
+            focus_range
+        })
+    }
+
+    pub fn from_field(db: &'_ dyn BaseDb, d: StructureFieldId<'_>, module: File) -> Option<NavigationTarget> {
+        let node = d.parent(db).syntax(db, module);
+        let name = d.name(db).data(db);
+        let variable = node.struct_members()
+            .find(|e| e.name().and_then(|n| n.ident_token()).map(|n| n.text() == name) == Some(true))?;
+        let full_range = node.syntax().text_range();
+        let focus_range = variable.syntax().text_range();
+        Some(NavigationTarget {
+            file: module,
+            full_range,
+            focus_range
+        })
+    }
+
     pub fn from_local(db: &'_ dyn BaseDb, d: VariableDeclaration<'_>, module: File) -> Option<NavigationTarget> {
         let node = d.syntax(db, module);
         let full_range = node.syntax().text_range();

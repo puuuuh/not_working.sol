@@ -4,7 +4,7 @@ use crate::hir::statement::StatementId;
 use crate::hir::{ContractId, HasFile, HasSourceUnit, Item};
 use crate::items::HirPrint;
 use crate::lower::LowerCtx;
-use crate::nameres::body::BodyScope;
+use crate::nameres::scope::BodyScope;
 use crate::source_map::item_source_map::ItemSourceMap;
 use crate::{impl_major_item, lazy_field, FileAstPtr, FileExt};
 use base_db::{BaseDb, Project};
@@ -42,7 +42,7 @@ impl<'db> ModifierId<'db> {
 
         let res = lowerer.lower_stmt(Stmt::Block(expr));
 
-        return Some((res, ItemSourceMap::new(lowerer.exprs, lowerer.stmts)));
+        return Some((res, ItemSourceMap::new(crate::IndexMapUpdate(lowerer.exprs), crate::IndexMapUpdate(lowerer.stmts))));
     }
 
     #[salsa::tracked]

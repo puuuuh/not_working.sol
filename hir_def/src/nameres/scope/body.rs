@@ -1,3 +1,7 @@
+use std::ops::Range;
+use std::sync::Arc;
+use std::thread::current;
+
 use crate::hir::EnumerationVariantId;
 use crate::hir::ExprId;
 use crate::hir::FunctionId;
@@ -8,15 +12,18 @@ use crate::hir::Item;
 use crate::hir::StructureFieldId;
 use crate::hir::VariableDeclaration;
 use crate::hir::{Statement, StatementId};
+use crate::nameres::scope::ItemScope;
 use crate::walk::walk_stmt;
 use crate::walk::Visitor;
 use crate::IndexMapUpdate;
 use base_db::{BaseDb, Project};
 use indexmap::IndexMap;
 use salsa::Database;
+use smallvec::smallvec;
+use smallvec::SmallVec;
 use vfs::File;
 
-use super::scope::ItemScope;
+use super::item::ItemScopeIter;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, salsa::Update)]
 pub enum StmtOrItem<'db> {
@@ -41,76 +48,146 @@ impl<'db> HasDefs<'db> for Definition<'db> {
     }
 }
 
+pub struct BodyScopeIter<'db> {
+    item: ItemScopeIter<'db>,
+    db: &'db dyn Database,
+    current: ExprScope,
+    scopes: &'db [ExprScope],
+    definitions: &'db [(Ident<'db>, Definition<'db>)],
+    name: Option<Ident<'db>>
+}
+
+impl<'db> BodyScopeIter<'db> {
+    #[inline(always)]
+    fn next_inner(&mut self) -> Option<(Ident<'db>, Definition<'db>)> {
+        while self.current.range.is_empty() {
+            if let Some(p) = self.current.parent {
+                self.current = self.scopes[p].clone();
+            } else {
+                return self.item.next().map(|(name, item)| (name, Definition::Item(item)));
+            }
+        }
+
+        self.current.range.end -= 1;
+
+        let t = Some(self.definitions[self.current.range.end]);
+
+        t
+    }
+}
+
+impl<'db> Iterator for BodyScopeIter<'db> {
+    type Item = (Ident<'db>, Definition<'db>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if let Some(t) = self.next_inner() {
+                if let Some(name) = self.name {
+                    if t.0 == name {
+                        return Some(t);
+                    }
+                } else {
+                    return Some(t)
+                }
+            } else {
+                return self.item.next().map(|(name, item)| (name, Definition::Item(item)) );
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, Hash, salsa::Update)]
-pub struct ExprScope<'db> {
+pub struct ExprScope {
     pub parent: Option<usize>,
-    pub items: Vec<(Ident<'db>, Definition<'db>)>,
+    pub range: Range<usize>,
 }
 
 #[salsa::tracked(debug)]
 pub struct BodyScope<'db> {
     pub parent: ItemScope<'db>,
     #[return_ref]
-    pub expr_scopes: Vec<ExprScope<'db>>,
+    pub definitions: SmallVec<[(Ident<'db>, Definition<'db>); 2]>,
+    #[return_ref]
+    pub expr_scopes: SmallVec<[ExprScope; 1]>,
     #[return_ref]
     pub scope_by_expr: IndexMapUpdate<ExprId<'db>, usize>,
     #[return_ref]
     pub scope_by_stmt: IndexMapUpdate<StatementId<'db>, usize>,
 }
 
-#[salsa::tracked]
 impl<'db> BodyScope<'db> {
-    pub fn from_body(db: &'db dyn BaseDb, project: Project, parent: ItemScope<'db>, item: Item<'db>, args: impl Iterator<Item = VariableDeclaration<'db>>, body: Option<StatementId<'db>>) -> BodyScope<'db> {
+    pub fn from_body(
+        db: &'db dyn BaseDb, 
+        project: Project, 
+        parent: ItemScope<'db>, 
+        item: Item<'db>, 
+        args: impl Iterator<Item = VariableDeclaration<'db>>, 
+        body: Option<StatementId<'db>>) -> BodyScope<'db> {
+
         resolve_body(db, project, parent, item, args, body)
     }
 
-    #[salsa::tracked]
     pub fn lookup_in_expr(
         self,
-        db: &'db dyn Database,
+        db: &'db dyn BaseDb,
         expr: ExprId<'db>,
         name: Ident<'db>,
-    ) -> Option<Definition<'db>> {
-        let scope = *self.scope_by_expr(db).0.get(&expr)?;
+    ) -> BodyScopeIter<'db> {
+        let scope = self.scope_by_expr(db).0.get(&expr).copied().unwrap_or_default();
         self.lookup_in_scope(db, scope, name)
     }
 
-    #[salsa::tracked]
+    pub fn iter_in_scope(
+        self,
+        db: &'db dyn BaseDb,
+        scope: usize,
+    ) -> BodyScopeIter<'db> {
+        BodyScopeIter { 
+            name: None, 
+            db, 
+            current: self.expr_scopes(db)[scope].clone(), 
+            scopes: self.expr_scopes(db), 
+            definitions: self.definitions(db), 
+            item: self.parent(db).iter(db)  
+        }
+    }
+
     pub fn lookup_in_scope(
         self,
-        db: &'db dyn Database,
+        db: &'db dyn BaseDb,
         scope: usize,
         name: Ident<'db>,
-    ) -> Option<Definition<'db>> {
-        let mut scope = Some(scope);
-        while let Some(scope_id) = scope {
-            let s = &self.expr_scopes(db)[scope_id];
-            if let Some(t) = s.items.iter().find(|(n, _)| *n == name) {
-                return Some(t.1);
-            };
-            scope = s.parent;
-        }
-
-        self.parent(db).lookup(db, name).iter().next().copied().map(Definition::Item)
+    ) -> BodyScopeIter<'db> {
+        BodyScopeIter { 
+            name: Some(name), 
+            db, 
+            current: self.expr_scopes(db)[scope].clone(), 
+            scopes: self.expr_scopes(db), 
+            definitions: self.definitions(db), 
+            item: self.parent(db).name(db, name)  }
     }
 }
 
 pub struct ScopeResolver<'db> {
     db: &'db dyn Database,
-    scopes: Vec<ExprScope<'db>>,
+    scopes: SmallVec<[ExprScope; 1]>,
+    definitions: SmallVec<[(Ident<'db>, Definition<'db>); 2]>,
     scope_item_cnt: Vec<usize>,
     scope_by_expr: IndexMap<ExprId<'db>, usize>,
     scope_by_stmt: IndexMap<StatementId<'db>, usize>,
 }
 
 fn resolve_body<'db>(db: &'db dyn BaseDb, project: Project, parent: ItemScope<'db>, item: Item<'db>, args: impl Iterator<Item = (VariableDeclaration<'db>)>, body: Option<StatementId<'db>>) -> BodyScope<'db> {
-    let root_items = args
+    let root_items: SmallVec<[(Ident<'_>, Definition<'_>); 2]> = args
         .filter_map(|a| a.name(db).map(move |n| (n, Definition::Local((StmtOrItem::Item(item), a)))))
         .collect();
 
+    let root_items_len = root_items.len();
+
     let mut resolver = ScopeResolver {
         db,
-        scopes: vec![ExprScope { parent: None, items: root_items }],
+        definitions: root_items,
+        scopes: smallvec![ExprScope { parent: None, range: 0..root_items_len }],
         scope_item_cnt: vec![0],
         scope_by_expr: Default::default(),
         scope_by_stmt: Default::default(),
@@ -130,21 +207,31 @@ fn resolve_body<'db>(db: &'db dyn BaseDb, project: Project, parent: ItemScope<'d
     BodyScope::new(
         db, 
         parent,
+        resolver.definitions,
         resolver.scopes, 
         IndexMapUpdate(resolver.scope_by_expr), 
         IndexMapUpdate(resolver.scope_by_stmt))
 }
 
 impl<'db> ScopeResolver<'db> {
+    fn add_item(&mut self, item: (Ident<'db>, Definition<'db>)) {
+        self.definitions.push(item);
+        if let Some(s) = self.scopes.last_mut() {
+            s.range.end += 1;
+        } else {
+            unreachable!()
+        }
+    }
+
     fn new_scope(&mut self, parent: Option<usize>) {
-        if let Some(last_scope) = self.scopes.last_mut() {
-            if last_scope.items.is_empty() && self.scope_item_cnt.last() == Some(&0usize) {
-                last_scope.parent = parent;
+        /*if let Some(last_scope) = self.scopes.last_mut() {
+            if last_scope.range.is_empty() && self.scope_item_cnt.last() == Some(&0usize) {
+                //last_scope.parent = parent;
                 return;
             }
-        }
+        }*/
 
-        self.scopes.push(ExprScope { parent, items: vec![] });
+        self.scopes.push(ExprScope { parent, range: self.definitions.len()..self.definitions.len() });
         self.scope_item_cnt.push(0);
     }
 
@@ -165,16 +252,15 @@ impl<'db> Visitor<'db> for &mut ScopeResolver<'db> {
                 self.new_scope(Some(current_scope));
             }
             Statement::Try { expr, returns, body, catch } => {
-                let new_items = returns
+                self.new_scope(Some(current_scope));
+                for item in returns
                     .iter()
                     .flatten()
                     .filter_map(|a| {
                         a.name(self.db).map(|name| (name, Definition::Local((StmtOrItem::Stmt(s), *a))))
-                    })
-                    .collect();
-
-                self.new_scope(Some(current_scope));
-                self.scopes.last_mut().unwrap().items = new_items;
+                    }) {
+                    self.add_item(item);
+                }
             }
             _ => {}
         }
@@ -185,16 +271,15 @@ impl<'db> Visitor<'db> for &mut ScopeResolver<'db> {
     fn stmt_end(&mut self, db: &'db dyn BaseDb, ctx: Self::Ctx, s: StatementId<'db>) {
         match s.kind(self.db) {
             Statement::VarDecl { items, init_expr } => {
-                let new_items = items
+                self.new_scope(Some(ctx));
+                for item in items
                     .iter()
                     .flatten()
                     .filter_map(|a| {
                         a.name(self.db).map(|name| (name, Definition::Local((StmtOrItem::Stmt(s), *a))))
-                    })
-                    .collect();
-
-                self.new_scope(Some(ctx));
-                self.scopes.last_mut().unwrap().items = new_items;
+                    }) {
+                    self.add_item(item);
+                }
             }
             Statement::Block { .. } |
                 Statement::Try { .. } => {

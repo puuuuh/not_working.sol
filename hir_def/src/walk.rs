@@ -126,9 +126,10 @@ impl<'db, VisitorImpl: Visitor<'db>> StmtVisitor<'db, VisitorImpl> {
                 }
             },
             Statement::If { cond, body, else_body } => {
+                self.visit_expr(db, *cond);
                 self.visit_stmt(db, *body);
                 if let Some(else_body) = else_body {
-                    self.visit_stmt(db, *body);
+                    self.visit_stmt(db, *else_body);
                 }
             },
             Statement::ForLoop { init, cond, finish_action, body } => {
@@ -138,6 +139,11 @@ impl<'db, VisitorImpl: Visitor<'db>> StmtVisitor<'db, VisitorImpl> {
                 if let Some(expr) = cond {
                     self.visit_expr(db, *expr)
                 }
+                if let Some(expr) = finish_action {
+                    self.visit_expr(db, *expr)
+                }
+
+                self.visit_stmt(db, *body)
             },
             Statement::WhileLoop { cond, body } => {
                 self.visit_expr(db, *cond);

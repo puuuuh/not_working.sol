@@ -4,7 +4,7 @@ use crate::hir::statement::StatementId;
 use crate::hir::{ContractId, HasSourceUnit, Item};
 use crate::items::HirPrint;
 use crate::lower::LowerCtx;
-use crate::nameres::body::BodyScope;
+use crate::nameres::scope::BodyScope;
 use crate::source_map::item_source_map::ItemSourceMap;
 use crate::{impl_major_item, lazy_field, FileAstPtr, FileExt};
 use base_db::{BaseDb, Project};
@@ -37,7 +37,7 @@ lazy_field!(ConstructorId<'db>, origin, set_origin, Option<ContractId<'db>>, Non
 impl<'db> ConstructorId<'db> {
     #[salsa::tracked]
     pub fn scope(self, db: &'db dyn BaseDb, project: Project, module: File) -> BodyScope<'db> {
-        let map = module.source_unit(db).item_map(db);
+        let map = module.source_unit(db);
         BodyScope::from_body(
             db, 
             project, 
@@ -63,7 +63,7 @@ impl<'db> ConstructorId<'db> {
 
         let res = lowerer.lower_stmt(nodes::Stmt::Block(expr));
 
-        return Some((res, ItemSourceMap::new(lowerer.exprs, lowerer.stmts)));
+        return Some((res, ItemSourceMap::new(crate::IndexMapUpdate(lowerer.exprs), crate::IndexMapUpdate(lowerer.stmts))));
     }
 }   
 

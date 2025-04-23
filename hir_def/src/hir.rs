@@ -59,7 +59,7 @@ pub use source_unit::*;
 pub use call_options::*;
 pub use state_mutability::*;
 
-use crate::{nameres::body::Definition, source_map::item_source_map::ItemSourceMap};
+use crate::{nameres::scope::body::Definition, source_map::item_source_map::ItemSourceMap};
 
 pub struct FilePosition {
     pub file: File,

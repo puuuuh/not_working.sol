@@ -13,7 +13,7 @@ use crate::hir::structure::StructureId;
 use crate::hir::user_defined_value_type::UserDefinedValueTypeId;
 use crate::hir::using::UsingId;
 use crate::lower::LowerCtx;
-use crate::nameres::body::Definition;
+use crate::nameres::scope::body::Definition;
 use crate::nameres::scope::{ItemScope, Scope};
 use crate::nameres::ImportResolution;
 use crate::source_map::item_source_map::ItemSourceMap;
@@ -33,7 +33,7 @@ pub struct SourceUnit<'db> {
     pub items: Vec<Item<'db>>,
 
     #[return_ref]
-    pub item_map: SpanMap<Item<'db>>
+    pub source_map: SpanMap<Item<'db>>
 }
 
 #[salsa::tracked]
@@ -74,7 +74,7 @@ impl<'db> SourceUnit<'db> {
     }
 
     pub fn item_scope_by_range(self, db: &'db dyn BaseDb, project: Project, module: File, range: TextRange) -> Scope<'db> {
-        if let Some(item) = self.item_map(db).find(range) {
+        if let Some(item) = self.source_map(db).find(range) {
             return item.scope(db, project, module);
         }
 
@@ -203,7 +203,7 @@ pub enum NamedItem<'db> {
     Modifier(ModifierId<'db>),
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, PartialOrd, Ord, salsa::Update)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, PartialOrd, Ord, salsa::Supertype, salsa::Update)]
 pub enum Item<'db> {
     Import(ImportId<'db>),
     Pragma(PragmaId<'db>),

@@ -4,7 +4,7 @@ use crate::nameres::scope::ItemScope;
 use crate::{impl_major_item, lazy_field, FileAstPtr};
 use base_db::{AnchoredPath, BaseDb, File, Project};
 use rowan::ast::AstPtr;
-use smallvec::{smallvec, SmallVec};
+use smallvec::SmallVec;
 use syntax::ast::nodes;
 use salsa::tracked;
 
@@ -12,7 +12,7 @@ use salsa::tracked;
 #[derive(Debug, Hash, Clone, Eq, PartialEq, salsa::Update)]
 pub enum ImportKind<'db> {
     Path { name: Option<Ident<'db>>, path: String },
-    Aliases { symbol_aliases: Vec<SymbolAlias<'db>>, path: String },
+    Aliases { symbol_aliases: SmallVec<[SymbolAlias<'db>; 5]>, path: String },
     Glob { as_name: Ident<'db>, path: String },
     Error,
 }

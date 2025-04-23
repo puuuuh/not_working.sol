@@ -1,7 +1,5 @@
-use std::{fmt::Debug};
-
 use base_db::{BaseDb, File};
-use hir_def::{hir::{ContractId, ElementaryTypeRef, EnumerationId, ErrorId, EventId, FunctionId, HasDefs, Ident, Item, ModifierId, SourceUnit, StructureId}, nameres::body::Definition};
+use hir_def::{hir::{ContractId, ElementaryTypeRef, EnumerationId, ErrorId, EventId, FunctionId, HasDefs, Ident, Item, ModifierId, SourceUnit, StructureId}, nameres::scope::body::Definition};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, salsa::Update)]
 pub enum TyKind<'db> {
@@ -25,8 +23,8 @@ pub struct Ty<'db> {
     pub kind: TyKind<'db>
 }
 
-impl<'db> HasDefs<'db> for Ty<'db> {
-    fn defs(self, db: &'db dyn BaseDb, _: File) -> Vec<(Ident<'db>, Definition<'db>)> {
+impl<'db> Ty<'db> {
+    pub fn defs(self, db: &'db dyn BaseDb) -> Vec<(Ident<'db>, Definition<'db>)> {
         match self.kind(db) {
             TyKind::Struct(file, structure_id) => {
                 structure_id.defs(db, file)

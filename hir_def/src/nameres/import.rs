@@ -11,7 +11,8 @@ use salsa::Database;
 #[salsa::tracked(debug)]
 pub struct ImportResolution<'db> {
     #[return_ref]
-    pub items: Arc<Vec<(Ident<'db>, (File, Item<'db>))>>,
+    pub items: Vec<(Ident<'db>, (File, Item<'db>))>,
+
     #[return_ref]
     pub errors: SmallVec<[String; 1]>,
 }
@@ -35,7 +36,7 @@ fn resolve_file<'db>(db: &'db dyn BaseDb, project: Project, file: File) -> Impor
     ctx.resolve_items(db, project);
     let items = ctx.items.into_iter()
         .flat_map(|(name, data)| data.into_iter().map(move |item| (name, item)));
-    ImportResolution::new(db, Arc::new(items.collect()), ctx.errors)
+    ImportResolution::new(db, items.collect(), ctx.errors)
 }
 
 impl<'db> ImportResolution<'db> {

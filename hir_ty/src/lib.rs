@@ -1,7 +1,7 @@
 use std::env::var;
 
 use base_db::{BaseDb, File, Project};
-use hir_def::{hir::{BinaryOp, ElementaryTypeRef, ExprId, HasSourceUnit, Item, StatementId, TypeRef}, nameres::{body::{Definition, StmtOrItem}, scope::Scope}};
+use hir_def::nameres::scope::Scope;
 use salsa::tracked;
 use tys::{Ty, TyKind};
 

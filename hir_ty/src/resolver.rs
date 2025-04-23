@@ -1,5 +1,5 @@
 use base_db::{BaseDb, File, Project};
-use hir_def::{hir::{BinaryOp, ElementaryTypeRef, Expr, ExprId, HasDefs, HasSourceUnit, Ident, Item, Statement, StatementId, TypeRef}, nameres::{body::{Definition, StmtOrItem}, scope::{ItemScope, Scope}}, walk::{walk_stmt, Visitor}, IndexMapUpdate};
+use hir_def::{hir::{BinaryOp, ElementaryTypeRef, Expr, ExprId, HasDefs, HasSourceUnit, Ident, Item, Statement, StatementId, TypeRef}, nameres::scope::{body::Definition, Scope}, walk::{walk_stmt, Visitor}, IndexMapUpdate};
 use indexmap::IndexMap;
 use salsa::Database;
 
@@ -182,7 +182,7 @@ impl<'db> TypeResolutionCtx<'db> {
         let kind = match expr.kind(db) {
             Expr::MemberAccess { owner, member_name } => {
                 let owner_ty = self.resolve_expr(db, *owner);
-                let defs = owner_ty.defs(db, self.module);
+                let defs = owner_ty.defs(db);
                 let mut defs = defs.iter().filter(|(name, _)| *name == *member_name);
                 loop {
                     let Some((_, def)) = defs.next() else {
@@ -242,7 +242,7 @@ impl<'db> TypeResolutionCtx<'db> {
             Expr::Slice { base, start, end } => return self.resolve_expr(db, *base),
             Expr::MemberAccess { owner, member_name } => {
                 let owner_ty = self.resolve_expr(db, *owner);
-                if let Some(def) =  owner_ty.defs(db, self.module).iter().find(|(name, _)| *name == *member_name) {
+                if let Some(def) =  owner_ty.defs(db).iter().find(|(name, _)| *name == *member_name) {
                     match def.1 {
                         Definition::Item(item) => return self.resolve_item_type(db, item),
                         Definition::EnumVariant(e) => {
@@ -350,7 +350,6 @@ impl<'db> TypeResolutionCtx<'db> {
     fn resolve_path(db: &'db dyn BaseDb, scope: Scope<'db>, path: &[Ident<'db>]) -> Option<Definition<'db>> {
         let mut path = path.into_iter();
         let start = path.next()?;
-
         if let mut def @ Definition::Item((mut module, _)) = scope.lookup(db, *start)? {
             'ident_loop: for ident in path {
                 for (name, new_def) in def.defs(db,  module) {
@@ -411,5 +410,47 @@ impl<'db> TypeResolutionCtx<'db> {
         };
 
         Ty::new(db, kind)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use base_db::{Project, TestDatabase, TestFixture, VfsPath};
+    use hir_def::{hir::HasSourceUnit, items::HirPrint};
+    use salsa::Database;
+
+    use super::resolve_item;
+
+    #[test]
+    fn basic_goto() {
+        let fixture = TestFixture::parse(r"
+            struct TestStruct {
+                uint256 field;
+                uint128 field2;
+                uint256 field3;
+                uint256 field4;
+                uint256 field5;
+            }
+
+            contract Test is
+                ReentrancyGuardUpgradeable,
+                ERC2771ContextUpgradeable(address(0))
+            {
+                uint64 testvar = 1;
+
+                function h$0elloWorld(IERC20 memory tmp) {
+                    TestStruct memory test = 1;
+                    test.field;
+                }
+            }
+        ");
+        let pos = fixture.position.unwrap();
+        let (db, file) = TestDatabase::from_fixture(fixture);
+        let item = file.source_unit(&db).source_map(&db).find_pos(pos);
+        let types = resolve_item(&db, Project::new(&db, VfsPath::from_virtual("".to_owned())), item.unwrap(), file);
+        for (expr, ty) in types.expr_map(&db).0 {
+            let mut t = String::new();
+            expr.write(&db, &mut t, 0).unwrap();
+        }
     }
 }

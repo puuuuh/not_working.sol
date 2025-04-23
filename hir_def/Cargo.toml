@@ -16,7 +16,6 @@ salsa.workspace = true
 rowan.workspace = true
 parser.workspace = true
 base_db.workspace = true
-span.workspace = true
 num-bigint.workspace = true
 indexmap.workspace = true
 derive_more.workspace = true
