@@ -34,7 +34,7 @@ use syntax::TextRange;
 
 pub(crate) struct LowerCtx<'a> {
     db: &'a dyn BaseDb,
-
+    file: File,
     pub(crate) spans: Vec<(TextRange, Item<'a>)>,
     pub(crate) exprs: IndexMap<AstPtr<Expr>, ExprId<'a>>,
     pub(crate) stmts: IndexMap<AstPtr<Stmt>, StatementId<'a>>,
@@ -42,7 +42,7 @@ pub(crate) struct LowerCtx<'a> {
 
 impl<'a> LowerCtx<'a> {
     pub fn new(db: &'a dyn BaseDb, file: File) -> Self {
-        Self { db, spans: Vec::new(), exprs: Default::default(), stmts: Default::default() }
+        Self { db, file, spans: Vec::new(), exprs: Default::default(), stmts: Default::default() }
     }
 
     pub fn save_span(&mut self, range: TextRange, data: Item<'a>) {
@@ -84,7 +84,7 @@ impl<'a> LowerCtx<'a> {
 
     pub fn lower_pragma(&mut self, s: nodes::Pragma) -> PragmaId<'a> {
         let data = s.data_string();
-        PragmaId::new(self.db, data, AstPtr::new(&s))
+        PragmaId::new(self.db, self.file, data, AstPtr::new(&s))
     }
 
     pub fn lower_using(&mut self, s: nodes::Using) -> UsingId<'a> {
@@ -111,7 +111,7 @@ impl<'a> LowerCtx<'a> {
         });
 
         let using = UsingData { items, type_name: ty_name, is_global: s.global_token().is_some() };
-        UsingId::new(self.db, using, AstPtr::new(&s))
+        UsingId::new(self.db, self.file, using, AstPtr::new(&s))
     }
 
     pub fn lower_using_alias(&mut self, s: nodes::UsingAlias) -> UsingAlias<'a> {

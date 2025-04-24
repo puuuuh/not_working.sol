@@ -1,17 +1,17 @@
 use std::{collections::{hash_map::Entry, BTreeSet, HashMap, HashSet}, iter::once, sync::Arc};
 
 use base_db::{BaseDb, Project, TestDatabase};
+use hir_def::{HasSourceUnit, Ident, ImportId, ImportKind, Item, SourceUnit};
 use indexmap::IndexMap;
 use smallvec::SmallVec;
 use vfs::{AnchoredPath, File, VfsPath};
 
-use crate::{hir::{HasSourceUnit, Ident, ImportId, ImportKind, Item, SourceUnit}, FileExt, IndexMapUpdate};
 use salsa::Database;
 
 #[salsa::tracked(debug)]
 pub struct ImportResolution<'db> {
     #[return_ref]
-    pub items: Vec<(Ident<'db>, (File, Item<'db>))>,
+    pub items: Vec<(Ident<'db>, Item<'db>)>,
 
     #[return_ref]
     pub errors: SmallVec<[String; 1]>,
@@ -40,8 +40,8 @@ fn resolve_file<'db>(db: &'db dyn BaseDb, project: Project, file: File) -> Impor
 }
 
 impl<'db> ImportResolution<'db> {
-    pub fn from_file(db: &'db dyn BaseDb, project: Project, module: File) -> Self {
-        resolve_file(db, project, module)
+    pub fn from_file(db: &'db dyn BaseDb, project: Project, file: File) -> Self {
+        resolve_file(db, project, file)
     }
 }
 
@@ -49,7 +49,7 @@ struct ImportResolutionCtx<'db> {
     // Already resolved items
     imported: HashMap<VfsPath, Option<HashMap<Ident<'db>, Ident<'db>>>>,
     modules: IndexMap<Ident<'db>, SourceUnit<'db>>,
-    items: IndexMap<Ident<'db>, HashSet<(File, Item<'db>)>>,
+    items: IndexMap<Ident<'db>, HashSet<Item<'db>>>,
     explicit_imports: Vec<(Ident<'db>, ImportId<'db>)>,
     queue: BTreeSet<File>,
     errors: SmallVec<[String; 1]>,
@@ -74,10 +74,10 @@ impl<'db> ImportResolutionCtx<'db> {
                 if let Some(rename) = remappings.get(&i.0) {
                     match self.items.entry(*rename) {
                         indexmap::map::Entry::Occupied(mut occupied_entry) => {
-                            occupied_entry.get_mut().insert((f, *i.1));
+                            occupied_entry.get_mut().insert((*i.1));
                         },
                         indexmap::map::Entry::Vacant(vacant_entry) => {
-                            vacant_entry.insert(once((f, *i.1)).collect());
+                            vacant_entry.insert(once(*i.1).collect());
                         },
                     }
                 }
@@ -86,10 +86,10 @@ impl<'db> ImportResolutionCtx<'db> {
             for (name, item) in tree.named_items(db) {
                 match self.items.entry(*name) {
                     indexmap::map::Entry::Occupied(mut occupied_entry) => {
-                        occupied_entry.get_mut().insert((f, *item));
+                        occupied_entry.get_mut().insert(*item);
                     },
                     indexmap::map::Entry::Vacant(vacant_entry) => {
-                        vacant_entry.insert(once((f, *item)).collect());
+                        vacant_entry.insert(once(*item).collect());
                     },
                 }
             }

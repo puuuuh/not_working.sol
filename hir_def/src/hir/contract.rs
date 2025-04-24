@@ -12,8 +12,6 @@ use crate::hir::user_defined_value_type::UserDefinedValueTypeId;
 use crate::hir::using::UsingId;
 use crate::hir::Item;
 use crate::items::HirPrint;
-use crate::nameres::scope::body::Definition;
-use crate::nameres::scope::ItemScope;
 use crate::{impl_major_item, lazy_field, AstPtr, IndexMapUpdate};
 use base_db::{BaseDb, Project};
 use salsa::Database;
@@ -22,10 +20,13 @@ use std::fmt::Write;
 use std::sync::Arc;
 use syntax::ast::nodes::{self, Contract};
 
-use super::{HasDefs, HasSourceUnit};
+use super::HasSourceUnit;
 
 #[salsa::tracked(debug)]
 pub struct ContractId<'db> {
+    #[tracked]
+    pub file: File,
+
     #[id]
     pub name: Ident<'db>,
 
@@ -45,17 +46,6 @@ pub struct ContractId<'db> {
 }
 
 lazy_field!(ContractId<'db>, origin, set_origin, Option<ContractId<'db>>, None);
-
-#[salsa::tracked]
-impl<'db> HasDefs<'db> for ContractId<'db> {
-    #[salsa::tracked]
-    fn defs(self, db: &'db dyn BaseDb, module: File) -> Vec<(Ident<'db>, Definition<'db>)> {
-        self.items(db).iter()
-            .flat_map(|item| item.name(db)
-            .map(|name| (name, Definition::Item((module, Item::from(*item))))))
-            .collect()
-    }
-}
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, salsa::Update)]
 pub enum ContractItem<'db> {
@@ -144,28 +134,6 @@ pub enum ContractType {
     Interface,
     Contract,
     Library,
-}
-
-#[salsa::tracked]
-impl<'db> ContractId<'db> {
-    #[salsa::tracked]
-    pub fn scope(self, db: &'db dyn BaseDb, project: Project, module: File) -> ItemScope<'db> {
-        let mut items: Box<[(Ident<'db>, (File, Item<'_>))]> = self
-            .items(db)
-            .iter()
-            .filter_map(|a| a.name(db).map(|name| (name, (module, (*a).into()))))
-            .collect();
-
-        items.sort_by_key(|(name, _)| *name);
-
-        ItemScope::new(
-            db,
-            Some(self.origin(db)
-                .map(|c| c.scope(db, project, module))
-                .unwrap_or_else(|| module.source_unit(db).scope(db, project, module))),
-            items.into(),
-        )
-    }
 }
 
 impl HirPrint for ContractId<'_> {

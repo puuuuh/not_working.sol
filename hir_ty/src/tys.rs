@@ -1,17 +1,18 @@
 use base_db::{BaseDb, File};
-use hir_def::{hir::{ContractId, ElementaryTypeRef, EnumerationId, ErrorId, EventId, FunctionId, HasDefs, Ident, Item, ModifierId, SourceUnit, StructureId}, nameres::scope::body::Definition};
+use hir_def::hir::{ContractId, ElementaryTypeRef, EnumerationId, ErrorId, EventId, FunctionId, Ident, Item, ModifierId, SourceUnit, StructureId};
+use hir_nameres::{container::Container, scope::body::Definition};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, salsa::Update)]
 pub enum TyKind<'db> {
     Unknown,
     Function(Ty<'db>, Ty<'db>),
-    Error(File, ErrorId<'db>),
+    Error(ErrorId<'db>),
     Modifier(Ty<'db>),
-    Event(File, EventId<'db>),
-    Struct(File, StructureId<'db>),
-    Enum(File, EnumerationId<'db>),
-    Contract(File, ContractId<'db>),
-    Module(File, SourceUnit<'db>),
+    Event(EventId<'db>),
+    Struct(StructureId<'db>),
+    Enum(EnumerationId<'db>),
+    Contract(ContractId<'db>),
+    Module(SourceUnit<'db>),
     Elementary(ElementaryTypeRef),
     Array(Ty<'db>, usize),
     Mapping(Ty<'db>, Ty<'db>),
@@ -24,46 +25,22 @@ pub struct Ty<'db> {
 }
 
 impl<'db> Ty<'db> {
-    pub fn defs(self, db: &'db dyn BaseDb) -> Vec<(Ident<'db>, Definition<'db>)> {
-        match self.kind(db) {
-            TyKind::Struct(file, structure_id) => {
-                structure_id.defs(db, file)
+    pub fn container(self, db: &'db dyn BaseDb) -> Option<Container<'db>> {
+        Some(match self.kind(db) {
+            TyKind::Struct(structure_id) => {
+                Container::Structure(structure_id)
             },
-            TyKind::Enum(file, enumeration_id) => {
-                enumeration_id.defs(db, file)
+            TyKind::Enum(enumeration_id) => {
+                Container::Enum(enumeration_id)
             },
-            TyKind::Contract(file, contract_id) => {
-                contract_id.defs(db, file)
+            TyKind::Contract(contract_id) => {
+                Container::Contract(contract_id)
             },
-            TyKind::Module(file, source_unit) => {
-                source_unit.defs(db, file)
+            TyKind::Module(source_unit) => {
+                Container::SourceUnit(source_unit)
             },
-            TyKind::Function(file, function_id) => {
-                vec![]
-            },
-            TyKind::Error(file, error_id) => {
-                vec![]
-            },
-            TyKind::Modifier(_) => {
-                vec![]
-            },
-            TyKind::Event(file, event_id) => {
-                vec![]
-            },
-            TyKind::Elementary(elementary_type_ref) => {
-                vec![]
-            },
-            TyKind::Array(ty, _) => {
-                vec![]
-            },
-            TyKind::Mapping(ty, ty1) => {
-                vec![]
-            },
-            TyKind::Tuple(items) => {
-                vec![]
-            },
-            TyKind::Unknown => vec![],
-        }
+            _ => return None
+        })
     }
 }
 

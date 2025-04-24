@@ -13,9 +13,6 @@ use crate::hir::structure::StructureId;
 use crate::hir::user_defined_value_type::UserDefinedValueTypeId;
 use crate::hir::using::UsingId;
 use crate::lower::LowerCtx;
-use crate::nameres::scope::body::Definition;
-use crate::nameres::scope::{ItemScope, Scope};
-use crate::nameres::ImportResolution;
 use crate::source_map::item_source_map::ItemSourceMap;
 use crate::source_map::span_map::SpanMap;
 use crate::{impl_major_item, lazy_field, FileExt};
@@ -25,10 +22,13 @@ use rowan::TextRange;
 use salsa::Database;
 
 use super::statement::StatementId;
-use super::{user_defined_value_type, ExprId, HasDefs, HasSourceUnit};
+use super::{user_defined_value_type, ExprId, HasSourceUnit};
 
 #[salsa::tracked(debug)]
 pub struct SourceUnit<'db> {
+    #[tracked]
+    pub file: File,
+
     #[return_ref]
     pub items: Vec<Item<'db>>,
 
@@ -42,7 +42,7 @@ fn lower_file<'db>(db: &'db dyn BaseDb, file: File) -> SourceUnit<'db> {
     let mut lower = LowerCtx::new(db, file);
     let items = lower.lower_source(input);
 
-    let item_tree = SourceUnit::new(db, items, SpanMap::new(core::mem::take(&mut lower.spans)));
+    let item_tree = SourceUnit::new(db, file, items, SpanMap::new(core::mem::take(&mut lower.spans)));
 
     item_tree
 }
@@ -55,32 +55,6 @@ impl<'db> HasSourceUnit<'db> for File {
 
 #[salsa::tracked]
 impl<'db> SourceUnit<'db> {
-    #[salsa::tracked]
-    pub fn scope_by_stmt(self, db: &'db dyn BaseDb, project: Project, module: File, stmt: StatementId<'db>) -> Scope<'db> {
-        if let Some(node) = stmt.node(db) {
-            return self.item_scope_by_range(db, project, module, node.syntax_node_ptr().text_range());
-        }
-
-        Scope::Item(self.scope(db, project, module))
-    }
-
-    #[salsa::tracked]
-    pub fn scope_by_expr(self, db: &'db dyn BaseDb, project: Project, module: File, expr: ExprId<'db>) -> Scope<'db> {
-        if let Some(node) = expr.node(db) {
-            return self.item_scope_by_range(db, project, module, node.syntax_node_ptr().text_range());
-        }
-
-        Scope::Item(self.scope(db, project, module))
-    }
-
-    pub fn item_scope_by_range(self, db: &'db dyn BaseDb, project: Project, module: File, range: TextRange) -> Scope<'db> {
-        if let Some(item) = self.source_map(db).find(range) {
-            return item.scope(db, project, module);
-        }
-
-        Scope::Item(self.scope(db, project, module))
-    }
-    
     #[salsa::tracked(return_ref)]
     pub fn named_items(self, db: &'db dyn BaseDb) -> IndexMap<Ident<'db>, Item<'db>> {
         let top_items = self.items(db);
@@ -88,15 +62,6 @@ impl<'db> SourceUnit<'db> {
             .collect()
     }
 
-    #[salsa::tracked]
-    pub fn scope(self, db: &'db dyn BaseDb, project: Project, module: File) -> ItemScope<'db> {
-        return ItemScope::new(db, None, self.resolve_imports(db, project, module).items(db).clone())
-    }
-
-    #[salsa::tracked]
-    pub fn resolve_imports(self, db: &'db dyn BaseDb, project: Project, module: File) -> ImportResolution<'db> {
-        ImportResolution::from_file(db, project, module)
-    }
 
     #[salsa::tracked(return_ref)]
     pub fn data(self, db: &'db dyn BaseDb) -> ItemTreeData<'db> {
@@ -145,17 +110,6 @@ impl<'db> SourceUnit<'db> {
             functions,
             state_variables,
         )
-    }
-}
-
-#[salsa::tracked]
-impl<'db> HasDefs<'db> for SourceUnit<'db> {
-    #[salsa::tracked]
-    fn defs(self, db: &'db dyn BaseDb, module: File) -> Vec<(Ident<'db>, Definition<'db>)> {
-        self.items(db)
-            .iter()
-            .filter_map(|item| item.name(db).map(|name| (name, Definition::Item((module, *item)))))
-            .collect()
     }
 }
 
@@ -226,45 +180,26 @@ pub enum Item<'db> {
     Module(SourceUnit<'db>)
 }
 
-impl<'db> HasDefs<'db> for Item<'db> {
-    fn defs(self, db: &'db dyn BaseDb, module: File) -> Vec<(Ident<'db>, Definition<'db>)> {
-        match self {
-            Item::Contract(contract_id) => {
-                contract_id.defs(db, module)
-            },
-            Item::Enum(enumeration_id) => {
-                enumeration_id.defs(db, module)
-            },
-            Item::Struct(structure_id) => {
-                structure_id.defs(db, module)
-            },
-            Item::Module(source_unit) => {
-                source_unit.defs(db, module)
-            },
-            _ => vec![]
-        }
-    }
-}
-
 impl<'db> Item<'db> {
-    pub fn scope(self, db: &'db dyn BaseDb, project: Project, module: File) -> Scope<'db> {
+    pub fn file(self, db: &'db dyn BaseDb) -> File {
         match self {
-            Item::StateVariable(s) => Scope::Item(s.scope(db, project, module)),
-            Item::Struct(s) => Scope::Item(s.scope(db, project, module)),
-            Item::Import(s) => Scope::Item(s.scope(db, project, module)),
-            Item::Enum(s) => Scope::Item(s.scope(db, project, module)),
-            Item::UserDefinedValueType(s) => Scope::Item(s.scope(db, project, module)),
-            Item::Error(s) => Scope::Item(s.scope(db, project, module)),
-            Item::Event(s) => Scope::Item(s.scope(db, project, module)),
-            Item::Pragma(s) => Scope::Item(s.scope(db, project, module)),
-            Item::Using(s) => Scope::Item(module.source_unit(db).scope(db, project, module)),
-            Item::Contract(contract_id) => Scope::Item(contract_id.scope(db, project, module)),
-            Item::Function(function_id) => Scope::Body(function_id.scope(db, project, module)),
-            Item::Constructor(constructor_id) => Scope::Body(constructor_id.scope(db, project, module)),
-            Item::Modifier(modifier_id) => Scope::Body(modifier_id.scope(db, project, module)),
-            Item::Module(source_unit) => Scope::Item(source_unit.scope(db, project, module)),
+            Item::Import(import_id) => import_id.file(db),
+            Item::Pragma(pragma_id) => pragma_id.file(db),
+            Item::Using(using_id) => using_id.file(db),
+            Item::Contract(contract_id) => contract_id.file(db),
+            Item::Enum(enumeration_id) => enumeration_id.file(db),
+            Item::UserDefinedValueType(user_defined_value_type_id) => user_defined_value_type_id.file(db),
+            Item::Error(error_id) => error_id.file(db),
+            Item::Event(event_id) => event_id.file(db),
+            Item::Function(function_id) => function_id.file(db),
+            Item::StateVariable(state_variable_id) => state_variable_id.file(db),
+            Item::Struct(structure_id) => structure_id.file(db),
+            Item::Constructor(constructor_id) => constructor_id.file(db),
+            Item::Modifier(modifier_id) => modifier_id.file(db),
+            Item::Module(source_unit) => source_unit.file(db)
         }
     }
+
     pub fn name(self, db: &'db dyn Database) -> Option<Ident<'db>> {
         match self {
             Item::Import(import_id) => None,
@@ -284,7 +219,7 @@ impl<'db> Item<'db> {
         }
     }
 
-    pub fn body(self, db: &'db dyn BaseDb, module: File) -> Option<(StatementId<'db>, ItemSourceMap<'db>)> {
+    pub fn body(self, db: &'db dyn BaseDb) -> Option<(StatementId<'db>, ItemSourceMap<'db>)> {
         match self {
             Item::Import(import_id) => None,
             Item::Pragma(pragma_id) => None,
@@ -294,11 +229,11 @@ impl<'db> Item<'db> {
             Item::UserDefinedValueType(user_defined_value_type_id) => None,
             Item::Error(error_id) => None,
             Item::Event(event_id) => None,
-            Item::Function(function_id) => function_id.body(db, module),
+            Item::Function(function_id) => function_id.body(db),
             Item::StateVariable(state_variable_id) => None,
             Item::Struct(structure_id) => None,
             Item::Constructor(constructor_id) => None,
-            Item::Modifier(modifier_id) => modifier_id.body(db, module),
+            Item::Modifier(modifier_id) => modifier_id.body(db),
             Item::Module(source_unit) => None,
         }
     }

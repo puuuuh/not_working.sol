@@ -2,7 +2,6 @@ use crate::hir::ident::{Ident, IdentPath};
 use crate::hir::type_name::TypeRef;
 use crate::hir::{ContractId, HasSourceUnit};
 use crate::items::HirPrint;
-use crate::nameres::scope::ItemScope;
 use crate::{impl_major_item, lazy_field, FileAstPtr};
 use base_db::{BaseDb, Project};
 use rowan::ast::AstPtr;
@@ -15,6 +14,9 @@ use super::visibility::Visibility;
 
 #[tracked(debug)]
 pub struct StateVariableId<'db> {
+    #[tracked]
+    pub file: File,
+
     #[id]
     pub name: Ident<'db>,
     pub ty: TypeRef<'db>,
@@ -24,16 +26,6 @@ pub struct StateVariableId<'db> {
 }
 
 lazy_field!(StateVariableId<'db>, origin, set_origin, Option<ContractId<'db>>, None);
-
-#[salsa::tracked]
-impl<'db> StateVariableId<'db> {
-    #[salsa::tracked]
-    pub fn scope(self, db: &'db dyn BaseDb, project: Project, module: File) -> ItemScope<'db> {
-        self.origin(db)
-            .map(|c| c.scope(db, project, module))
-            .unwrap_or_else(|| module.source_unit(db).scope(db, project, module))
-    }
-}
 
 impl HirPrint for StateVariableId<'_> {
     fn write<T: Write>(&self, db: &dyn Database, w: &mut T, ident: usize) -> std::fmt::Result {

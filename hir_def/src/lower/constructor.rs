@@ -19,6 +19,7 @@ impl<'db> LowerCtx<'db> {
                     .unwrap_or_default();
         let c = ConstructorId::new(
             self.db,
+            self.file,
             Constructor {
                 args: args.clone(),
                 modifiers: mods,

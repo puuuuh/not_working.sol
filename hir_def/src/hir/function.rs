@@ -4,7 +4,6 @@ use crate::hir::statement::StatementId;
 use crate::hir::{ContractId, HasFile, HasSourceUnit};
 use crate::items::HirPrint;
 use crate::lower::LowerCtx;
-use crate::nameres::scope::BodyScope;
 use crate::source_map::item_source_map::ItemSourceMap;
 use crate::{impl_major_item, lazy_field, lower, FileAstPtr, FileExt};
 use base_db::{BaseDb, Project};
@@ -21,6 +20,9 @@ use super::Item;
 
 #[salsa::tracked(debug)]
 pub struct FunctionId<'db> {
+    #[tracked]
+    pub file: File,
+
     #[id]
     pub name: Option<Ident<'db>>,
     pub info: Function<'db>,
@@ -35,15 +37,16 @@ lazy_field!(FunctionId<'db>, origin, set_origin, Option<ContractId<'db>>, None);
 #[salsa::tracked]
 impl<'db> FunctionId<'db> {
     #[salsa::tracked]
-    pub fn body(self, db: &'db dyn BaseDb, module: File) -> Option<(StatementId<'db>, ItemSourceMap<'db>)> {
+    pub fn body(self, db: &'db dyn BaseDb) -> Option<(StatementId<'db>, ItemSourceMap<'db>)> {
+        let file = self.file(db);
         let mut origin = self.origin(db);
         let node = self.body_node(db)?;
-        let root = module.node(db);
+        let root = file.node(db);
         let root = root.syntax();
         
         let expr = node.to_node(&root);
 
-        let mut lowerer = LowerCtx::new(db, module);
+        let mut lowerer = LowerCtx::new(db, file);
 
         let res = lowerer.lower_stmt(Stmt::Block(expr));
 
@@ -99,23 +102,6 @@ impl HirPrint for ModifierInvocation<'_> {
             w.write_str(")")?;
         }
         Ok(())
-    }
-}
-
-#[salsa::tracked]
-impl<'db> FunctionId<'db> {
-    #[salsa::tracked]
-    pub fn scope(self, db: &'db dyn BaseDb, project: Project, module: File) -> BodyScope<'db> {
-        BodyScope::from_body(
-            db, 
-            project, 
-            self.origin(db)
-                .map(|c| c.scope(db, project, module))
-                .unwrap_or_else(|| module.source_unit(db).scope(db, project, module)), 
-            Item::Function(self),
-            self.info(db).args.iter().copied(), 
-            self.body(db, module).map(|a| a.0)
-        )
     }
 }
 

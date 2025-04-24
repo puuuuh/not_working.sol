@@ -19,6 +19,7 @@ impl<'db> LowerCtx<'db> {
     pub fn lower_error(&mut self, e: nodes::ErrorDefinition) -> ErrorId<'db> {
         let res = ErrorId::new(
             self.db,
+            self.file,
             Ident::from_name(self.db, e.name()),
             e.error_parameters().map(|e| self.lower_error_parameter(e)).collect(),
             AstPtr::new(&e),

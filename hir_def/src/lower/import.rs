@@ -19,7 +19,7 @@ impl<'a> LowerCtx<'a> {
 
     pub fn lower_import(&mut self, s: nodes::Import) -> ImportId<'a> {
         let Some(item) = s.import_item() else {
-            return ImportId::new(self.db, ImportKind::Error, AstPtr::new(&s));
+            return ImportId::new(self.db, self.file, ImportKind::Error, AstPtr::new(&s));
         };
         let kind = match item {
             nodes::ImportItem::ImportPath(path) => ImportKind::Path {
@@ -57,7 +57,7 @@ impl<'a> LowerCtx<'a> {
                 }
             }
         };
-        let res = ImportId::new(self.db, kind, AstPtr::new(&s));
+        let res = ImportId::new(self.db, self.file, kind, AstPtr::new(&s));
         self.save_span(s.syntax().text_range(), Item::Import(res));
         res
     }

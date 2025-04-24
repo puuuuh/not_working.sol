@@ -1,21 +1,20 @@
 use std::sync::Arc;
 
 use base_db::BaseDb;
+use hir_def::{Ident, Item};
 use vfs::File;
 
-use crate::hir::{Ident, Item};
-
-use super::scope::{self, body::Definition, Scope};
+use crate::scope::{body::Definition, Scope};
 
 enum ScopeIterInner<'db> {
     Expr {
-        items: &'db [(Ident<'db>, (File, Item<'db>))],
+        items: &'db [(Ident<'db>, Item<'db>)],
         pos: usize,
     },
 }
 
 impl<'db> ScopeIterInner<'db> {
-    fn expr(data: &'db [(Ident<'db>, (File, Item<'db>))]) -> Self {
+    fn expr(data: &'db [(Ident<'db>, Item<'db>)]) -> Self {
         Self::Expr {
             items: data,
             pos: 0

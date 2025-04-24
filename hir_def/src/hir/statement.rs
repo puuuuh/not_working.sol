@@ -4,7 +4,7 @@ use crate::hir::ident::Ident;
 use crate::hir::source_unit::Item;
 use crate::hir::HasSourceUnit;
 use crate::items::HirPrint;
-use crate::{impl_has_syntax, impl_major_item, lazy_field, FileAstPtr, FileExt, InFile};
+use crate::{impl_has_syntax, impl_major_item, lazy_field, FileAstPtr, FileExt};
 use base_db::BaseDb;
 use rowan::ast::AstPtr;
 use salsa::Database;
@@ -26,9 +26,9 @@ pub struct StatementId<'db> {
 #[salsa::tracked]
 impl<'db> StatementId<'db> {
     #[salsa::tracked]
-    pub fn owner(self, db: &'db dyn BaseDb, module: File) -> Item<'db> {
+    pub fn owner(self, db: &'db dyn BaseDb, file: File) -> Item<'db> {
         let node = self.node(db).unwrap();
-        module.source_unit(db).source_map(db).find(node.syntax_node_ptr().text_range()).unwrap()
+        file.source_unit(db).source_map(db).find(node.syntax_node_ptr().text_range()).unwrap()
     }
 }
 

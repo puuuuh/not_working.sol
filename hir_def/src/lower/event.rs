@@ -20,6 +20,7 @@ impl<'db> LowerCtx<'db> {
     pub fn lower_event(&mut self, e: nodes::EventDefinition) -> EventId<'db> {
         let res = EventId::new(
             self.db,
+            self.file,
             Ident::from_name(self.db, e.name()),
             e.anonymous_token().is_some(),
             e.event_parameters().map(|e| self.lower_event_parameter(e)).collect(),

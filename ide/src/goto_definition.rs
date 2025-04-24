@@ -1,6 +1,8 @@
+use hir_nameres::{container::Container, scope::{body::Definition, HasScope}};
+use hir_ty::tys::TyKind;
 use rowan::ast::{AstNode, AstPtr};
 use base_db::{BaseDb, Project};
-use hir_def::{hir::{FilePosition, HasSourceUnit, Ident, Item}, nameres::scope::{body::Definition, Scope}, FileExt};
+use hir_def::{hir::{FilePosition, HasSourceUnit, Ident, Item}, FileExt, InFile};
 use syntax::{ast::nodes::{self}, SyntaxKind};
 
 use crate::navigation_target::NavigationTarget;
@@ -11,11 +13,11 @@ pub fn goto_definition(db: &dyn BaseDb, project: Project, pos: FilePosition) -> 
     let token = t.syntax().token_at_offset(pos.offset).find(|t| t.kind() == SyntaxKind::IDENT)?;
     let expr = token.parent_ancestors().filter_map(|t| nodes::Expr::cast(t)).next();
     let item = parsed.source_map(db).find(token.text_range())?;
-    let type_inference = hir_ty::resolver::resolve_item(db, project, item, pos.file);
+    let type_inference = hir_ty::resolver::resolve_item(db, project, item);
     let body = match item {
-        Item::Function(function_id) => Some((function_id.body(db, pos.file), function_id.scope(db, project, pos.file))),
-        Item::Constructor(constructor_id) => Some((constructor_id.body(db, pos.file), constructor_id.scope(db, project, pos.file))),
-        Item::Modifier(modifier_id) => Some((modifier_id.body(db, pos.file), modifier_id.scope(db, project, pos.file))),
+        Item::Function(function_id) => Some((function_id.body(db), function_id.scope(db, project))),
+        Item::Constructor(constructor_id) => Some((constructor_id.body(db), constructor_id.scope(db, project))),
+        Item::Modifier(modifier_id) => Some((modifier_id.body(db), modifier_id.scope(db, project))),
         _ => None,
     };
 
@@ -26,29 +28,31 @@ pub fn goto_definition(db: &dyn BaseDb, project: Project, pos: FilePosition) -> 
                     hir_def::hir::Expr::MemberAccess { owner, member_name } => {
                         let expr_map = type_inference.expr_map(db);
                         let owner_ty = expr_map.get(owner)?;
-                        let module = match owner_ty.kind(db) {
-                            hir_ty::tys::TyKind::Error(file, error_id) => file,
-                            hir_ty::tys::TyKind::Event(file, event_id) => file,
-                            hir_ty::tys::TyKind::Struct(file, structure_id) => file,
-                            hir_ty::tys::TyKind::Enum(file, enumeration_id) => file,
-                            hir_ty::tys::TyKind::Contract(file, contract_id) => file,
-                            hir_ty::tys::TyKind::Module(file, source_unit) => file,
+                        let container = match owner_ty.kind(db) {
+                            TyKind::Struct(structure_id) => Container::from(structure_id),
+                            TyKind::Enum(enumeration_id) => Container::from(enumeration_id),
+                            TyKind::Contract(contract_id) => Container::from(contract_id),
+                            TyKind::Module(source_unit) => Container::from(source_unit),
                             _ => return None
                         };
-                        owner_ty.defs(db).iter().find(|(name, _)| name == member_name).and_then(|a| {
+                        container.defs(db).iter().find(|(name, _)| name == member_name).and_then(|a| {
                             match a.1 {
-                                Definition::Item((module, item)) => NavigationTarget::from_item(db, item, module),
-                                Definition::Local(variable_declaration) => NavigationTarget::from_local(db, variable_declaration.1, pos.file),
-                                Definition::Field(structure_field_id) => NavigationTarget::from_field(db, structure_field_id, module),
-                                Definition::EnumVariant(enumeration_variant_id) => NavigationTarget::from_variant(db, enumeration_variant_id, module),
+                                Definition::Item(item) => NavigationTarget::from_item(db, item),
+                                Definition::Local(variable_declaration) => NavigationTarget::from_local(db, InFile { file: pos.file, data: variable_declaration.1} ),
+                                Definition::Field(structure_field_id) => NavigationTarget::from_field(db, structure_field_id),
+                                Definition::EnumVariant(enumeration_variant_id) => NavigationTarget::from_variant(db, enumeration_variant_id),
                             }
                         }).into_iter().collect()
                     },
                     hir_def::hir::Expr::Ident { name_ref } => {
                         scopes.lookup_in_expr(db, *e, *name_ref)
-                            .flat_map(|(_, defsite)| match defsite {
-                                Definition::Item((module, item)) => NavigationTarget::from_item(db, item, module),
-                                Definition::Local(variable_declaration) => NavigationTarget::from_local(db, variable_declaration.1, pos.file),
+                            .into_iter()
+                            .flat_map(|defsite| match defsite {
+                                Definition::Item(item) => NavigationTarget::from_item(db, item),
+                                Definition::Local(variable_declaration) => NavigationTarget::from_local(db, InFile {
+                                    file: pos.file,
+                                    data: variable_declaration.1
+                                }),
                                 _ => None
                             })
                             .collect()
@@ -61,13 +65,13 @@ pub fn goto_definition(db: &dyn BaseDb, project: Project, pos: FilePosition) -> 
         }
     }
 
-    let scope = item.scope(db, project, pos.file);
+    let scope = item.scope(db, project);
 
     return Some(scope.lookup(db, Ident::new(db, token.text()))
         .into_iter()
         .flat_map(|defsite| match defsite {
-            Definition::Item((module, item)) => NavigationTarget::from_item(db, item, module),
-            Definition::Local(variable_declaration) => NavigationTarget::from_local(db, variable_declaration.1, pos.file),
+            Definition::Item(item) => NavigationTarget::from_item(db, item),
+            Definition::Local(variable_declaration) => NavigationTarget::from_local(db, InFile { file: pos.file, data: variable_declaration.1 }),
             _ => None
         })
         .collect());

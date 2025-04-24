@@ -20,7 +20,7 @@ impl<'db> LowerCtx<'db> {
     pub fn lower_structure(&mut self, e: nodes::StructDefinition) -> StructureId<'db> {
         let name = Ident::from_name(self.db, e.name());
         let fields = e.struct_members().map(|e| self.lower_structure_field(e)).collect::<Vec<_>>();
-        let s = StructureId::new(self.db, name, fields.clone(), AstPtr::new(&e));
+        let s = StructureId::new(self.db, self.file, name, fields.clone(), AstPtr::new(&e));
         for f in &fields {
             f.set_parent(self.db, s);
         }

@@ -445,11 +445,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "hir_nameres"
+version = "0.1.0"
+dependencies = [
+ "base_db",
+ "derive_more",
+ "hir_def",
+ "indexmap 2.9.0",
+ "la-arena",
+ "line-index",
+ "num-bigint",
+ "parser",
+ "rowan",
+ "salsa 0.19.0",
+ "smallvec",
+ "sorted-vec",
+ "syntax",
+ "tracing",
+ "vfs",
+]
+
+[[package]]
 name = "hir_ty"
 version = "0.1.0"
 dependencies = [
  "base_db",
  "hir_def",
+ "hir_nameres",
  "indexmap 2.9.0",
  "salsa 0.19.0",
 ]
@@ -580,6 +602,7 @@ dependencies = [
  "camino",
  "dashmap",
  "hir_def",
+ "hir_nameres",
  "hir_ty",
  "line-index",
  "rowan",

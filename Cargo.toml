@@ -10,12 +10,13 @@ members = [
     "lang_server", 
     "ide", 
     "hir_ty", 
-    "vfs", 
+    "vfs", "hir_nameres", 
 ]
 
 [workspace.dependencies]
 hir_def = { path = "./hir_def" }
 hir_ty = { path = "./hir_ty" }
+hir_nameres = { path = "./hir_nameres" }
 sourcegen = { path = "./sourcegen" }
 parser = { path = "./parser" }
 syntax = { path = "./syntax" }

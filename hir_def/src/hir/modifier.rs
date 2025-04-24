@@ -4,7 +4,6 @@ use crate::hir::statement::StatementId;
 use crate::hir::{ContractId, HasFile, HasSourceUnit, Item};
 use crate::items::HirPrint;
 use crate::lower::LowerCtx;
-use crate::nameres::scope::BodyScope;
 use crate::source_map::item_source_map::ItemSourceMap;
 use crate::{impl_major_item, lazy_field, FileAstPtr, FileExt};
 use base_db::{BaseDb, Project};
@@ -17,6 +16,9 @@ use syntax::ast::nodes::{self, Stmt};
 
 #[tracked(debug)]
 pub struct ModifierId<'db> {
+    #[tracked]
+    pub file: File,
+
     #[id]
     pub name: Ident<'db>,
     pub info: Modifier<'db>,
@@ -30,33 +32,20 @@ lazy_field!(ModifierId<'db>, origin, set_origin, Option<ContractId<'db>>, None);
 #[salsa::tracked]
 impl<'db> ModifierId<'db> {
     #[salsa::tracked]
-    pub fn body(self, db: &'db dyn BaseDb, module: File) -> Option<(StatementId<'db>, ItemSourceMap<'db>)> {
+    pub fn body(self, db: &'db dyn BaseDb) -> Option<(StatementId<'db>, ItemSourceMap<'db>)> {
+        let file = self.file(db);
         let mut origin = self.origin(db);
-        let tree = module.node(db);
+        let tree = file.node(db);
         let root = tree.syntax();
         let node = self.body_node(db)?;
         
         let expr = node.to_node(&root);
 
-        let mut lowerer = LowerCtx::new(db, module);
+        let mut lowerer = LowerCtx::new(db, file);
 
         let res = lowerer.lower_stmt(Stmt::Block(expr));
 
         return Some((res, ItemSourceMap::new(crate::IndexMapUpdate(lowerer.exprs), crate::IndexMapUpdate(lowerer.stmts))));
-    }
-
-    #[salsa::tracked]
-    pub fn scope(self, db: &'db dyn BaseDb, project: Project, module: File) -> BodyScope<'db> {
-        BodyScope::from_body(
-            db, 
-            project, 
-            self.origin(db)
-                .map(|c| c.scope(db, project, module))
-                .unwrap_or_else(|| module.source_unit(db).scope(db, project, module)), 
-            Item::Modifier(self),
-            self.info(db).args.iter().copied(), 
-            self.body(db, module).map(|a| a.0)
-        )
     }
 }
 

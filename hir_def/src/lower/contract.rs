@@ -60,6 +60,7 @@ impl<'a> LowerCtx<'a> {
 
         let contract = ContractId::new(
             self.db,
+            self.file,
             name,
             is_abstract,
             inheritance_chain,

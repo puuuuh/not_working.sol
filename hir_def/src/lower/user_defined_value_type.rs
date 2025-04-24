@@ -14,7 +14,7 @@ impl<'db> LowerCtx<'db> {
     ) -> UserDefinedValueTypeId<'db> {
         let name = Ident::from_name(self.db, e.name());
         let ty = e.ty().map(|e| self.lower_type_ref(e)).unwrap_or(TypeRef::Error);
-        let res = UserDefinedValueTypeId::new(self.db, name, ty, AstPtr::new(&e));
+        let res = UserDefinedValueTypeId::new(self.db, self.file, name, ty, AstPtr::new(&e));
         self.save_span(e.syntax().text_range(), Item::UserDefinedValueType(res));
         res
     }

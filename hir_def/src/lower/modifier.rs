@@ -43,6 +43,7 @@ impl<'db> LowerCtx<'db> {
         let name = Ident::from_name(self.db, e.name());
         let res = ModifierId::new(
             self.db,
+            self.file,
             name,
             Modifier {
                 args: e

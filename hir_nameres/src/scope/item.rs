@@ -1,9 +1,7 @@
 use std::sync::Arc;
 
-use crate::hir::Ident;
-use crate::hir::Item;
-use crate::IndexMapUpdate;
 use base_db::BaseDb;
+use hir_def::{Ident, Item};
 use salsa::Database;
 use smallvec::SmallVec;
 use sorted_vec::SortedVec;
@@ -12,13 +10,13 @@ use vfs::File;
 pub struct ItemScopeIter<'db> {
     db: &'db dyn BaseDb,
     parent: Option<ItemScope<'db>>,
-    items: &'db [(Ident<'db>, (File, Item<'db>))],
+    items: &'db [(Ident<'db>, Item<'db>)],
     pos: usize,
     name: Option<Ident<'db>>,
 }
 
 impl<'db> ItemScopeIter<'db> {
-    fn next_inner(&mut self) -> Option<(Ident<'db>, (File, Item<'db>))> {
+    fn next_inner(&mut self) -> Option<(Ident<'db>, Item<'db>)> {
         loop {
             if self.pos < self.items.len() {
                 let pos = self.pos;
@@ -38,7 +36,7 @@ impl<'db> ItemScopeIter<'db> {
 }
 
 impl<'db> Iterator for ItemScopeIter<'db> {
-    type Item = (Ident<'db>, (File, Item<'db>));
+    type Item = (Ident<'db>, Item<'db>);
     
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -73,7 +71,7 @@ pub struct ItemScope<'db> {
     pub parent: Option<ItemScope<'db>>,
     // Keep this sorted, pls:)
     #[return_ref]
-    pub items: Vec<(Ident<'db>, (File, Item<'db>))>
+    pub items: Vec<(Ident<'db>, Item<'db>)>
 }
 
 #[salsa::tracked]

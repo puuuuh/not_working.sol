@@ -51,6 +51,7 @@ impl<'db> LowerCtx<'db> {
         let info = StateVariableInfo { mutability, vis, overrides };
         let res = StateVariableId::new(
             self.db,
+            self.file,
             Ident::from_name(self.db, s.name()),
             s.ty().map(|t| self.lower_type_ref(t)).unwrap_or(TypeRef::Error),
             info,

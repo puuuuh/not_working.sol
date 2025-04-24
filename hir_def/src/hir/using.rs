@@ -5,11 +5,15 @@ use crate::items::HirPrint;
 use crate::{impl_major_item, lazy_field, FileAstPtr};
 use rowan::ast::AstPtr;
 use salsa::{tracked, Database};
+use vfs::File;
 use std::fmt::Write;
 use syntax::ast::nodes;
 
 #[tracked(debug)]
 pub struct UsingId<'db> {
+    #[tracked]
+    pub file: File,
+
     pub data: UsingData<'db>,
 
     pub node: AstPtr<nodes::Using>,

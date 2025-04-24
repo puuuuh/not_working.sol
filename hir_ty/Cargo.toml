@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 base_db.workspace = true
 hir_def.workspace = true
+hir_nameres.workspace = true
 salsa.workspace = true
 indexmap.workspace = true
 

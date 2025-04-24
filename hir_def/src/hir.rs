@@ -26,6 +26,7 @@ mod call_options;
 mod state_mutability;
 
 use base_db::BaseDb;
+use rowan::ast::AstNode;
 use rowan::TextSize;
 use syntax::ast::nodes;
 use vfs::File;
@@ -59,7 +60,7 @@ pub use source_unit::*;
 pub use call_options::*;
 pub use state_mutability::*;
 
-use crate::{nameres::scope::body::Definition, source_map::item_source_map::ItemSourceMap};
+use crate::{source_map::item_source_map::ItemSourceMap, FileExt, InFile};
 
 pub struct FilePosition {
     pub file: File,
@@ -79,7 +80,7 @@ macro_rules! impl_major_item {
 pub trait HasSyntax<'db> {
     type Node;
 
-    fn syntax(self, db: &'db dyn BaseDb, module: vfs::File) -> Self::Node;
+    fn syntax(self, db: &'db dyn BaseDb) -> Self::Node;
 }
 
 #[macro_export]
@@ -88,8 +89,9 @@ macro_rules! impl_has_syntax {
         impl<'db> crate::hir::HasSyntax<'db> for $t {
             type Node = $node_ty;
 
-            fn syntax(self, db: &'db dyn base_db::BaseDb, module: vfs::File) -> Self::Node {
-                let f = <base_db::File as $crate::FileExt>::node(module, db);
+            fn syntax(self, db: &'db dyn base_db::BaseDb) -> Self::Node {
+                let file = self.file(db);
+                let f = <base_db::File as $crate::FileExt>::node(file, db);
                 let node = self.node(db).to_node(&<_ as $crate::AstNode>::syntax(&f));
                 node
             }
@@ -114,9 +116,17 @@ impl_major_item!(
     StateVariableId<'db>: nodes::StateVariableDeclaration,
     StructureId<'db>: nodes::StructDefinition,
     UserDefinedValueTypeId<'db>: nodes::UserDefinedValueTypeDefinition,
-    UsingId<'db>: nodes::Using,
-    VariableDeclaration<'db>: nodes::VariableDeclaration
+    UsingId<'db>: nodes::Using
 );
+
+impl<'db> HasSyntax<'db> for &InFile<VariableDeclaration<'db>> {
+    type Node = nodes::VariableDeclaration;
+
+    fn syntax(self, db: &'db dyn BaseDb) -> Self::Node {
+        let root = self.file.node(db);
+        self.data.node(db).to_node(&root.syntax())
+    }
+}
 
 pub trait HasBody<'db> {
     fn body(self, db: &'db dyn BaseDb, file: File) -> Option<(StatementId<'db>, ItemSourceMap<'db>)>;
@@ -124,8 +134,4 @@ pub trait HasBody<'db> {
 
 pub trait HasSourceUnit<'db> {
     fn source_unit(self, db: &'db dyn BaseDb) -> SourceUnit<'db>;
-}
-
-pub trait HasDefs<'db> {
-    fn defs(self, db: &'db dyn BaseDb, module: File) -> Vec<(Ident<'db>, Definition<'db>)>;
 }

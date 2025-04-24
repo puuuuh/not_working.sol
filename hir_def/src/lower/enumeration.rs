@@ -17,6 +17,7 @@ impl<'db> LowerCtx<'db> {
             e.enum_members().map(|e| self.lower_enumeration_variant(e)).collect::<Vec<_>>();
         let s = EnumerationId::new(
             self.db,
+            self.file,
             name,
             fields.clone(),
             AstPtr::new(&e),

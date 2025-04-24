@@ -133,6 +133,7 @@ impl<'db> LowerCtx<'db> {
 
         let f = FunctionId::new(
             self.db,
+            self.file,
             Some(name),
             Function {
                 args: args.clone(),

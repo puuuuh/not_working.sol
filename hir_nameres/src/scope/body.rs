@@ -2,20 +2,18 @@ use std::ops::Range;
 use std::sync::Arc;
 use std::thread::current;
 
-use crate::hir::EnumerationVariantId;
-use crate::hir::ExprId;
-use crate::hir::FunctionId;
-use crate::hir::HasDefs;
-use crate::hir::HasSyntax;
-use crate::hir::Ident;
-use crate::hir::Item;
-use crate::hir::StructureFieldId;
-use crate::hir::VariableDeclaration;
-use crate::hir::{Statement, StatementId};
-use crate::nameres::scope::ItemScope;
-use crate::walk::walk_stmt;
-use crate::walk::Visitor;
-use crate::IndexMapUpdate;
+use hir_def::hir::EnumerationVariantId;
+use hir_def::hir::ExprId;
+use hir_def::hir::FunctionId;
+use hir_def::hir::HasSyntax;
+use hir_def::hir::Ident;
+use hir_def::hir::Item;
+use hir_def::hir::StructureFieldId;
+use hir_def::hir::VariableDeclaration;
+use hir_def::hir::{Statement, StatementId};
+use hir_def::walk::walk_stmt;
+use hir_def::walk::Visitor;
+use hir_def::IndexMapUpdate;
 use base_db::{BaseDb, Project};
 use indexmap::IndexMap;
 use salsa::Database;
@@ -23,7 +21,10 @@ use smallvec::smallvec;
 use smallvec::SmallVec;
 use vfs::File;
 
+use crate::scope::ItemScope;
+
 use super::item::ItemScopeIter;
+use super::Scope;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, salsa::Update)]
 pub enum StmtOrItem<'db> {
@@ -33,19 +34,10 @@ pub enum StmtOrItem<'db> {
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, salsa::Update)]
 pub enum Definition<'db> {
-    Item((File, Item<'db>)),
+    Item((Item<'db>)),
     Local((StmtOrItem<'db>, VariableDeclaration<'db>)),
     Field(StructureFieldId<'db>),
     EnumVariant(EnumerationVariantId<'db>)
-}
-
-impl<'db> HasDefs<'db> for Definition<'db> {
-    fn defs(self, db: &'db dyn BaseDb, module: File) -> Vec<(Ident<'db>, Definition<'db>)> {
-        match self {
-            Definition::Item((module, item)) => item.defs(db, module),
-            _ => vec![]
-        }
-    }
 }
 
 pub struct BodyScopeIter<'db> {

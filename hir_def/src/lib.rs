@@ -14,8 +14,9 @@ pub mod hir;
 pub mod lower;
 pub mod source_map;
 pub mod items;
-pub mod nameres;
 pub mod walk;
+
+pub use hir::*;
 
 use base_db::{BaseDb, File};
 use line_index::LineIndex;
@@ -25,10 +26,9 @@ use syntax::ast::nodes::UnitSource;
 use syntax::parse::Parse;
 use syntax::{TextRange, TextSize};
 
-#[derive(Debug, Hash, Clone, Eq, PartialEq, salsa::Update)]
-pub struct InFile<T: salsa::Update> {
+pub struct InFile<T> {
     pub file: File,
-    pub data: T,
+    pub data: T
 }
 
 #[derive(Debug, Hash, Clone, Eq, PartialEq, salsa::Update)]

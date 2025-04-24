@@ -1,0 +1,24 @@
+[package]
+name = "hir_nameres"
+version = "0.1.0"
+edition = "2024"
+
+[lints]
+workspace = true
+
+[dependencies]
+hir_def.workspace = true
+vfs.workspace = true
+la-arena = "0.3.1"
+tracing = "0.1.40"
+syntax.workspace = true
+salsa.workspace = true
+rowan.workspace = true
+parser.workspace = true
+base_db.workspace = true
+num-bigint.workspace = true
+indexmap.workspace = true
+derive_more.workspace = true
+sorted-vec.workspace = true
+smallvec.workspace = true
+line-index = "0.1.2"
