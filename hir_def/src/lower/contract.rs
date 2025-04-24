@@ -62,6 +62,7 @@ impl<'a> LowerCtx<'a> {
             self.db,
             self.file,
             name,
+            t,
             is_abstract,
             inheritance_chain,
             body,

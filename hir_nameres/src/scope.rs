@@ -3,7 +3,7 @@ pub mod body;
 
 use base_db::{BaseDb, Project};
 pub use body::BodyScope;
-use hir_def::{Constructor, ConstructorId, ContractId, EnumerationId, ErrorId, EventId, ExprId, FunctionId, HasSourceUnit, Ident, ImportId, Item, ModifierId, PragmaId, SourceUnit, StateVariableId, StatementId, StructureId, UserDefinedValueTypeId, UsingId};
+use hir_def::{Constructor, ConstructorId, ContractId, EnumerationId, ErrorId, EventId, ExprId, FunctionId, HasSourceUnit, Ident, IdentPath, ImportId, Item, ModifierId, PragmaId, SourceUnit, StateVariableId, StatementId, StructureId, UserDefinedValueTypeId, UsingId};
 pub use item::ItemScope;
 
 use indexmap::IndexMap;
@@ -11,7 +11,7 @@ use salsa::{Database, Update};
 use vfs::File;
 use std::{hash::{Hash, Hasher}, ops::{Deref, DerefMut}};
 
-use crate::{import::ImportResolution, HasDefs};
+use crate::{container::Container, import::ImportResolution, inheritance::linearization, HasDefs};
 
 use super::scope::body::Definition;
 
@@ -53,6 +53,32 @@ impl<'db> Scope<'db> {
                 expr_scope_root.lookup_in_expr(db, expr, name).next().map(|(_, item)| item)
             },
         }
+    }
+
+    pub fn lookup_path(self, db: &'db dyn BaseDb, path: &[Ident<'db>]) -> Option<Definition<'db>> {
+        let mut path = path.into_iter();
+        let start = path.next()?;
+        if let mut def @ Definition::Item(item) = self.lookup(db, *start)? {
+            let mut file = item.file(db);
+            'ident_loop: for ident in path {
+                let container = Container::try_from(item).ok()?;
+                for (name, new_def) in container.defs(db) {
+                    if *ident == name {
+                        def = new_def;
+                        if let Definition::Item(item) = new_def {
+                            file = item.file(db);
+                        }
+                        continue 'ident_loop;
+                    }
+                }
+                return None;
+            }
+
+            Some(def)
+        } else {
+            None
+        }
+
     }
 
     pub fn for_stmt(self, db: &'db dyn BaseDb, stmt: StatementId<'db>) -> Scope<'db> {
@@ -114,25 +140,27 @@ impl<'db> HasScope<'db> for ConstructorId<'db> {
 impl<'db> HasScope<'db> for ContractId<'db> {
     #[salsa::tracked]
     fn scope(self, db: &'db dyn BaseDb, project: Project) -> Scope<'db> {
-        let mut items: Box<[(Ident<'db>, Item<'_>)]> = self
-            .items(db)
-            .iter()
-            .filter_map(|a| a.name(db).map(|name| (name, (*a).into())))
-            .collect();
-
-        items.sort_by_key(|(name, _)| *name);
-
-        ItemScope::new(
-            db,
-            Some(self.item_scope(db, project)),
-            items.into(),
-        ).into()
+        Scope::Item(self.item_scope(db, project))
     }
     
     fn item_scope(self, db: &'db dyn BaseDb, project: Project) -> ItemScope<'db> {
-        self.origin(db)
+        let inheritance_chain = linearization(db, project, self).unwrap_or(vec![self]);
+
+        let items: Vec<_> = inheritance_chain.into_iter().rev().flat_map(|c| {
+            c
+                .items(db)
+                .iter()
+                .filter_map(|a| a.name(db).map(|name| (name, (*a).into())))
+        })
+        .collect();
+
+        ItemScope::new(
+            db,
+            Some(self.origin(db)
                 .map(|c| c.item_scope(db, project))
-                .unwrap_or_else(|| self.file(db).source_unit(db).item_scope(db, project))
+                .unwrap_or_else(|| self.file(db).source_unit(db).item_scope(db, project))),
+            items,
+        )
     }
 }
 

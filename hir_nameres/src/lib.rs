@@ -6,6 +6,7 @@ pub mod nameres;
 pub mod scope;
 pub mod container;
 pub mod import;
+pub mod inheritance;
 
 pub trait HasDefs<'db> {
     fn defs(self, db: &'db dyn BaseDb) -> Vec<(Ident<'db>, Definition<'db>)>;

@@ -343,7 +343,7 @@ impl<'db> TypeResolutionCtx<'db> {
                 TyKind::Array(self.resolve_type_ref(db, scope, *ty.clone()), 0)
             },
             TypeRef::Path(ref idents) => {
-                if let Some(Definition::Item(item)) = Self::resolve_path(db, scope, &*idents) {
+                if let Some(Definition::Item(item)) = scope.lookup_path(db, &idents) {
                     return self.resolve_item_type(db, item)
                 } else {
                     TyKind::Unknown
@@ -353,31 +353,6 @@ impl<'db> TypeResolutionCtx<'db> {
         });
 
         ty
-    }
-
-    fn resolve_path(db: &'db dyn BaseDb, scope: Scope<'db>, path: &[Ident<'db>]) -> Option<Definition<'db>> {
-        let mut path = path.into_iter();
-        let start = path.next()?;
-        if let mut def @ Definition::Item(item) = scope.lookup(db, *start)? {
-            let mut file = item.file(db);
-            'ident_loop: for ident in path {
-                let container = Container::try_from(item).ok()?;
-                for (name, new_def) in container.defs(db) {
-                    if *ident == name {
-                        def = new_def;
-                        if let Definition::Item(item) = new_def {
-                            file = item.file(db);
-                        }
-                        continue 'ident_loop;
-                    }
-                }
-                return None;
-            }
-
-            Some(def)
-        } else {
-            None
-        }
     }
 
     fn resolve_item_type(&mut self, db: &'db dyn BaseDb, item: Item<'db>) -> Ty<'db> {

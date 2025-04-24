@@ -31,6 +31,9 @@ pub struct ContractId<'db> {
     pub name: Ident<'db>,
 
     #[tracked]
+    pub kind: ContractType,
+
+    #[tracked]
     pub is_abstract: bool,
 
     #[tracked]
@@ -129,7 +132,7 @@ impl HirPrint for ContractItem<'_> {
     }
 }
 
-
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, salsa::Update)]
 pub enum ContractType {
     Interface,
     Contract,

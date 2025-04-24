@@ -6,7 +6,7 @@ use syntax::SyntaxToken;
 use crate::items::HirPrint;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, salsa::Update)]
-pub struct IdentPath<'db>(Vec<Ident<'db>>);
+pub struct IdentPath<'db>(pub Vec<Ident<'db>>);
 
 impl HirPrint for IdentPath<'_> {
     fn write<T: Write>(&self, db: &dyn Database, w: &mut T, ident: usize) -> std::fmt::Result {
