@@ -15,14 +15,14 @@ use crate::hir::using::UsingId;
 use crate::lower::LowerCtx;
 use crate::source_map::item_source_map::ItemSourceMap;
 use crate::source_map::span_map::SpanMap;
-use crate::{impl_major_item, lazy_field, FileExt};
+use crate::{impl_major_item, lazy_field, parse_file, FileExt};
 use base_db::{BaseDb, File, Project};
 use indexmap::IndexMap;
 use rowan::TextRange;
 use salsa::Database;
 
 use super::statement::StatementId;
-use super::{user_defined_value_type, ExprId, HasSourceUnit};
+use super::{user_defined_value_type, ExprId};
 
 #[salsa::tracked(debug)]
 pub struct SourceUnit<'db> {
@@ -37,20 +37,14 @@ pub struct SourceUnit<'db> {
 }
 
 #[salsa::tracked]
-fn lower_file<'db>(db: &'db dyn BaseDb, file: File) -> SourceUnit<'db> {
-    let input = file.node(db);
+pub fn lower_file<'db>(db: &'db dyn BaseDb, file: File) -> SourceUnit<'db> {
+    let input = parse_file(db, file);
     let mut lower = LowerCtx::new(db, file);
-    let items = lower.lower_source(input);
+    let items = lower.lower_source(input.node());
 
     let item_tree = SourceUnit::new(db, file, items, SpanMap::new(core::mem::take(&mut lower.spans)));
 
     item_tree
-}
-
-impl<'db> HasSourceUnit<'db> for File {
-    fn source_unit(self, db: &'db dyn BaseDb) -> SourceUnit<'db> {
-        lower_file(db, self)
-    }
 }
 
 #[salsa::tracked]

@@ -55,12 +55,12 @@ impl<'a> Parser<'a> {
         self.try_expr_bp(min_bp);
         if current == self.pos {
             self.builder.start_node(ERROR.into());
-            let start = self.pos;
+            let start = self.current_offset();
             self.bump_any();
-            let end = self.pos;
+            let end = self.current_offset();
             self.builder.finish_node();
             self.errors.push(SyntaxError::new(
-                "Expected expression".to_owned(),
+                format!("Expected expression, found {}", self.current_full().map(|(_, a)| a).unwrap_or_default()),
                 TextRange::new(start.try_into().unwrap(), end.try_into().unwrap()),
             ));
         }

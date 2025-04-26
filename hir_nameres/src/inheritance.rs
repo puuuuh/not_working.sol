@@ -50,7 +50,7 @@ fn merge<'db>(db: &'db dyn BaseDb, mut data: Vec<Vec<ContractId<'db>>>) -> Resul
 }
 
 #[salsa::tracked(cycle_initial = linearization_initial, cycle_fn = linearization_recovery)]
-pub fn linearization<'db>(db: &'db dyn BaseDb, project: Project, c: ContractId<'db>) -> Result<Vec<ContractId<'db>>, LinearizationError> {
+pub fn inheritance_chain<'db>(db: &'db dyn BaseDb, project: Project, c: ContractId<'db>) -> Result<Vec<ContractId<'db>>, LinearizationError> {
     let mut chain = Vec::with_capacity(5);
     let parents = c.inheritance_chain(db);
     if !parents.is_empty() {
@@ -59,10 +59,8 @@ pub fn linearization<'db>(db: &'db dyn BaseDb, project: Project, c: ContractId<'
             let path = &p.path.0;
             let scope = c.scope(db, project);
             if let Some(Definition::Item(Item::Contract(p))) = scope.lookup_path(db, path) {
-                if (p.kind(db) == ContractType::Contract) {
-                    data[0].push(p);
-                    data.push(linearization(db, project, p)?);
-                }
+                data[0].push(p);
+                data.push(inheritance_chain(db, project, p)?);
             }
         }
         chain = merge(db, data)?;
@@ -74,9 +72,9 @@ pub fn linearization<'db>(db: &'db dyn BaseDb, project: Project, c: ContractId<'
 #[cfg(test)]
 mod tests {
     use base_db::{Project, TestDatabase, TestFixture};
-    use hir_def::HasSourceUnit;
+    use hir_def::lower_file;
     use salsa::Database;
-    use crate::inheritance::{linearization, LinearizationError};
+    use crate::inheritance::{inheritance_chain, LinearizationError};
 
     #[test]
     fn merge_test() {
@@ -96,10 +94,10 @@ mod tests {
             contract Z is K1,K3,K2 {}
         ");
         let (db, file) = TestDatabase::from_fixture(fixture);
-        let source_unit = file.source_unit(&db);
+        let source_unit = lower_file(&db, file);
         let data = source_unit.data(&db);
         let c = *data.contracts(&db).last().unwrap();
-        assert_eq!(linearization(&db, Project::new(&db, vfs::VfsPath::from_virtual("".to_owned())), c), Err(LinearizationError::Merge));
+        assert_eq!(inheritance_chain(&db, Project::new(&db, vfs::VfsPath::from_virtual("".to_owned())), c), Err(LinearizationError::Merge));
     }
 
     #[test]
@@ -120,10 +118,10 @@ mod tests {
             contract Z is K1,K3,K2 {}
         ");
         let (db, file) = TestDatabase::from_fixture(fixture);
-        let source_unit = file.source_unit(&db);
+        let source_unit = lower_file(&db, file);
         let data = source_unit.data(&db);
         let c = *data.contracts(&db).last().unwrap();
-        assert_eq!(linearization(&db, Project::new(&db, vfs::VfsPath::from_virtual("".to_owned())), c), Err(LinearizationError::Cycle));
+        assert_eq!(inheritance_chain(&db, Project::new(&db, vfs::VfsPath::from_virtual("".to_owned())), c), Err(LinearizationError::Cycle));
     }
 
     #[test]
@@ -144,12 +142,12 @@ mod tests {
             contract Z is K1,K3,K2 {}
         ");
         let (db, file) = TestDatabase::from_fixture(fixture);
-        let source_unit = file.source_unit(&db);
+        let source_unit = lower_file(&db, file);
         let data = source_unit.data(&db);
         let c = *data.contracts(&db).last().unwrap();
 
         db.attach(|_| {
-            for c in linearization(&db, Project::new(&db, vfs::VfsPath::from_virtual("".to_owned())), c).unwrap() {
+            for c in inheritance_chain(&db, Project::new(&db, vfs::VfsPath::from_virtual("".to_owned())), c).unwrap() {
                 dbg!(c.name(&db));
             }
         });

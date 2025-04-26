@@ -3,7 +3,7 @@ pub mod body;
 
 use base_db::{BaseDb, Project};
 pub use body::BodyScope;
-use hir_def::{Constructor, ConstructorId, ContractId, EnumerationId, ErrorId, EventId, ExprId, FunctionId, HasSourceUnit, Ident, IdentPath, ImportId, Item, ModifierId, PragmaId, SourceUnit, StateVariableId, StatementId, StructureId, UserDefinedValueTypeId, UsingId};
+use hir_def::{lower_file, Constructor, ConstructorId, ContractId, EnumerationId, ErrorId, EventId, ExprId, FunctionId, Ident, IdentPath, ImportId, Item, ModifierId, PragmaId, SourceUnit, StateVariableId, StatementId, StructureId, UserDefinedValueTypeId, UsingId};
 pub use item::ItemScope;
 
 use indexmap::IndexMap;
@@ -11,7 +11,7 @@ use salsa::{Database, Update};
 use vfs::File;
 use std::{hash::{Hash, Hasher}, ops::{Deref, DerefMut}};
 
-use crate::{container::Container, import::ImportResolution, inheritance::linearization, HasDefs};
+use crate::{container::Container, import::ImportResolution, inheritance::inheritance_chain, HasDefs};
 
 use super::scope::body::Definition;
 
@@ -119,12 +119,11 @@ impl<'db> HasScope<'db> for ConstructorId<'db> {
     fn item_scope(self, db: &'db dyn BaseDb, project: Project) -> ItemScope<'db> {
         self.origin(db)
                 .map(|c| c.item_scope(db, project))
-                .unwrap_or_else(|| self.file(db).source_unit(db).item_scope(db, project))
+                .unwrap_or_else(|| lower_file(db, self.file(db)).item_scope(db, project))
     }
 
     #[salsa::tracked]
     fn scope(self, db: &'db dyn BaseDb, project: Project) -> Scope<'db> {
-        let map = self.file(db).source_unit(db);
         BodyScope::from_body(
             db, 
             project, 
@@ -144,9 +143,9 @@ impl<'db> HasScope<'db> for ContractId<'db> {
     }
     
     fn item_scope(self, db: &'db dyn BaseDb, project: Project) -> ItemScope<'db> {
-        let inheritance_chain = linearization(db, project, self).unwrap_or(vec![self]);
+        let chain = inheritance_chain(db, project, self).unwrap_or(vec![self]);
 
-        let items: Vec<_> = inheritance_chain.into_iter().rev().flat_map(|c| {
+        let items: Vec<_> = chain.into_iter().rev().flat_map(|c| {
             c
                 .items(db)
                 .iter()
@@ -158,7 +157,7 @@ impl<'db> HasScope<'db> for ContractId<'db> {
             db,
             Some(self.origin(db)
                 .map(|c| c.item_scope(db, project))
-                .unwrap_or_else(|| self.file(db).source_unit(db).item_scope(db, project))),
+                .unwrap_or_else(|| lower_file(db, self.file(db)).item_scope(db, project))),
             items,
         )
     }
@@ -168,7 +167,7 @@ impl<'db> HasScope<'db> for ContractId<'db> {
 impl<'db> HasScope<'db> for FunctionId<'db> {
     #[salsa::tracked]
     fn scope(self, db: &'db dyn BaseDb, project: Project) -> Scope<'db> {
-        let map = self.file(db).source_unit(db);
+        let map = lower_file(db, self.file(db));
         BodyScope::from_body(
             db, 
             project, 
@@ -182,7 +181,7 @@ impl<'db> HasScope<'db> for FunctionId<'db> {
     fn item_scope(self, db: &'db dyn BaseDb, project: Project) -> ItemScope<'db> {
         self.origin(db)
             .map(|c| c.item_scope(db, project))
-            .unwrap_or_else(|| self.file(db).source_unit(db).item_scope(db, project))
+            .unwrap_or_else(|| lower_file(db, self.file(db)).item_scope(db, project))
     }
 }
 
@@ -191,10 +190,11 @@ macro_rules! impl_has_scope {
         $(
             #[salsa::tracked]
             impl<'db> HasScope<'db> for $t {
+                #[salsa::tracked]
                 fn item_scope(self, db: &'db dyn BaseDb, project: Project) -> ItemScope<'db> {
                     self.origin(db)
                         .map(|c| c.item_scope(db, project))
-                        .unwrap_or_else(|| self.file(db).source_unit(db).item_scope(db, project))
+                        .unwrap_or_else(|| lower_file(db, self.file(db)).item_scope(db, project))
                         .into()
                 }
 
@@ -234,7 +234,7 @@ impl<'db> HasScope<'db> for SourceUnit<'db> {
 impl<'db> HasScope<'db> for ImportId<'db> {
     fn item_scope(self, db: &'db dyn BaseDb, project: Project) -> ItemScope<'db> {
         let file = self.file(db);
-        file.source_unit(db).item_scope(db, project)
+        lower_file(db, file).item_scope(db, project)
     }
 
     fn scope(self, db: &'db dyn BaseDb, project: Project) -> Scope<'db> {
@@ -246,7 +246,7 @@ impl<'db> HasScope<'db> for ImportId<'db> {
 impl<'db> HasScope<'db> for PragmaId<'db> {
     fn item_scope(self, db: &'db dyn BaseDb, project: Project) -> ItemScope<'db> {
         let file = self.file(db);
-        file.source_unit(db).item_scope(db, project)
+        lower_file(db, file).item_scope(db, project)
     }
 
     fn scope(self, db: &'db dyn BaseDb, project: Project) -> Scope<'db> {

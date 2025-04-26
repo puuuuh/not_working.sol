@@ -1,10 +1,12 @@
 use std::sync::Arc;
+use async_lsp::ClientSocket;
 use camino::Utf8PathBuf;
 use change::FileChange;
+use diagnostic::Diagnostic;
 use navigation_target::NavigationTarget;
 use rowan::TextSize;
 use base_db::{BaseDb, File, Project, TestDatabase};
-use hir_def::{hir::FilePosition, FileExt};
+use hir_def::{hir::FilePosition, lower_file, FileExt, SyntaxError};
 use salsa::Setter;
 use tracing::warn;
 use vfs::VfsPath;
@@ -13,6 +15,7 @@ use salsa::Database;
 mod goto_definition;
 mod navigation_target;
 pub mod change;
+pub mod diagnostic;
 
 #[derive(Clone)]
 pub struct AnalysisHost {
@@ -26,7 +29,7 @@ impl AnalysisHost {
         let project = Project::new(&db, VfsPath::from_virtual(String::new())) ;
         Self {
             db,
-            project
+            project,
         }
     }
 
@@ -63,7 +66,7 @@ impl AnalysisHost {
         })
     }
 
-    pub fn apply_changes(&mut self, file: File, change: FileChange) {
+    pub fn apply_change(&mut self, file: File, change: FileChange) {
         match change {
             FileChange::SetContent { data } => {
                 file.set_content(&mut self.db).to(data);
@@ -92,5 +95,15 @@ impl AnalysisHost {
                 new_file.set_content(&mut self.db).to(content);
             },
         }
+    }
+
+    pub fn initial_analyze(&self, files: impl Iterator<Item = File>) {
+        for f in files {
+            lower_file(&self.db, f);
+        }
+    }
+
+    pub fn diagnostics(&self, file: File) -> Vec<&SyntaxError> {
+        lower_file::accumulated::<SyntaxError>(&self.db, file)
     }
 }

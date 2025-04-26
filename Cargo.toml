@@ -10,7 +10,8 @@ members = [
     "lang_server", 
     "ide", 
     "hir_ty", 
-    "vfs", "hir_nameres", 
+    "vfs", 
+    "hir_nameres", 
 ]
 
 [workspace.dependencies]
@@ -38,6 +39,7 @@ line-index = "0.1.2"
 camino = "1.1.9"
 compact_str = "0.9"
 smallvec = "1.0"
+async-lsp = "0.2.2"
 
 [workspace.lints.rust]
 unused = "allow"

@@ -2,10 +2,11 @@
 
 #![allow(bad_style, missing_docs, unreachable_pub)]
 #[doc = r" The kind of syntax node, e.g. `IDENT`, `USE_KW`, or `STRUCT`."]
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
 #[repr(u16)]
 pub enum SyntaxKind {
     #[doc(hidden)]
+    #[default]
     EOF,
     SEMICOLON,
     COLON,
@@ -252,6 +253,8 @@ pub enum SyntaxKind {
     #[doc(hidden)]
     __LAST,
 }
+use std::default;
+
 use self::SyntaxKind::*;
 impl SyntaxKind {
     pub fn is_keyword(self) -> bool {

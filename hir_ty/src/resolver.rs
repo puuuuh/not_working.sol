@@ -1,5 +1,6 @@
 use base_db::{BaseDb, File, Project};
-use hir_def::{hir::{BinaryOp, ElementaryTypeRef, Expr, ExprId, HasSourceUnit, Ident, Item, Statement, StatementId, TypeRef}, walk::{walk_stmt, Visitor}, IndexMapUpdate};
+use hir_def::{hir::{BinaryOp, ElementaryTypeRef, Expr, ExprId, Ident, Item, Statement, 
+    StatementId, TypeRef}, walk::{walk_stmt, Visitor}, IndexMapUpdate};
 use hir_nameres::{container::{self, Container}, scope::{body::Definition, Scope}};
 use hir_nameres::scope::HasScope;
 use indexmap::IndexMap;
@@ -396,7 +397,7 @@ impl<'db> TypeResolutionCtx<'db> {
 #[cfg(test)]
 mod tests {
     use base_db::{Project, TestDatabase, TestFixture, VfsPath};
-    use hir_def::{hir::HasSourceUnit, items::HirPrint};
+    use hir_def::{items::HirPrint, lower_file};
     use salsa::Database;
 
     use super::resolve_item;
@@ -426,7 +427,7 @@ mod tests {
         ");
         let pos = fixture.position.unwrap();
         let (db, file) = TestDatabase::from_fixture(fixture);
-        let item = file.source_unit(&db).source_map(&db).find_pos(pos);
+        let item = lower_file(&db, file).source_map(&db).find_pos(pos);
         let types = resolve_item(&db, Project::new(&db, VfsPath::from_virtual("".to_owned())), item.unwrap());
         for (expr, ty) in types.expr_map(&db).0 {
             let mut t = String::new();

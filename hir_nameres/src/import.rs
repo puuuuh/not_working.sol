@@ -1,7 +1,7 @@
 use std::{collections::{hash_map::Entry, BTreeSet, HashMap, HashSet}, iter::once, sync::Arc};
 
 use base_db::{BaseDb, Project, TestDatabase};
-use hir_def::{HasSourceUnit, Ident, ImportId, ImportKind, Item, SourceUnit};
+use hir_def::{lower_file, Ident, ImportId, ImportKind, Item, SourceUnit};
 use indexmap::IndexMap;
 use smallvec::SmallVec;
 use vfs::{AnchoredPath, File, VfsPath};
@@ -68,7 +68,7 @@ impl<'db> ImportResolutionCtx<'db> {
     }
     
     fn resolve_items_inner(&mut self, db: &'db dyn BaseDb, project: Project, f: File, remappings: Option<HashMap<Ident<'db>, Ident<'db>>>) {
-        let tree = f.source_unit(db);
+        let tree = lower_file(db, f);
         if let Some(remappings) = remappings {
             for i in tree.named_items(db) {
                 if let Some(rename) = remappings.get(&i.0) {
@@ -97,7 +97,7 @@ impl<'db> ImportResolutionCtx<'db> {
     }
 
     fn resolve_imports_inner(&mut self, db: &'db dyn BaseDb, project: Project, f: File, filter: &Option<HashSet<Ident<'db>>>) {
-        let tree = f.source_unit(db);
+        let tree = lower_file(db, f);
         let imports = tree.data(db).imports(db);
         for (mut path, import) in imports.into_iter().flat_map(|i| i.path(db).map(|p| (p, i))) {
             for (from, to) in self.remappings {
@@ -119,7 +119,7 @@ impl<'db> ImportResolutionCtx<'db> {
             match import.kind(db) {
                 ImportKind::Path { name: Some(as_name), .. } 
                     | ImportKind::Glob { as_name, .. } => {
-                    self.modules.insert(as_name, file.source_unit(db));
+                    self.modules.insert(as_name, lower_file(db, file));
                 },
                 ImportKind::Path { .. } => {
                     root_changed = self.imported.insert(path.clone(), None) != Some(None);

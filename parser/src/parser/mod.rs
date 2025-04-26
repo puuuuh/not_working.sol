@@ -26,6 +26,7 @@ use syntax::SyntaxKind::*;
 
 pub struct Parser<'a> {
     pos: usize,
+    start: usize,
     tokens: Vec<(SyntaxKind, &'a str)>,
 
     /// the in-progress tree.
@@ -95,12 +96,18 @@ use syntax::syntax_error::SyntaxError;
 
 impl<'a> Parser<'a> {
     fn new(data: &'a [(SyntaxKind, &'a str)]) -> Self {
-        Self { pos: 0, tokens: data.to_vec(), builder: Default::default(), errors: Vec::new() }
+        Self { 
+            pos: 0, 
+            start: data.get(0).map(|s| s.1.as_ptr() as usize).unwrap_or_default(), 
+            tokens: data.to_vec(), 
+            builder: Default::default(), 
+            errors: Vec::new() }
     }
 
     fn tail(&self) -> Self {
         Self {
             pos: 0,
+            start: self.start,
             tokens: self.tokens.get(self.pos..).unwrap_or_default().to_vec(),
             builder: Default::default(),
             errors: Vec::new(),
@@ -195,26 +202,41 @@ impl<'a> Parser<'a> {
         self.builder.finish_node();
     }
 
+    fn current_offset(&self) -> usize {
+        self.tokens.get(self.pos)
+            .or(self.tokens.last())
+            .map(|s| s.1.as_ptr() as usize)
+            .unwrap_or(self.start)
+            .saturating_sub(self.start)
+    }
+
     fn err_unexpected_token(&mut self, expected: &[SyntaxKind]) {
-        let c = self.current();
-        let start = self.pos;
-        self.bump_any();
-        let end = self.pos;
+        let (_, next_token) = self.current_full().unwrap_or_default();
+
+        let start = self.current_offset();
+        if self.at_oneof(&[SyntaxKind::L_CURLY, SyntaxKind::R_CURLY, SyntaxKind::L_BRACK, SyntaxKind::R_BRACK, SyntaxKind::L_PAREN, SyntaxKind::R_PAREN]).is_none() {
+            self.bump_any();
+        }
+        let end = self.current_offset();
+
         self.errors.push(SyntaxError::new(
-            format!("expect one of {expected:?}, found {c:?}"),
-            TextRange::new(start.try_into().unwrap(), end.try_into().unwrap()),
+            format!("unexpected {next_token:?}"),
+            TextRange::new(start.try_into().unwrap_or_default(), end.try_into().unwrap()),
         ));
         self.builder.start_node(ERROR.into());
         self.builder.finish_node();
     }
 
     fn recover(&mut self, expected: &[SyntaxKind], until: SyntaxKind) {
-        let c = self.current();
-        let start = self.pos;
-        self.bump_any();
-        let end = self.pos;
+        let (_, next_token) = self.current_full().unwrap_or_default();
+        let start = self.current_offset();
+        if self.at_oneof(&[SyntaxKind::L_CURLY, SyntaxKind::R_CURLY, SyntaxKind::L_BRACK, SyntaxKind::R_BRACK, SyntaxKind::L_PAREN, SyntaxKind::R_PAREN]).is_none() {
+            self.bump_any();
+        }
+        let end = self.current_offset();
+
         self.errors.push(SyntaxError::new(
-            format!("expect one of {expected:?}, found {c:?}"),
+            format!("unexpected {next_token:?}"),
             TextRange::new(start.try_into().unwrap(), end.try_into().unwrap()),
         ));
         self.builder.start_node(ERROR.into());

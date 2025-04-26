@@ -1,7 +1,7 @@
 use crate::hir::variable_declaration::VariableDeclaration;
 use crate::hir::function::ModifierInvocation;
 use crate::hir::statement::StatementId;
-use crate::hir::{ContractId, HasSourceUnit, Item};
+use crate::hir::{ContractId, Item};
 use crate::items::HirPrint;
 use crate::lower::LowerCtx;
 use crate::source_map::item_source_map::ItemSourceMap;

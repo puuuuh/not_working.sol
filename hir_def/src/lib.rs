@@ -48,13 +48,15 @@ impl<N: AstNode<Language = SolidityLang>> FileAstPtr<N> {
 }
 
 #[salsa::accumulator]
+#[derive(Debug, Hash, Clone, Eq, PartialEq)]
 pub struct SyntaxError {
-    text: String,
-    range: TextRange,
+    pub file: File,
+    pub text: String,
+    pub range: TextRange,
 }
 
 #[salsa::tracked]
-fn file_parse(db: &dyn BaseDb, file: File) -> Parse<UnitSource> {
+pub fn parse_file(db: &dyn BaseDb, file: File) -> Parse<UnitSource> {
     let data = &*file.content(db);
     let lexer = Lexer::new(data);
     let mut pos = 0;
@@ -67,7 +69,7 @@ fn file_parse(db: &dyn BaseDb, file: File) -> Parse<UnitSource> {
         .collect::<Vec<_>>();
     let (parsed, errors) = Parser::parse(&tokens);
     for e in errors {
-        SyntaxError { text: e.0, range: e.1 }.accumulate(db);
+        SyntaxError { file: file, text: e.0, range: e.1 }.accumulate(db);
     }
     parsed
 }
@@ -85,7 +87,7 @@ pub trait FileExt {
 
 impl FileExt for File {
     fn node(self, db: &dyn BaseDb) -> UnitSource {
-        file_parse(db, self).node()
+        parse_file(db, self).node()
     }
 
     fn line_index(self, db: &dyn BaseDb) -> Arc<LineIndex> {

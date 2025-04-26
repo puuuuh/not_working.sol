@@ -1,7 +1,7 @@
 use crate::hir::variable_declaration::VariableDeclaration;
 use crate::hir::ident::{Ident, IdentPath};
 use crate::hir::statement::StatementId;
-use crate::hir::{ContractId, HasFile, HasSourceUnit, Item};
+use crate::hir::{ContractId, HasFile, Item};
 use crate::items::HirPrint;
 use crate::lower::LowerCtx;
 use crate::source_map::item_source_map::ItemSourceMap;

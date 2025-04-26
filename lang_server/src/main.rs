@@ -11,6 +11,7 @@ mod db;
 mod server;
 pub mod from_proto;
 pub mod to_proto;
+pub mod tasks;
 
 #[tokio::main]
 async fn main() {
@@ -20,7 +21,7 @@ async fn main() {
         .with_writer(std::io::stderr)
         .init();
 
-    let (server, _) = async_lsp::MainLoop::new_server(|client| {
+    let (server, client) = async_lsp::MainLoop::new_server(|client| {
         ServiceBuilder::new()
             .layer(TracingLayer::default())
             .layer(LifecycleLayer::default())

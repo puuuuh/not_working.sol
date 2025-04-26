@@ -3,7 +3,7 @@ use rowan::ast::AstPtr;
 use syntax::ast::nodes;
 use vfs::File;
 
-use crate::{hir::{ContractId, HasSourceUnit}, impl_major_item, lazy_field};
+use crate::{hir::ContractId, impl_major_item, lazy_field};
 
 #[salsa::tracked(debug)]
 pub struct PragmaId<'db> {

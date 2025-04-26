@@ -2,14 +2,14 @@ use hir_nameres::{container::Container, scope::{body::Definition, HasScope}};
 use hir_ty::tys::TyKind;
 use rowan::ast::{AstNode, AstPtr};
 use base_db::{BaseDb, Project};
-use hir_def::{hir::{FilePosition, HasSourceUnit, Ident, Item}, FileExt, InFile};
+use hir_def::{hir::{FilePosition, Ident, Item}, lower_file, FileExt, InFile};
 use syntax::{ast::nodes::{self}, SyntaxKind};
 
 use crate::navigation_target::NavigationTarget;
 
 pub fn goto_definition(db: &dyn BaseDb, project: Project, pos: FilePosition) -> Option<Vec<NavigationTarget>> {
     let t = pos.file.node(db);
-    let parsed = pos.file.source_unit(db);
+    let parsed = lower_file(db, pos.file);
     let token = t.syntax().token_at_offset(pos.offset).find(|t| t.kind() == SyntaxKind::IDENT)?;
     let expr = token.parent_ancestors().filter_map(|t| nodes::Expr::cast(t)).next();
     let item = parsed.source_map(db).find(token.text_range())?;

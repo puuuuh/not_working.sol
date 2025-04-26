@@ -1,9 +1,12 @@
+use async_lsp::lsp_types::notification::Notification;
 use async_lsp::lsp_types::*;
 use async_lsp::router::Router;
 use async_lsp::{ClientSocket, LanguageServer, ResponseError};
+use base_db::File;
 use camino::Utf8PathBuf;
 use futures::future::BoxFuture;
 use ide::change::FileChange;
+use std::collections::HashSet;
 use std::ops::ControlFlow;
 use std::sync::Arc;
 use line_index::LineIndex;
@@ -14,7 +17,9 @@ use crate::from_proto::ToCaminoPathBuf;
 use crate::{from_proto, to_proto};
 
 pub struct Server {
-    snap: AnalysisHost,
+    pub(crate) client: ClientSocket,
+    pub(crate) opened_files: HashSet<File>,
+    pub(crate) snap: AnalysisHost,
 }
 
 struct TickEvent;
@@ -22,6 +27,8 @@ struct TickEvent;
 impl Server {
     pub fn new_router(client: ClientSocket) -> Router<Self> {
         let mut router = Router::from_language_server(Self {
+            client,
+            opened_files: Default::default(),
             snap: AnalysisHost::new(),
         });
         router.event(Self::on_tick);
@@ -90,6 +97,13 @@ impl LanguageServer for Server {
     fn did_open(&mut self, params: DidOpenTextDocumentParams,) -> ControlFlow<async_lsp::Result<()>> {
         let raw_path = params.text_document.uri.to_utf8_path_buf().unwrap();
         let f = self.snap.file_unchecked(raw_path);
+        self.opened_files.insert(f);
+        self.snap.apply_change(
+            f, 
+            FileChange::SetContent { data: params.text_document.text.into() }
+        );
+
+        self.analyze();
         
         ControlFlow::Continue(())
     }
@@ -102,11 +116,14 @@ impl LanguageServer for Server {
             let new_path = f.new_uri.to_utf8_path_buf().unwrap();
             let f = self.snap.file_unchecked(old_path);
 
-            self.snap.apply_changes(
+            self.snap.apply_change(
                 f, 
                 FileChange::Rename { new_file: self.snap.file_unchecked(new_path) }
             );
         }
+
+        self.analyze();
+
         ControlFlow::Continue(())
     }
     fn did_create_files(&mut self, params: CreateFilesParams) -> ControlFlow<async_lsp::Result<()>> {
@@ -114,11 +131,13 @@ impl LanguageServer for Server {
             let raw_path = f.uri.to_utf8_path_buf().unwrap();
             let f = self.snap.file_unchecked(raw_path);
 
-            self.snap.apply_changes(
+            self.snap.apply_change(
                 f, 
                 FileChange::Create {}
             );
         }
+
+        self.analyze();
 
         ControlFlow::Continue(())
     }
@@ -127,11 +146,13 @@ impl LanguageServer for Server {
             let raw_path = f.uri.to_utf8_path_buf().unwrap();
             let f = self.snap.file_unchecked(raw_path);
 
-            self.snap.apply_changes(
+            self.snap.apply_change(
                 f, 
                 FileChange::Delete {  }
             );
         }
+
+        self.analyze();
 
         ControlFlow::Continue(())
     }
@@ -156,15 +177,21 @@ impl LanguageServer for Server {
             }
         }
 
-        self.snap.apply_changes(
+        self.snap.apply_change(
             f, 
             FileChange::SetContent { data: Arc::from(new_content) }
         );
 
+        self.analyze();
+
         ControlFlow::Continue(())
     }
 
-    fn did_save(&mut self, params: DidSaveTextDocumentParams) -> ControlFlow<async_lsp::Result<()>> {
+    fn did_save(&mut self, _params: DidSaveTextDocumentParams) -> ControlFlow<async_lsp::Result<()>> {
+        ControlFlow::Continue(())
+    }
+
+    fn did_change_watched_files(&mut self, _params: DidChangeWatchedFilesParams) -> ControlFlow<async_lsp::Result<()>> {
         ControlFlow::Continue(())
     }
 }

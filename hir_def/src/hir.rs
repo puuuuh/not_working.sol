@@ -132,6 +132,3 @@ pub trait HasBody<'db> {
     fn body(self, db: &'db dyn BaseDb, file: File) -> Option<(StatementId<'db>, ItemSourceMap<'db>)>;
 }
 
-pub trait HasSourceUnit<'db> {
-    fn source_unit(self, db: &'db dyn BaseDb) -> SourceUnit<'db>;
-}

@@ -20,8 +20,6 @@ use std::fmt::Write;
 use std::sync::Arc;
 use syntax::ast::nodes::{self, Contract};
 
-use super::HasSourceUnit;
-
 #[salsa::tracked(debug)]
 pub struct ContractId<'db> {
     #[tracked]

@@ -16,6 +16,7 @@ camino.workspace = true
 line-index.workspace = true
 hir_ty.workspace = true
 hir_nameres.workspace = true
+async-lsp.workspace = true
 
 [lints]
 workspace = true

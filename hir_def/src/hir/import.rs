@@ -1,5 +1,4 @@
 use crate::hir::ident::Ident;
-use crate::hir::HasSourceUnit;
 use crate::{impl_major_item, lazy_field, FileAstPtr};
 use base_db::{AnchoredPath, BaseDb, File, Project};
 use rowan::ast::AstPtr;
