@@ -7,6 +7,8 @@ use smallvec::SmallVec;
 use sorted_vec::SortedVec;
 use vfs::File;
 
+use super::body::Definition;
+
 pub struct ItemScopeIter<'db> {
     db: &'db dyn BaseDb,
     parent: Option<ItemScope<'db>>,
@@ -36,17 +38,17 @@ impl<'db> ItemScopeIter<'db> {
 }
 
 impl<'db> Iterator for ItemScopeIter<'db> {
-    type Item = (Ident<'db>, Item<'db>);
+    type Item = (Ident<'db>, Definition<'db>);
     
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             let t = self.next_inner()?;
             if let Some(name) = self.name {
                 if t.0 == name {
-                    return Some(t)
+                    return Some((t.0, Definition::Item(t.1)))
                 }
             } else {
-                return Some(t)
+                return Some((t.0, Definition::Item(t.1)))
             }
         }
     }

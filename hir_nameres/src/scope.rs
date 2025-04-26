@@ -3,10 +3,13 @@ pub mod body;
 
 use base_db::{BaseDb, Project};
 pub use body::BodyScope;
+use body::BodyScopeIter;
+use either::Either;
 use hir_def::{lower_file, Constructor, ConstructorId, ContractId, EnumerationId, ErrorId, EventId, ExprId, FunctionId, Ident, IdentPath, ImportId, Item, ModifierId, PragmaId, SourceUnit, StateVariableId, StatementId, StructureId, UserDefinedValueTypeId, UsingId};
 pub use item::ItemScope;
 
 use indexmap::IndexMap;
+use item::ItemScopeIter;
 use salsa::{Database, Update};
 use vfs::File;
 use std::{hash::{Hash, Hasher}, ops::{Deref, DerefMut}};
@@ -35,22 +38,21 @@ impl<'db> From<BodyScope<'db>> for Scope<'db> {
 }
 
 impl<'db> Scope<'db> {
-    pub fn lookup(self, db: &'db dyn BaseDb, name: Ident<'db>) -> Option<Definition<'db>> {
-        let t = match self {
-            Scope::Item(item_scope) => item_scope.name(db, name).next(),
-            Scope::Body(body_scope) => body_scope.parent(db).name(db, name).next(),
+    pub fn lookup(self, db: &'db dyn BaseDb, name: Ident<'db>) -> Either<ItemScopeIter<'db>, BodyScopeIter<'db>> {
+        match self {
+            Scope::Item(item_scope) => Either::Left(item_scope.name(db, name)),
+            Scope::Body(body_scope) => Either::Left(body_scope.parent(db).name(db, name)),
             Scope::Expr(body_scope, i) => {
-                return body_scope.lookup_in_scope(db, i, name).map(|a| a.1).next();
+                Either::Right(body_scope.lookup_in_scope(db, i, name))
             }
-        }.map(|(_, item)| Definition::Item(item));
-        t
+        }
     }
 
-    pub fn lookup_in_expr(self, db: &'db dyn BaseDb, expr: ExprId<'db>, name: Ident<'db>) -> Option<Definition<'db>> {
+    pub fn lookup_in_expr(self, db: &'db dyn BaseDb, expr: ExprId<'db>, name: Ident<'db>) -> Either<ItemScopeIter<'db>, BodyScopeIter<'db>> {
         match self {
-            Scope::Item(item_scope) => item_scope.name(db, name).next().map(|(_, item)| Definition::Item(item)),
+            Scope::Item(item_scope) => Either::Left(item_scope.name(db, name)),
             Scope::Body(expr_scope_root) | Scope::Expr(expr_scope_root, _) => {
-                expr_scope_root.lookup_in_expr(db, expr, name).next().map(|(_, item)| item)
+                Either::Right(expr_scope_root.lookup_in_expr(db, expr, name))
             },
         }
     }
@@ -58,7 +60,7 @@ impl<'db> Scope<'db> {
     pub fn lookup_path(self, db: &'db dyn BaseDb, path: &[Ident<'db>]) -> Option<Definition<'db>> {
         let mut path = path.into_iter();
         let start = path.next()?;
-        if let mut def @ Definition::Item(item) = self.lookup(db, *start)? {
+        if let mut def @ Definition::Item(item) = self.lookup(db, *start).next()?.1 {
             let mut file = item.file(db);
             'ident_loop: for ident in path {
                 let container = Container::try_from(item).ok()?;

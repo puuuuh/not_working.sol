@@ -47,7 +47,7 @@ pub fn goto_definition(db: &dyn BaseDb, project: Project, pos: FilePosition) -> 
                     hir_def::hir::Expr::Ident { name_ref } => {
                         scopes.lookup_in_expr(db, *e, *name_ref)
                             .into_iter()
-                            .flat_map(|defsite| match defsite {
+                            .flat_map(|defsite| match defsite.1 {
                                 Definition::Item(item) => NavigationTarget::from_item(db, item),
                                 Definition::Local(variable_declaration) => NavigationTarget::from_local(db, InFile {
                                     file: pos.file,
@@ -69,7 +69,7 @@ pub fn goto_definition(db: &dyn BaseDb, project: Project, pos: FilePosition) -> 
 
     return Some(scope.lookup(db, Ident::new(db, token.text()))
         .into_iter()
-        .flat_map(|defsite| match defsite {
+        .flat_map(|defsite| match defsite.1 {
             Definition::Item(item) => NavigationTarget::from_item(db, item),
             Definition::Local(variable_declaration) => NavigationTarget::from_local(db, InFile { file: pos.file, data: variable_declaration.1 }),
             _ => None

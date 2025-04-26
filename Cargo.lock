@@ -450,6 +450,7 @@ version = "0.1.0"
 dependencies = [
  "base_db",
  "derive_more",
+ "either",
  "hir_def",
  "indexmap 2.9.0",
  "la-arena",

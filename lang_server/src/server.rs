@@ -1,4 +1,3 @@
-use async_lsp::lsp_types::notification::Notification;
 use async_lsp::lsp_types::*;
 use async_lsp::router::Router;
 use async_lsp::{ClientSocket, LanguageServer, ResponseError};

@@ -40,6 +40,7 @@ camino = "1.1.9"
 compact_str = "0.9"
 smallvec = "1.0"
 async-lsp = "0.2.2"
+either = "1.15.0"
 
 [workspace.lints.rust]
 unused = "allow"

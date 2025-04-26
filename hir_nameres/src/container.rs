@@ -11,7 +11,7 @@ pub enum Container<'db> {
     SourceUnit(SourceUnit<'db>),
     Contract(ContractId<'db>),
     Structure(StructureId<'db>),
-    Enum(EnumerationId<'db>)
+    Enum(EnumerationId<'db>),
 }
 
 impl<'db> From<EnumerationId<'db>> for Container<'db> {

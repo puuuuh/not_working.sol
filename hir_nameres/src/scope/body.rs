@@ -56,7 +56,7 @@ impl<'db> BodyScopeIter<'db> {
             if let Some(p) = self.current.parent {
                 self.current = self.scopes[p].clone();
             } else {
-                return self.item.next().map(|(name, item)| (name, Definition::Item(item)));
+                return self.item.next().map(|(name, item)| (name, item));
             }
         }
 
@@ -82,7 +82,7 @@ impl<'db> Iterator for BodyScopeIter<'db> {
                     return Some(t)
                 }
             } else {
-                return self.item.next().map(|(name, item)| (name, Definition::Item(item)) );
+                return self.item.next().map(|(name, item)| (name, item) );
             }
         }
     }

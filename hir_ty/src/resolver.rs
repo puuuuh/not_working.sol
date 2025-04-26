@@ -296,7 +296,7 @@ impl<'db> TypeResolutionCtx<'db> {
                 return None
             },
             Expr::Ident { name_ref } => {
-                return Some(match self.scope.lookup_in_expr(db, expr, *name_ref)? {
+                return Some(match self.scope.lookup_in_expr(db, expr, *name_ref).next()?.1 {
                     Definition::Item(item) => 
                         self.resolve_item_type(db, item),
                     Definition::Local((origin, item)) =>
