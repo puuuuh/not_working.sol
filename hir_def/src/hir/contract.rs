@@ -15,10 +15,10 @@ use crate::items::HirPrint;
 use crate::{impl_major_item, lazy_field, AstPtr, IndexMapUpdate};
 use base_db::{BaseDb, Project};
 use salsa::Database;
-use vfs::File;
 use std::fmt::Write;
 use std::sync::Arc;
 use syntax::ast::nodes::{self, Contract};
+use vfs::File;
 
 #[salsa::tracked(debug)]
 pub struct ContractId<'db> {

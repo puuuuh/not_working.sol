@@ -1,20 +1,29 @@
-pub mod item;
 pub mod body;
+pub mod item;
 
 use base_db::{BaseDb, Project};
 pub use body::BodyScope;
 use body::BodyScopeIter;
 use either::Either;
-use hir_def::{lower_file, Constructor, ConstructorId, ContractId, EnumerationId, ErrorId, EventId, ExprId, FunctionId, Ident, IdentPath, ImportId, Item, ModifierId, PragmaId, SourceUnit, StateVariableId, StatementId, StructureId, UserDefinedValueTypeId, UsingId};
+use hir_def::{
+    Constructor, ConstructorId, ContractId, EnumerationId, ErrorId, EventId, ExprId, FunctionId,
+    Ident, IdentPath, ImportId, Item, ModifierId, PragmaId, SourceUnit, StateVariableId,
+    StatementId, StructureId, UserDefinedValueTypeId, UsingId, lower_file,
+};
 pub use item::ItemScope;
 
 use indexmap::IndexMap;
 use item::ItemScopeIter;
 use salsa::{Database, Update};
+use std::{
+    hash::{Hash, Hasher},
+    ops::{Deref, DerefMut},
+};
 use vfs::File;
-use std::{hash::{Hash, Hasher}, ops::{Deref, DerefMut}};
 
-use crate::{container::Container, import::ImportResolution, inheritance::inheritance_chain, HasDefs};
+use crate::{
+    container::Container, import::resolve_file_root, inheritance::inheritance_chain, HasDefs
+};
 
 use super::scope::body::Definition;
 
@@ -22,7 +31,7 @@ use super::scope::body::Definition;
 pub enum Scope<'db> {
     Item(ItemScope<'db>),
     Body(BodyScope<'db>),
-    Expr(BodyScope<'db>, usize)
+    Expr(BodyScope<'db>, usize),
 }
 
 impl<'db> From<ItemScope<'db>> for Scope<'db> {
@@ -38,22 +47,37 @@ impl<'db> From<BodyScope<'db>> for Scope<'db> {
 }
 
 impl<'db> Scope<'db> {
-    pub fn lookup(self, db: &'db dyn BaseDb, name: Ident<'db>) -> Either<ItemScopeIter<'db>, BodyScopeIter<'db>> {
+    pub fn iter(self, db: &'db dyn BaseDb) -> Either<ItemScopeIter<'db>, BodyScopeIter<'db>> {
         match self {
-            Scope::Item(item_scope) => Either::Left(item_scope.name(db, name)),
-            Scope::Body(body_scope) => Either::Left(body_scope.parent(db).name(db, name)),
-            Scope::Expr(body_scope, i) => {
-                Either::Right(body_scope.lookup_in_scope(db, i, name))
-            }
+            Scope::Item(item_scope) => Either::Left(item_scope.iter(db)),
+            Scope::Body(body_scope) => Either::Left(body_scope.parent(db).iter(db)),
+            Scope::Expr(body_scope, i) => Either::Right(body_scope.iter_in_scope(db, i)),
         }
     }
 
-    pub fn lookup_in_expr(self, db: &'db dyn BaseDb, expr: ExprId<'db>, name: Ident<'db>) -> Either<ItemScopeIter<'db>, BodyScopeIter<'db>> {
+    pub fn lookup(
+        self,
+        db: &'db dyn BaseDb,
+        name: Ident<'db>,
+    ) -> Either<ItemScopeIter<'db>, BodyScopeIter<'db>> {
+        match self {
+            Scope::Item(item_scope) => Either::Left(item_scope.name(db, name)),
+            Scope::Body(body_scope) => Either::Left(body_scope.parent(db).name(db, name)),
+            Scope::Expr(body_scope, i) => Either::Right(body_scope.lookup_in_scope(db, i, name)),
+        }
+    }
+
+    pub fn lookup_in_expr(
+        self,
+        db: &'db dyn BaseDb,
+        expr: ExprId<'db>,
+        name: Ident<'db>,
+    ) -> Either<ItemScopeIter<'db>, BodyScopeIter<'db>> {
         match self {
             Scope::Item(item_scope) => Either::Left(item_scope.name(db, name)),
             Scope::Body(expr_scope_root) | Scope::Expr(expr_scope_root, _) => {
                 Either::Right(expr_scope_root.lookup_in_expr(db, expr, name))
-            },
+            }
         }
     }
 
@@ -80,7 +104,6 @@ impl<'db> Scope<'db> {
         } else {
             None
         }
-
     }
 
     pub fn for_stmt(self, db: &'db dyn BaseDb, stmt: StatementId<'db>) -> Scope<'db> {
@@ -92,7 +115,7 @@ impl<'db> Scope<'db> {
                 } else {
                     Scope::Body(body_scope)
                 }
-            },
+            }
         }
     }
 
@@ -105,7 +128,7 @@ impl<'db> Scope<'db> {
                 } else {
                     Scope::Body(body_scope)
                 }
-            },
+            }
         }
     }
 }
@@ -120,20 +143,21 @@ impl<'db> HasScope<'db> for ConstructorId<'db> {
     #[salsa::tracked]
     fn item_scope(self, db: &'db dyn BaseDb, project: Project) -> ItemScope<'db> {
         self.origin(db)
-                .map(|c| c.item_scope(db, project))
-                .unwrap_or_else(|| lower_file(db, self.file(db)).item_scope(db, project))
+            .map(|c| c.item_scope(db, project))
+            .unwrap_or_else(|| lower_file(db, self.file(db)).item_scope(db, project))
     }
 
     #[salsa::tracked]
     fn scope(self, db: &'db dyn BaseDb, project: Project) -> Scope<'db> {
         BodyScope::from_body(
-            db, 
-            project, 
-            self.item_scope(db, project), 
+            db,
+            project,
+            self.item_scope(db, project),
             Item::Constructor(self),
-            self.info(db).args.iter().copied(), 
-            self.body(db).map(|a| a.0)
-        ).into()
+            self.info(db).args.iter().copied(),
+            self.body(db).map(|a| a.0),
+        )
+        .into()
     }
 }
 
@@ -143,23 +167,25 @@ impl<'db> HasScope<'db> for ContractId<'db> {
     fn scope(self, db: &'db dyn BaseDb, project: Project) -> Scope<'db> {
         Scope::Item(self.item_scope(db, project))
     }
-    
-    fn item_scope(self, db: &'db dyn BaseDb, project: Project) -> ItemScope<'db> {
-        let chain = inheritance_chain(db, project, self).unwrap_or(vec![self]);
 
-        let items: Vec<_> = chain.into_iter().rev().flat_map(|c| {
-            c
-                .items(db)
-                .iter()
-                .filter_map(|a| a.name(db).map(|name| (name, (*a).into())))
-        })
-        .collect();
+    fn item_scope(self, db: &'db dyn BaseDb, project: Project) -> ItemScope<'db> {
+        let chain = inheritance_chain(db, project, self).clone().unwrap_or(vec![self]);
+
+        let items: Vec<_> = chain
+            .into_iter()
+            .rev()
+            .flat_map(|c| {
+                c.items(db).iter().filter_map(|a| a.name(db).map(|name| (name, (*a).into())))
+            })
+            .collect();
 
         ItemScope::new(
             db,
-            Some(self.origin(db)
-                .map(|c| c.item_scope(db, project))
-                .unwrap_or_else(|| lower_file(db, self.file(db)).item_scope(db, project))),
+            Some(
+                self.origin(db)
+                    .map(|c| c.item_scope(db, project))
+                    .unwrap_or_else(|| lower_file(db, self.file(db)).item_scope(db, project)),
+            ),
             items,
         )
     }
@@ -171,15 +197,16 @@ impl<'db> HasScope<'db> for FunctionId<'db> {
     fn scope(self, db: &'db dyn BaseDb, project: Project) -> Scope<'db> {
         let map = lower_file(db, self.file(db));
         BodyScope::from_body(
-            db, 
-            project, 
+            db,
+            project,
             self.item_scope(db, project),
             Item::Function(self),
-            self.info(db).args.iter().copied(), 
-            self.body(db).map(|a| a.0)
-        ).into()
+            self.info(db).args.iter().copied(),
+            self.body(db).map(|a| a.0),
+        )
+        .into()
     }
-    
+
     fn item_scope(self, db: &'db dyn BaseDb, project: Project) -> ItemScope<'db> {
         self.origin(db)
             .map(|c| c.item_scope(db, project))
@@ -209,10 +236,10 @@ macro_rules! impl_has_scope {
 }
 
 impl_has_scope!(
-    EnumerationId<'db>, 
-    EventId<'db>, 
-    StateVariableId<'db>, 
-    StructureId<'db>, 
+    EnumerationId<'db>,
+    EventId<'db>,
+    StateVariableId<'db>,
+    StructureId<'db>,
     UserDefinedValueTypeId<'db>,
     UsingId<'db>,
     ErrorId<'db>,
@@ -223,9 +250,10 @@ impl_has_scope!(
 impl<'db> HasScope<'db> for SourceUnit<'db> {
     #[salsa::tracked]
     fn item_scope(self, db: &'db dyn BaseDb, project: Project) -> ItemScope<'db> {
-        let imports = ImportResolution::from_file(db, project, self.file(db));
-        ItemScope::new(db, None, imports.items(db).clone())
+        let imports = resolve_file_root(db, project, self.file(db));
+        ItemScope::new(db, None, imports.clone())
     }
+
     #[salsa::tracked]
     fn scope(self, db: &'db dyn BaseDb, project: Project) -> Scope<'db> {
         Scope::Item(self.item_scope(db, project))
@@ -264,7 +292,9 @@ impl<'db> HasScope<'db> for Item<'db> {
             Item::Using(using_id) => using_id.scope(db, project),
             Item::Contract(contract_id) => contract_id.scope(db, project),
             Item::Enum(enumeration_id) => enumeration_id.scope(db, project),
-            Item::UserDefinedValueType(user_defined_value_type_id) => user_defined_value_type_id.scope(db, project),
+            Item::UserDefinedValueType(user_defined_value_type_id) => {
+                user_defined_value_type_id.scope(db, project)
+            }
             Item::Error(error_id) => error_id.scope(db, project),
             Item::Event(event_id) => event_id.scope(db, project),
             Item::Function(function_id) => function_id.scope(db, project),
@@ -283,7 +313,9 @@ impl<'db> HasScope<'db> for Item<'db> {
             Item::Using(using_id) => using_id.item_scope(db, project),
             Item::Contract(contract_id) => contract_id.item_scope(db, project),
             Item::Enum(enumeration_id) => enumeration_id.item_scope(db, project),
-            Item::UserDefinedValueType(user_defined_value_type_id) => user_defined_value_type_id.item_scope(db, project),
+            Item::UserDefinedValueType(user_defined_value_type_id) => {
+                user_defined_value_type_id.item_scope(db, project)
+            }
             Item::Error(error_id) => error_id.item_scope(db, project),
             Item::Event(event_id) => event_id.item_scope(db, project),
             Item::Function(function_id) => function_id.item_scope(db, project),

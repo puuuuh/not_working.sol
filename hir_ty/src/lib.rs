@@ -4,5 +4,6 @@ use base_db::{BaseDb, File, Project};
 use salsa::tracked;
 use tys::{Ty, TyKind};
 
-pub mod tys;
+pub mod error;
 pub mod resolver;
+pub mod tys;

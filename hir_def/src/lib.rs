@@ -4,16 +4,16 @@
 use indexmap::IndexMap;
 use rowan::ast::{AstNode, AstPtr};
 use rowan::Language;
-use salsa::{Accumulator, Update};
 use salsa::Database;
-use syntax::{SolidityLang, SyntaxNode};
+use salsa::{Accumulator, Update};
 use std::hash::{Hash, Hasher};
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
+use syntax::{SolidityLang, SyntaxNode};
 pub mod hir;
+pub mod items;
 pub mod lower;
 pub mod source_map;
-pub mod items;
 pub mod walk;
 
 pub use hir::*;
@@ -28,7 +28,16 @@ use syntax::{TextRange, TextSize};
 
 pub struct InFile<T> {
     pub file: File,
-    pub data: T
+    pub data: T,
+}
+
+impl<T> InFile<T> {
+    pub fn new(file: File, data: T) -> Self {
+        Self {
+            file,
+            data
+        }
+    }
 }
 
 #[derive(Debug, Hash, Clone, Eq, PartialEq, salsa::Update)]

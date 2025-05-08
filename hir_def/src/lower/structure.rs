@@ -1,10 +1,9 @@
-use rowan::ast::{AstNode, AstPtr};
 use crate::hir::Ident;
 use crate::hir::Item;
 use crate::hir::{StructureFieldId, StructureId};
-use crate::hir::TypeRef;
 use crate::lower::LowerCtx;
 use crate::FileAstPtr;
+use rowan::ast::{AstNode, AstPtr};
 use syntax::ast::nodes;
 
 impl<'db> LowerCtx<'db> {
@@ -12,7 +11,7 @@ impl<'db> LowerCtx<'db> {
         StructureFieldId::new(
             self.db,
             Ident::from_name(self.db, e.name()),
-            e.ty().map(|e| self.lower_type_ref(e)).unwrap_or(TypeRef::Error),
+            self.lower_type_ref2(e.ty()),
         )
     }
 
@@ -25,7 +24,7 @@ impl<'db> LowerCtx<'db> {
             f.set_parent(self.db, s);
         }
         self.save_span(e.syntax().text_range(), Item::Struct(s));
-        
+
         s
     }
 }

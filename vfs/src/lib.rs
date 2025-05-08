@@ -1,9 +1,9 @@
 mod path;
 
-use std::sync::Arc;
+pub use crate::path::{AnchoredPath, VfsPath};
 use dashmap::{DashMap, Entry};
 use salsa::Database;
-pub use crate::path::{AnchoredPath, VfsPath};
+use std::sync::Arc;
 
 #[salsa::input(debug)]
 pub struct File {
@@ -17,17 +17,13 @@ pub struct Vfs {
     paths: DashMap<File, VfsPath>,
 }
 
-
 impl Vfs {
     pub fn new() -> Self {
         Self::with_roots()
     }
 
     pub fn with_roots() -> Self {
-        Self {
-            paths: Default::default(),
-            files: Default::default()
-        }
+        Self { paths: Default::default(), files: Default::default() }
     }
 
     pub fn with_files(db: &dyn Database, files: impl Iterator<Item = (VfsPath, Arc<str>)>) -> Self {
@@ -40,24 +36,21 @@ impl Vfs {
         t
     }
 
-    pub fn file(&self, db: &dyn Database, path: &VfsPath) -> File{
+    pub fn file(&self, db: &dyn Database, path: &VfsPath) -> File {
         match self.files.entry(path.clone()) {
-            Entry::Occupied(f) => {
-                *f.get()
-            }
+            Entry::Occupied(f) => *f.get(),
             Entry::Vacant(f) => {
                 let t = match &path {
                     VfsPath::Path(p) => {
-                        let (content, exists): (Arc<str>, bool) = if let Ok(content) = std::fs::read_to_string(p) {
-                            (Arc::from(&*content), true)
-                        } else {
-                            (Arc::from(""), false)
-                        };
+                        let (content, exists): (Arc<str>, bool) =
+                            if let Ok(content) = std::fs::read_to_string(p) {
+                                (Arc::from(&*content), true)
+                            } else {
+                                (Arc::from(""), false)
+                            };
                         File::new(db, exists, content)
                     }
-                    VfsPath::Virtual(_) => {
-                        File::new(db, false, Default::default())
-                    }
+                    VfsPath::Virtual(_) => File::new(db, false, Default::default()),
                 };
                 self.paths.insert(t, path.clone());
                 f.insert(t);
@@ -71,7 +64,12 @@ impl Vfs {
         self.paths.get(&file).unwrap().clone()
     }
 
-    pub fn resolve_path(&self, db: &dyn Database, path: &AnchoredPath, roots: &[VfsPath]) -> Option<VfsPath> {
+    pub fn resolve_path(
+        &self,
+        db: &dyn Database,
+        path: &AnchoredPath,
+        roots: &[VfsPath],
+    ) -> Option<VfsPath> {
         let parent = self.paths.get(&path.parent)?;
         if path.path.starts_with(".") {
             let joined = parent.parent()?.join(&path.path)?;
@@ -82,7 +80,7 @@ impl Vfs {
             if let VfsPath::Path(p) = &joined {
                 db.report_untracked_read();
                 if p.exists() {
-                    return Some(joined)
+                    return Some(joined);
                 }
             }
         } else {
@@ -94,7 +92,7 @@ impl Vfs {
                 if let VfsPath::Path(p) = &joined {
                     db.report_untracked_read();
                     if p.exists() {
-                        return Some(joined)
+                        return Some(joined);
                     }
                 }
             }
@@ -104,7 +102,5 @@ impl Vfs {
     }
 }
 
-
 #[cfg(test)]
-mod tests {
-}
+mod tests {}

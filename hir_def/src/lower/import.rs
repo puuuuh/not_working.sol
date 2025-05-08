@@ -1,19 +1,17 @@
 use crate::hir::Ident;
-use crate::hir::{ImportId, ImportKind, SymbolAlias};
 use crate::hir::Item;
+use crate::hir::{ImportId, ImportKind, SymbolAlias};
 use crate::lower::literal::decode_string_literal;
 use crate::lower::LowerCtx;
 use crate::FileAstPtr;
-use std::path::PathBuf;
 use rowan::ast::{AstNode, AstPtr};
+use std::path::PathBuf;
 use syntax::ast::nodes;
 
 impl<'a> LowerCtx<'a> {
     pub fn lower_path(&mut self, s: nodes::Path) -> String {
         s.string_token()
-            .map(|s| {
-                String::from_utf8(decode_string_literal(s.text())).unwrap()
-            })
+            .map(|s| String::from_utf8(decode_string_literal(s.text())).unwrap())
             .unwrap_or_default()
     }
 
@@ -23,20 +21,14 @@ impl<'a> LowerCtx<'a> {
         };
         let kind = match item {
             nodes::ImportItem::ImportPath(path) => ImportKind::Path {
-                path: path
-                    .path()
-                    .map(|p| self.lower_path(p))
-                    .unwrap_or_default(),
+                path: path.path().map(|p| self.lower_path(p)).unwrap_or_default(),
                 name: path.name().map(|a| Ident::from_name(self.db, Some(a))),
             },
             nodes::ImportItem::ImportSymbols(data) => {
                 if let Some(alias) = data.symbol_alias() {
                     ImportKind::Glob {
                         as_name: Ident::from_name(self.db, alias.name()),
-                        path: data
-                            .path()
-                            .map(|p| self.lower_path(p))
-                            .unwrap_or_default(),
+                        path: data.path().map(|p| self.lower_path(p)).unwrap_or_default(),
                     }
                 } else if let Some(aliases) = data.symbol_aliases() {
                     ImportKind::Aliases {
@@ -47,10 +39,7 @@ impl<'a> LowerCtx<'a> {
                                 as_name: Ident::from_name_opt(self.db, a.name()),
                             })
                             .collect(),
-                        path: data
-                            .path()
-                            .map(|p| self.lower_path(p))
-                            .unwrap_or_default(),
+                        path: data.path().map(|p| self.lower_path(p)).unwrap_or_default(),
                     }
                 } else {
                     ImportKind::Error

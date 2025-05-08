@@ -60,7 +60,10 @@ impl<'a> Parser<'a> {
             let end = self.current_offset();
             self.builder.finish_node();
             self.errors.push(SyntaxError::new(
-                format!("Expected expression, found {}", self.current_full().map(|(_, a)| a).unwrap_or_default()),
+                format!(
+                    "Expected expression, found {}",
+                    self.current_full().map(|(_, a)| a).unwrap_or_default()
+                ),
                 TextRange::new(start.try_into().unwrap(), end.try_into().unwrap()),
             ));
         }

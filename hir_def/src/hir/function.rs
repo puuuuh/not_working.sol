@@ -1,6 +1,6 @@
-use crate::hir::variable_declaration::VariableDeclaration;
 use crate::hir::ident::{Ident, IdentPath};
 use crate::hir::statement::StatementId;
+use crate::hir::variable_declaration::VariableDeclaration;
 use crate::hir::{ContractId, HasFile};
 use crate::items::HirPrint;
 use crate::lower::LowerCtx;
@@ -9,9 +9,9 @@ use crate::{impl_major_item, lazy_field, lower, FileAstPtr, FileExt};
 use base_db::{BaseDb, Project};
 use rowan::ast::{AstNode, AstPtr};
 use salsa::Database;
-use vfs::File;
 use std::fmt::Write;
 use syntax::ast::nodes::{self, Stmt};
+use vfs::File;
 
 use super::expr::ExprId;
 use super::state_mutability::StateMutability;
@@ -43,14 +43,20 @@ impl<'db> FunctionId<'db> {
         let node = self.body_node(db)?;
         let root = file.node(db);
         let root = root.syntax();
-        
+
         let expr = node.to_node(&root);
 
         let mut lowerer = LowerCtx::new(db, file);
 
         let res = lowerer.lower_stmt(Stmt::Block(expr));
 
-        return Some((res, ItemSourceMap::new(crate::IndexMapUpdate(lowerer.exprs), crate::IndexMapUpdate(lowerer.stmts))));
+        return Some((
+            res,
+            ItemSourceMap::new(
+                crate::IndexMapUpdate(lowerer.exprs),
+                crate::IndexMapUpdate(lowerer.stmts),
+            ),
+        ));
     }
 }
 

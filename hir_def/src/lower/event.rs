@@ -1,10 +1,9 @@
-use rowan::ast::{AstNode, AstPtr};
-use crate::hir::{EventId, EventParameter, EventParameterId};
 use crate::hir::Ident;
 use crate::hir::Item;
-use crate::hir::TypeRef;
+use crate::hir::{EventId, EventParameter, EventParameterId};
 use crate::lower::LowerCtx;
 use crate::FileAstPtr;
+use rowan::ast::{AstNode, AstPtr};
 use syntax::ast::nodes;
 
 impl<'db> LowerCtx<'db> {
@@ -12,7 +11,7 @@ impl<'db> LowerCtx<'db> {
         let info = EventParameter {
             name: e.name().map(|e| Ident::from_name(self.db, Some(e))),
             is_indexed: e.indexed_token().is_some(),
-            ty: e.ty().map(|e| self.lower_type_ref(e)).unwrap_or(TypeRef::Error),
+            ty: self.lower_type_ref2(e.ty()),
         };
         EventParameterId::new(self.db, info)
     }
@@ -27,7 +26,7 @@ impl<'db> LowerCtx<'db> {
             AstPtr::new(&e),
         );
         self.save_span(e.syntax().text_range(), Item::Event(res));
-        
+
         res
     }
 }

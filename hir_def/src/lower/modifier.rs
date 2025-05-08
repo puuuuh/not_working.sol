@@ -1,6 +1,6 @@
+use crate::hir::Item;
 use crate::hir::{Ident, IdentPath};
 use crate::hir::{Modifier, ModifierId};
-use crate::hir::Item;
 use crate::lower::LowerCtx;
 use crate::FileAstPtr;
 use rowan::ast::{AstNode, AstPtr};
@@ -19,11 +19,8 @@ impl<'db> LowerCtx<'db> {
 
         for m in e {
             if let Some(i) = m.override_specifier() {
-                overrides = Some(
-                    i.ident_paths()
-                        .map(|p| IdentPath::from(self.db, p))
-                        .collect::<Vec<_>>(),
-                );
+                overrides =
+                    Some(i.ident_paths().map(|p| IdentPath::from(self.db, p)).collect::<Vec<_>>());
             } else {
                 for t in m.syntax().children_with_tokens() {
                     if t.kind() == T![virtual] {
@@ -35,10 +32,7 @@ impl<'db> LowerCtx<'db> {
         (overrides, virt)
     }
 
-    pub fn lower_modifier_definition(
-        &mut self,
-        e: nodes::ModifierDefinition,
-    ) -> ModifierId<'db> {
+    pub fn lower_modifier_definition(&mut self, e: nodes::ModifierDefinition) -> ModifierId<'db> {
         let (over, virt) = self.lower_modifier_attrs(e.modifier_attributes());
         let name = Ident::from_name(self.db, e.name());
         let res = ModifierId::new(

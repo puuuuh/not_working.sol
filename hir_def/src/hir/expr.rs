@@ -1,7 +1,7 @@
 use crate::hir::ident::Ident;
 use crate::hir::literal::Literal;
 use crate::hir::source_unit::Item;
-use crate::hir::type_name::{ElementaryTypeRef, TypeRef};
+use crate::hir::type_name::ElementaryTypeRef;
 use crate::items::HirPrint;
 use crate::{impl_major_item, lazy_field, FileAstPtr, FileExt};
 use base_db::BaseDb;
@@ -13,13 +13,14 @@ use syntax::ast::nodes;
 use super::call_options::CallOption;
 use super::op::{BinaryOp, PostfixOp, PrefixOp};
 use super::type_name::walk_type_ref;
+use super::{TypeRefId, TypeRefKind};
 
 #[salsa::tracked(debug)]
 pub struct ExprId<'db> {
     #[return_ref]
     pub kind: Expr<'db>,
 
-    pub node: Option<AstPtr<nodes::Expr>>,
+    pub node: Option<FileAstPtr<nodes::Expr>>,
 }
 
 impl HirPrint for ExprId<'_> {
@@ -28,7 +29,15 @@ impl HirPrint for ExprId<'_> {
     }
 }
 
+fn missing<'db>(db: &'db dyn Database) -> ExprId<'db> {
+    ExprId::new(db, Expr::Missing, None)
+}
+
 impl<'db> ExprId<'db> {
+    pub fn missing(db: &'db dyn Database) -> Self {
+        missing(db)
+    }
+
     pub fn walk(self, db: &'db dyn Database, expr_fn: &mut impl FnMut(Self)) {
         expr_fn(self);
         match self.kind(db) {
@@ -88,18 +97,18 @@ impl<'db> ExprId<'db> {
             Expr::Ident { .. } => {}
             Expr::Literal { .. } => {}
             Expr::ElementaryTypeName { .. } => {}
-            Expr::New { ty } => match ty {
-                TypeRef::Elementary(_) => {}
-                TypeRef::Function { .. } => {}
-                TypeRef::Mapping { .. } => {}
-                TypeRef::Path(_) => {}
-                TypeRef::Array { ty, len } => {
+            Expr::New { ty } => match ty.kind(db) {
+                TypeRefKind::Elementary(_) => {}
+                TypeRefKind::Function { .. } => {}
+                TypeRefKind::Mapping { .. } => {}
+                TypeRefKind::Path(_) => {}
+                TypeRefKind::Array { ty, len } => {
                     walk_type_ref(ty, db, expr_fn);
                     if let Some(t) = len {
                         t.walk(db, expr_fn);
                     }
                 }
-                TypeRef::Error => {}
+                TypeRefKind::Error => {}
             },
             Expr::Missing => {}
         }
@@ -122,7 +131,7 @@ pub enum Expr<'db> {
     Ident { name_ref: Ident<'db> },
     Literal { data: Literal },
     ElementaryTypeName { data: ElementaryTypeRef },
-    New { ty: TypeRef<'db> },
+    New { ty: TypeRefId<'db> },
     Missing,
 }
 

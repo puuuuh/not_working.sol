@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use crate::hir::constructor::ConstructorId;
 use crate::hir::contract::{ContractId, ContractItem};
 use crate::hir::enumeration::EnumerationId;
@@ -22,18 +24,20 @@ use rowan::TextRange;
 use salsa::Database;
 
 use super::statement::StatementId;
-use super::{user_defined_value_type, ExprId};
+use super::{user_defined_value_type};
 
 #[salsa::tracked(debug)]
 pub struct SourceUnit<'db> {
-    #[tracked]
+    #[id]
     pub file: File,
 
     #[return_ref]
-    pub items: Vec<Item<'db>>,
+    #[tracked]
+    pub items: BTreeSet<Item<'db>>,
 
     #[return_ref]
-    pub source_map: SpanMap<Item<'db>>
+    #[tracked]
+    pub source_map: SpanMap<Item<'db>>,
 }
 
 #[salsa::tracked]
@@ -42,7 +46,8 @@ pub fn lower_file<'db>(db: &'db dyn BaseDb, file: File) -> SourceUnit<'db> {
     let mut lower = LowerCtx::new(db, file);
     let items = lower.lower_source(input.node());
 
-    let item_tree = SourceUnit::new(db, file, items, SpanMap::new(core::mem::take(&mut lower.spans)));
+    let item_tree =
+        SourceUnit::new(db, file, items, SpanMap::new(core::mem::take(&mut lower.spans)));
 
     item_tree
 }
@@ -52,10 +57,8 @@ impl<'db> SourceUnit<'db> {
     #[salsa::tracked(return_ref)]
     pub fn named_items(self, db: &'db dyn BaseDb) -> IndexMap<Ident<'db>, Item<'db>> {
         let top_items = self.items(db);
-        top_items.iter().filter_map(|a| a.name(db).map(|name| (name, *a)))
-            .collect()
+        top_items.iter().filter_map(|a| a.name(db).map(|name| (name, *a))).collect()
     }
-
 
     #[salsa::tracked(return_ref)]
     pub fn data(self, db: &'db dyn BaseDb) -> ItemTreeData<'db> {
@@ -72,21 +75,21 @@ impl<'db> SourceUnit<'db> {
         let mut structs = vec![];
         for i in self.items(db) {
             match i {
-                Item::Import(i)=>imports.push(*i),
-                Item::Pragma(p)=>pragmas.push(*p),
-                Item::Using(u)=>usings.push(*u),
-                Item::Contract(c)=>contracts.push(*c),
-                Item::Enum(e)=>enums.push(*e),
-                Item::Struct(s)=>structs.push(*s),
-                Item::UserDefinedValueType(t)=>user_type_definitions.push(*t),
-                Item::Error(e)=>errors.push(*e),
-                Item::Event(e)=>events.push(*e),
-                Item::Function(f)=>functions.push(*f),
-                Item::StateVariable(s)=>state_variables.push(*s),
+                Item::Import(i) => imports.push(*i),
+                Item::Pragma(p) => pragmas.push(*p),
+                Item::Using(u) => usings.push(*u),
+                Item::Contract(c) => contracts.push(*c),
+                Item::Enum(e) => enums.push(*e),
+                Item::Struct(s) => structs.push(*s),
+                Item::UserDefinedValueType(t) => user_type_definitions.push(*t),
+                Item::Error(e) => errors.push(*e),
+                Item::Event(e) => events.push(*e),
+                Item::Function(f) => functions.push(*f),
+                Item::StateVariable(s) => state_variables.push(*s),
                 // Invalid items
-                Item::Constructor(constructor_id) => {},
-                Item::Modifier(modifier_id) => {},
-                Item::Module(_) => {},
+                Item::Constructor(constructor_id) => {}
+                Item::Modifier(modifier_id) => {}
+                Item::Module(_) => {}
             }
         }
 
@@ -151,7 +154,9 @@ pub enum NamedItem<'db> {
     Modifier(ModifierId<'db>),
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, PartialOrd, Ord, salsa::Supertype, salsa::Update)]
+#[derive(
+    Debug, Copy, Clone, Eq, PartialEq, Hash, PartialOrd, Ord, salsa::Supertype, salsa::Update,
+)]
 pub enum Item<'db> {
     Import(ImportId<'db>),
     Pragma(PragmaId<'db>),
@@ -171,7 +176,7 @@ pub enum Item<'db> {
     Constructor(ConstructorId<'db>),
     Modifier(ModifierId<'db>),
 
-    Module(SourceUnit<'db>)
+    Module(SourceUnit<'db>),
 }
 
 impl<'db> Item<'db> {
@@ -182,7 +187,9 @@ impl<'db> Item<'db> {
             Item::Using(using_id) => using_id.file(db),
             Item::Contract(contract_id) => contract_id.file(db),
             Item::Enum(enumeration_id) => enumeration_id.file(db),
-            Item::UserDefinedValueType(user_defined_value_type_id) => user_defined_value_type_id.file(db),
+            Item::UserDefinedValueType(user_defined_value_type_id) => {
+                user_defined_value_type_id.file(db)
+            }
             Item::Error(error_id) => error_id.file(db),
             Item::Event(event_id) => event_id.file(db),
             Item::Function(function_id) => function_id.file(db),
@@ -190,7 +197,7 @@ impl<'db> Item<'db> {
             Item::Struct(structure_id) => structure_id.file(db),
             Item::Constructor(constructor_id) => constructor_id.file(db),
             Item::Modifier(modifier_id) => modifier_id.file(db),
-            Item::Module(source_unit) => source_unit.file(db)
+            Item::Module(source_unit) => source_unit.file(db),
         }
     }
 
@@ -201,7 +208,9 @@ impl<'db> Item<'db> {
             Item::Using(using_id) => None,
             Item::Contract(contract_id) => Some(contract_id.name(db)),
             Item::Enum(enumeration_id) => Some(enumeration_id.name(db)),
-            Item::UserDefinedValueType(user_defined_value_type_id) => Some(user_defined_value_type_id.name(db)),
+            Item::UserDefinedValueType(user_defined_value_type_id) => {
+                Some(user_defined_value_type_id.name(db))
+            }
             Item::Error(error_id) => Some(error_id.name(db)),
             Item::Event(event_id) => Some(event_id.name(db)),
             Item::Function(function_id) => function_id.name(db),
@@ -209,7 +218,7 @@ impl<'db> Item<'db> {
             Item::Struct(structure_id) => Some(structure_id.name(db)),
             Item::Constructor(constructor_id) => None,
             Item::Modifier(modifier_id) => Some(modifier_id.name(db)),
-            Item::Module(source_unit) => None
+            Item::Module(source_unit) => None,
         }
     }
 

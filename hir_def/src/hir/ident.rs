@@ -65,7 +65,7 @@ impl<'db> Ident<'db> {
     pub fn from_name(db: &'db dyn Database, data: Option<nodes::Name>) -> Self {
         Self::from_token(db, data.and_then(|n| n.ident_token()))
     }
-    
+
     pub fn from_name_opt(db: &'db dyn Database, data: Option<nodes::Name>) -> Option<Self> {
         if data.is_none() {
             None

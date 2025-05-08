@@ -1,10 +1,12 @@
-use crate::hir::variable_declaration::VariableDeclaration;
-use crate::hir::expr::ExprId;
+use crate::{hir::expr::ExprId, FileAstPtr};
 use crate::hir::ident::Ident;
+use crate::hir::variable_declaration::VariableDeclaration;
 use crate::items::HirPrint;
-use salsa::Database;
-use std::fmt::{Debug, Display, Formatter, Write};
 use crate::lazy_field;
+use rowan::ast::AstPtr;
+use salsa::Database;
+use syntax::ast::nodes;
+use std::fmt::{Debug, Display, Formatter, Write};
 
 use super::{state_mutability::StateMutability, visibility::Visibility};
 
@@ -63,8 +65,25 @@ impl HirPrint for ElementaryTypeRef {
     }
 }
 
+
+#[salsa::tracked(debug)]
+pub struct TypeRefId<'db> {
+    pub kind: TypeRefKind<'db>,
+    pub node: Option<FileAstPtr<nodes::Type>>,
+}
+
+pub fn missing<'db>(db: &'db dyn Database) -> TypeRefId<'db> {
+    TypeRefId::new(db, TypeRefKind::Error, None)
+}
+
+impl<'db> TypeRefId<'db> {
+    pub fn missing(db: &'db dyn Database) -> Self {
+        missing(db)
+    }
+}
+
 #[derive(Clone, Eq, PartialEq, Hash, Debug, salsa::Update)]
-pub enum TypeRef<'db> {
+pub enum TypeRefKind<'db> {
     Elementary(ElementaryTypeRef),
     Function {
         arguments: Vec<VariableDeclaration<'db>>,
@@ -73,56 +92,56 @@ pub enum TypeRef<'db> {
         returns: Vec<VariableDeclaration<'db>>,
     },
     Mapping {
-        key_type: Box<TypeRef<'db>>,
+        key_type: TypeRefId<'db>,
         key_name: Option<Ident<'db>>,
-        value_type: Box<TypeRef<'db>>,
+        value_type: TypeRefId<'db>,
         value_name: Option<Ident<'db>>,
     },
     Path(Vec<Ident<'db>>),
     Array {
-        ty: Box<TypeRef<'db>>,
+        ty: TypeRefId<'db>,
         len: Option<ExprId<'db>>,
     },
     Error,
 }
 
 pub fn walk_type_ref<'db>(
-    t: &TypeRef<'db>,
+    t: TypeRefId<'db>,
     db: &'db dyn Database,
     expr_fn: &mut impl FnMut(ExprId<'db>),
 ) {
-    match t {
-        TypeRef::Elementary(_) => {}
-        TypeRef::Function { arguments, visibility: _, mutability: _, returns } => {
+    match t.kind(db) {
+        TypeRefKind::Elementary(_) => {}
+        TypeRefKind::Function { arguments, visibility: _, mutability: _, returns } => {
             for a in arguments {
-                walk_type_ref(&a.ty(db), db, expr_fn);
+                walk_type_ref(a.ty(db), db, expr_fn);
             }
             for a in returns {
-                walk_type_ref(&a.ty(db), db, expr_fn);
+                walk_type_ref(a.ty(db), db, expr_fn);
             }
         }
-        TypeRef::Mapping { key_type, key_name: _, value_type, value_name: _ } => {
+        TypeRefKind::Mapping { key_type, key_name: _, value_type, value_name: _ } => {
             walk_type_ref(key_type, db, expr_fn);
             walk_type_ref(value_type, db, expr_fn);
         }
-        TypeRef::Path(_) => {}
-        TypeRef::Array { ty, len } => {
+        TypeRefKind::Path(_) => {}
+        TypeRefKind::Array { ty, len } => {
             walk_type_ref(ty, db, expr_fn);
             if let Some(len) = len {
                 len.walk(db, expr_fn);
             }
         }
-        TypeRef::Error => {}
+        TypeRefKind::Error => {}
     }
 }
 
-impl HirPrint for TypeRef<'_> {
+impl HirPrint for TypeRefId<'_> {
     fn write<T: Write>(&self, db: &dyn Database, w: &mut T, ident: usize) -> std::fmt::Result {
-        match self {
-            TypeRef::Elementary(t) => {
+        match self.kind(db) {
+            TypeRefKind::Elementary(t) => {
                 t.write(db, w, ident)?;
             }
-            TypeRef::Function { arguments, visibility, mutability, returns } => {
+            TypeRefKind::Function { arguments, visibility, mutability, returns } => {
                 write!(w, "function(")?;
                 for (i, a) in arguments.iter().enumerate() {
                     if i > 0 {
@@ -140,7 +159,7 @@ impl HirPrint for TypeRef<'_> {
                     a.write(db, w, ident)?;
                 }
             }
-            TypeRef::Mapping { key_type, key_name, value_type, value_name } => {
+            TypeRefKind::Mapping { key_type, key_name, value_type, value_name } => {
                 write!(w, "mapping(")?;
                 key_type.write(db, w, ident)?;
                 if let Some(n) = key_name {
@@ -153,7 +172,7 @@ impl HirPrint for TypeRef<'_> {
                 }
                 write!(w, ")")?;
             }
-            TypeRef::Path(p) => {
+            TypeRefKind::Path(p) => {
                 for (i, p) in p.iter().enumerate() {
                     if i > 0 {
                         write!(w, ".")?;
@@ -162,7 +181,7 @@ impl HirPrint for TypeRef<'_> {
                     write!(w, "{}", p.data(db))?
                 }
             }
-            TypeRef::Array { ty, len } => {
+            TypeRefKind::Array { ty, len } => {
                 ty.write(db, w, ident)?;
                 write!(w, "[")?;
                 if let Some(len) = len {
@@ -170,7 +189,7 @@ impl HirPrint for TypeRef<'_> {
                 }
                 write!(w, "]")?;
             }
-            TypeRef::Error => {
+            TypeRefKind::Error => {
                 write!(w, "<error>")?;
             }
         }

@@ -1,64 +1,76 @@
 use crate::hir::Ident;
 use crate::hir::StateMutability;
-use crate::hir::{ElementaryTypeRef, TypeRef};
 use crate::hir::Visibility;
+use crate::hir::ElementaryTypeRef;
 use crate::lower::LowerCtx;
+use crate::TypeRefId;
+use crate::TypeRefKind;
 use rowan::ast::AstNode;
+use rowan::ast::AstPtr;
 use std::str::FromStr;
 use syntax::ast::nodes;
 use syntax::ast::nodes::{ElementaryType, FunctionType};
 use syntax::T;
 
 impl<'db> LowerCtx<'db> {
-    pub fn lower_type_ref(&mut self, ty: nodes::Type) -> TypeRef<'db> {
-        match ty {
+    pub fn lower_type_ref2(&mut self, ty: Option<nodes::Type>) -> TypeRefId<'db> {
+        ty.map(|ty| self.lower_type_ref(ty)).unwrap_or(self.missing_typeref)
+    }
+
+    pub fn lower_type_ref(&mut self, ty: nodes::Type) -> TypeRefId<'db> {
+        let node = crate::FileAstPtr::new(self.file, &ty);
+        TypeRefId::new(self.db, match ty {
             nodes::Type::ElementaryType(t) => {
-                self.lower_elementary_name(t).map(TypeRef::Elementary).unwrap_or(TypeRef::Error)
+                if let Some(e) = self.lower_elementary_name(t).map(|t| TypeRefKind::Elementary(t)) {
+                    e
+                } else {
+                    return self.missing_typeref;
+                }
             }
             nodes::Type::FunctionType(t) => self.lower_function_name(t),
             nodes::Type::MappingType(t) => self.lower_mapping_name(t),
             nodes::Type::IdentPathType(t) => self.lower_ident_type_name(t),
             nodes::Type::ArrayType(t) => self.lower_array_name(t),
-        }
+        }, Some(node))
     }
 
-    fn lower_array_name(&mut self, p: nodes::ArrayType) -> TypeRef<'db> {
-        let ty = p.ty().map(|ty| self.lower_type_ref(ty)).unwrap_or(TypeRef::Error);
+    fn lower_array_name(&mut self, p: nodes::ArrayType) -> TypeRefKind<'db> {
+        let ty = self.lower_type_ref2(p.ty());
         let expr = p.len().map(|e| self.lower_expr(e));
-        TypeRef::Array { ty: Box::new(ty), len: expr }
+        TypeRefKind::Array { ty: ty, len: expr }
     }
 
-    fn lower_ident_type_name(&mut self, p: nodes::IdentPathType) -> TypeRef<'db> {
+    fn lower_ident_type_name(&mut self, p: nodes::IdentPathType) -> TypeRefKind<'db> {
         let mut res: Vec<Ident> =
             p.segment().map(|a| Ident::from_name_ref(self.db, Some(a))).collect();
         res.shrink_to_fit();
-        TypeRef::Path(res)
+        TypeRefKind::Path(res)
     }
 
-    fn lower_mapping_name(&mut self, p: nodes::MappingType) -> TypeRef<'db> {
+    fn lower_mapping_name(&mut self, p: nodes::MappingType) -> TypeRefKind<'db> {
         let key = p
             .key()
             .map(|k| {
-                let ty = k.ty().map(|ty| self.lower_type_ref(ty)).unwrap_or(TypeRef::Error);
+                let ty = self.lower_type_ref2(k.ty());
                 (ty, Ident::from_name_opt(self.db, k.name()))
             })
-            .unwrap_or((TypeRef::Error, None));
+            .unwrap_or((self.missing_typeref, None));
         let val = p
             .val()
             .map(|k| {
-                let ty = k.ty().map(|ty| self.lower_type_ref(ty)).unwrap_or(TypeRef::Error);
+                let ty = self.lower_type_ref2(k.ty());
                 (ty, Ident::from_name_opt(self.db, k.name()))
             })
-            .unwrap_or((TypeRef::Error, None));
+            .unwrap_or((self.missing_typeref, None));
 
-        TypeRef::Mapping {
-            key_type: Box::new(key.0),
+        TypeRefKind::Mapping {
+            key_type: key.0,
             key_name: key.1,
-            value_type: Box::new(val.0),
+            value_type: val.0,
             value_name: val.1,
         }
     }
-    fn lower_function_name(&mut self, ty: FunctionType) -> TypeRef<'db> {
+    fn lower_function_name(&mut self, ty: FunctionType) -> TypeRefKind<'db> {
         let args = ty
             .parameter_list()
             .map(|list| list.variable_declarations().map(|a| self.lower_parameter(a)).collect())
@@ -85,7 +97,7 @@ impl<'db> LowerCtx<'db> {
             }
         }
 
-        TypeRef::Function { arguments: args, visibility, mutability, returns }
+        TypeRefKind::Function { arguments: args, visibility, mutability, returns }
     }
 
     pub fn lower_elementary_name(&mut self, ty: ElementaryType) -> Option<ElementaryTypeRef> {

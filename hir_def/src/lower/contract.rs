@@ -1,9 +1,9 @@
-use rowan::ast::{AstNode, AstPtr};
+use crate::hir::Item;
 use crate::hir::{ContractId, ContractItem, ContractType, InheritanceSpecifier};
 use crate::hir::{Ident, IdentPath};
-use crate::hir::Item;
 use crate::lower::LowerCtx;
 use crate::FileAstPtr;
+use rowan::ast::{AstNode, AstPtr};
 use syntax::ast::nodes;
 
 impl<'a> LowerCtx<'a> {
@@ -50,13 +50,10 @@ impl<'a> LowerCtx<'a> {
         }
         let name = Ident::from_name(self.db, s.name());
         let is_abstract = s.abstract_token().is_some();
-        let inheritance_chain = s.inheritance()
-            .and_then(|s| self.lower_inheritance(s))
-            .unwrap_or_default();
+        let inheritance_chain =
+            s.inheritance().and_then(|s| self.lower_inheritance(s)).unwrap_or_default();
 
-        let body = s.contract_items()
-            .filter_map(|t| self.lower_contract_item(t))
-            .collect();
+        let body = s.contract_items().filter_map(|t| self.lower_contract_item(t)).collect();
 
         let contract = ContractId::new(
             self.db,
@@ -68,7 +65,7 @@ impl<'a> LowerCtx<'a> {
             body,
             AstPtr::new(&s),
         );
-        
+
         self.save_span(s.syntax().text_range(), Item::Contract(contract));
         for i in contract.items(self.db) {
             i.set_origin(self.db, contract);

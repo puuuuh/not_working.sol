@@ -1,21 +1,25 @@
-use std::sync::Arc;
 use async_lsp::ClientSocket;
+use base_db::{BaseDb, File, Project, TestDatabase};
 use camino::Utf8PathBuf;
 use change::FileChange;
+use completion::{completion, Completion};
 use diagnostic::Diagnostic;
+use hir_def::{hir::FilePosition, lower_file, FileExt, SyntaxError};
+use hir_ty::error::TypeResolutionError;
+use hir_ty::resolver::resolve_file;
 use navigation_target::NavigationTarget;
 use rowan::TextSize;
-use base_db::{BaseDb, File, Project, TestDatabase};
-use hir_def::{hir::FilePosition, lower_file, FileExt, SyntaxError};
+use salsa::Database;
 use salsa::Setter;
+use std::sync::Arc;
 use tracing::warn;
 use vfs::VfsPath;
-use salsa::Database;
 
+pub mod change;
+pub mod completion;
+pub mod diagnostic;
 mod goto_definition;
 mod navigation_target;
-pub mod change;
-pub mod diagnostic;
 
 #[derive(Clone)]
 pub struct AnalysisHost {
@@ -26,11 +30,8 @@ pub struct AnalysisHost {
 impl AnalysisHost {
     pub fn new() -> Self {
         let db = TestDatabase::default();
-        let project = Project::new(&db, VfsPath::from_virtual(String::new())) ;
-        Self {
-            db,
-            project,
-        }
+        let project = Project::new(&db, VfsPath::from_virtual(String::new()));
+        Self { db, project }
     }
 
     pub fn reload_project(&mut self, root: Utf8PathBuf) {
@@ -46,7 +47,7 @@ impl AnalysisHost {
     }
 
     pub fn path(&self, f: File) -> Utf8PathBuf {
-        match self.db.path(f)  {
+        match self.db.path(f) {
             VfsPath::Path(utf8_path_buf) => utf8_path_buf,
             VfsPath::Virtual(virtual_path) => virtual_path.to_path_buf(),
         }
@@ -61,9 +62,18 @@ impl AnalysisHost {
     }
 
     pub fn goto_definition(&self, file: File, pos: TextSize) -> Vec<NavigationTarget> {
-        self.db.attach(|_| {
-            goto_definition::goto_definition(&self.db, self.project, FilePosition { file, offset: pos }).unwrap_or(vec![])
+        self.db.attach(|db| {
+            goto_definition::goto_definition(
+                &self.db,
+                self.project,
+                FilePosition { file, offset: pos },
+            )
+            .unwrap_or(vec![])
         })
+    }
+
+    pub fn completion(&self, file: File, pos: FilePosition) -> Option<Vec<Completion>> {
+        completion::completion(&self.db, self.project, pos)
     }
 
     pub fn apply_change(&mut self, file: File, change: FileChange) {
@@ -71,17 +81,17 @@ impl AnalysisHost {
             FileChange::SetContent { data } => {
                 file.set_content(&mut self.db).to(data);
                 file.set_exists(&mut self.db).to(true);
-            },
-            FileChange::Delete { } => {
+            }
+            FileChange::Delete {} => {
                 if !file.set_exists(&mut self.db).to(true) {
                     warn!("File already deleted")
                 }
             }
-            FileChange::Create { } => {
+            FileChange::Create {} => {
                 if file.set_exists(&mut self.db).to(true) {
                     warn!("File already exists")
                 }
-            },
+            }
             FileChange::Rename { new_file } => {
                 if new_file.exists(&mut self.db) {
                     warn!("Destination file already exists");
@@ -93,17 +103,18 @@ impl AnalysisHost {
                 new_file.set_exists(&mut self.db).to(true);
                 let content = file.content(&self.db);
                 new_file.set_content(&mut self.db).to(content);
-            },
+            }
         }
     }
 
-    pub fn initial_analyze(&self, files: impl Iterator<Item = File>) {
-        for f in files {
-            lower_file(&self.db, f);
-        }
-    }
-
-    pub fn diagnostics(&self, file: File) -> Vec<&SyntaxError> {
-        lower_file::accumulated::<SyntaxError>(&self.db, file)
+    pub fn diagnostics(&self, file: File) -> Vec<Diagnostic> {
+        let syntax: Vec<&SyntaxError> = lower_file::accumulated::<SyntaxError>(&self.db, file);
+        dbg!(syntax.len());
+        self.db.attach(|_| {
+            let typeres: Vec<&TypeResolutionError> = resolve_file::accumulated::<TypeResolutionError>(&self.db, self.project, file);
+            dbg!(typeres.len());
+            let typeres = typeres.into_iter().map(Diagnostic::TypeResolution);
+            syntax.into_iter().map(Diagnostic::Syntax).chain(typeres).collect()
+        })
     }
 }

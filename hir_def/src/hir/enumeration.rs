@@ -5,9 +5,9 @@ use crate::{impl_major_item, lazy_field, FileAstPtr};
 use base_db::{BaseDb, Project};
 use rowan::ast::AstPtr;
 use salsa::Database;
-use vfs::File;
 use std::fmt::Write;
 use syntax::ast::nodes;
+use vfs::File;
 
 #[salsa::tracked(debug)]
 pub struct EnumerationId<'db> {

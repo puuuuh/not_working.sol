@@ -1,29 +1,23 @@
-use std::{collections::{hash_map::Entry, BTreeSet, HashMap, HashSet}, iter::once, sync::Arc};
+use std::{
+    collections::BTreeSet,
+    iter::once,
+    sync::Arc,
+};
 
 use base_db::{BaseDb, Project, TestDatabase};
-use hir_def::{lower_file, Ident, ImportId, ImportKind, Item, SourceUnit};
-use indexmap::IndexMap;
+use hir_def::{Ident, ImportId, ImportKind, Item, SourceUnit, lower_file};
+use indexmap::{map::Entry, IndexMap, IndexSet};
 use smallvec::SmallVec;
 use vfs::{AnchoredPath, File, VfsPath};
 
-use salsa::Database;
+use salsa::{tracked, Database};
 
-#[salsa::tracked(debug)]
-pub struct ImportResolution<'db> {
-    #[return_ref]
-    pub items: Vec<(Ident<'db>, Item<'db>)>,
-
-    #[return_ref]
-    pub errors: SmallVec<[String; 1]>,
-}
-
-#[salsa::tracked]
-fn resolve_file<'db>(db: &'db dyn BaseDb, project: Project, file: File) -> ImportResolution<'db> {
+#[salsa::tracked(return_ref)]
+pub fn resolve_file_root<'db>(db: &'db dyn BaseDb, project: Project, file: File) -> Vec<(Ident<'db>, Item<'db>)> {
     let mut ctx = ImportResolutionCtx {
         imported: Default::default(),
-        modules: Default::default(),
+        imported_modules: Default::default(),
         items: Default::default(),
-        explicit_imports: Default::default(),
         queue: Default::default(),
         errors: SmallVec::new(),
         remappings: project.remappings(db),
@@ -34,51 +28,57 @@ fn resolve_file<'db>(db: &'db dyn BaseDb, project: Project, file: File) -> Impor
     }
     ctx.resolve_items_inner(db, project, file, None);
     ctx.resolve_items(db, project);
-    let items = ctx.items.into_iter()
-        .flat_map(|(name, data)| data.into_iter().map(move |item| (name, item)));
-    ImportResolution::new(db, items.collect(), ctx.errors)
-}
+    let mut items = ctx
+        .items
+        .into_iter()
+        .flat_map(|(name, data)| data.into_iter().map(move |item| (name, item)))
+        .collect::<Vec<_>>();
+    items.sort_by_key(|item| item.0);
 
-impl<'db> ImportResolution<'db> {
-    pub fn from_file(db: &'db dyn BaseDb, project: Project, file: File) -> Self {
-        resolve_file(db, project, file)
-    }
+    items
 }
 
 struct ImportResolutionCtx<'db> {
-    // Already resolved items
-    imported: HashMap<VfsPath, Option<HashMap<Ident<'db>, Ident<'db>>>>,
-    modules: IndexMap<Ident<'db>, SourceUnit<'db>>,
-    items: IndexMap<Ident<'db>, HashSet<Item<'db>>>,
-    explicit_imports: Vec<(Ident<'db>, ImportId<'db>)>,
+    imported: IndexMap<File, Option<IndexMap<Ident<'db>, Ident<'db>>>>,
+    imported_modules: IndexMap<Ident<'db>, SourceUnit<'db>>,
+    items: IndexMap<Ident<'db>, IndexSet<Item<'db>>>,
+
     queue: BTreeSet<File>,
-    errors: SmallVec<[String; 1]>,
+    errors: SmallVec<[(ImportId<'db>, String); 1]>,
     remappings: &'db Vec<(String, String)>,
 }
 
 impl<'db> ImportResolutionCtx<'db> {
     fn resolve_items(&mut self, db: &'db dyn BaseDb, project: Project) {
-        for (path, filter) in std::mem::take(&mut self.imported) {
-            if let Some(f) = db.file(&path) {
-                self.resolve_items_inner(db, project, f, filter);
-            } else {
-                self.errors.push(format!("Couldn't open file: {}", path));
-            }
+        for (f, filter) in std::mem::take(&mut self.imported) {
+            self.resolve_items_inner(db, project, f, filter);
         }
+
+        self.items.extend(
+            std::mem::take(&mut self.imported_modules)
+                .into_iter()
+                .map(|(name, m)| (name, IndexSet::from([Item::Module(m)]))),
+        );
     }
-    
-    fn resolve_items_inner(&mut self, db: &'db dyn BaseDb, project: Project, f: File, remappings: Option<HashMap<Ident<'db>, Ident<'db>>>) {
+
+    fn resolve_items_inner(
+        &mut self,
+        db: &'db dyn BaseDb,
+        project: Project,
+        f: File,
+        remappings: Option<IndexMap<Ident<'db>, Ident<'db>>>,
+    ) {
         let tree = lower_file(db, f);
         if let Some(remappings) = remappings {
             for i in tree.named_items(db) {
-                if let Some(rename) = remappings.get(&i.0) {
+                if let Some(rename) = remappings.get(i.0) {
                     match self.items.entry(*rename) {
                         indexmap::map::Entry::Occupied(mut occupied_entry) => {
                             occupied_entry.get_mut().insert((*i.1));
-                        },
+                        }
                         indexmap::map::Entry::Vacant(vacant_entry) => {
                             vacant_entry.insert(once(*i.1).collect());
-                        },
+                        }
                     }
                 }
             }
@@ -87,16 +87,22 @@ impl<'db> ImportResolutionCtx<'db> {
                 match self.items.entry(*name) {
                     indexmap::map::Entry::Occupied(mut occupied_entry) => {
                         occupied_entry.get_mut().insert(*item);
-                    },
+                    }
                     indexmap::map::Entry::Vacant(vacant_entry) => {
                         vacant_entry.insert(once(*item).collect());
-                    },
+                    }
                 }
             }
         }
     }
 
-    fn resolve_imports_inner(&mut self, db: &'db dyn BaseDb, project: Project, f: File, filter: &Option<HashSet<Ident<'db>>>) {
+    fn resolve_imports_inner(
+        &mut self,
+        db: &'db dyn BaseDb,
+        project: Project,
+        f: File,
+        filter: &Option<IndexSet<Ident<'db>>>,
+    ) {
         let tree = lower_file(db, f);
         let imports = tree.data(db).imports(db);
         for (mut path, import) in imports.into_iter().flat_map(|i| i.path(db).map(|p| (p, i))) {
@@ -107,45 +113,52 @@ impl<'db> ImportResolutionCtx<'db> {
             }
             let p = AnchoredPath::new(f, path);
             let Some(path) = db.resolve_path(project, &p) else {
-                self.errors.push(format!("Couldn't resolve path: {}", p.path()));
+                self.errors.push((*import, format!("Couldn't resolve path: {}", p.path())));
                 continue;
             };
             let Some(file) = db.file(&path) else {
-                self.errors.push(format!("Couldn't resolve path: {}", path));
+                self.errors.push((*import, format!("File not found: {}", path)));
                 return;
             };
-            
+
             let mut root_changed = false;
             match import.kind(db) {
-                ImportKind::Path { name: Some(as_name), .. } 
-                    | ImportKind::Glob { as_name, .. } => {
-                    self.modules.insert(as_name, lower_file(db, file));
-                },
+                ImportKind::Path { name: Some(as_name), .. } | ImportKind::Glob { as_name, .. } => {
+                    self.imported_modules.insert(as_name, lower_file(db, file));
+                }
                 ImportKind::Path { .. } => {
-                    root_changed = self.imported.insert(path.clone(), None) != Some(None);
-                },
+                    root_changed = self.imported.insert(file, None) != Some(None);
+                }
                 ImportKind::Aliases { symbol_aliases, .. } => {
                     if symbol_aliases.is_empty() {
                         continue;
                     }
-                    match self.imported.entry(path.clone()) {
+                    match self.imported.entry(file) {
                         Entry::Occupied(mut e) => {
-                            if let Some(e) =  e.get_mut() {
+                            if let Some(e) = e.get_mut() {
                                 for a in symbol_aliases {
-                                    root_changed |= e.insert(a.name, a.as_name.unwrap_or(a.name)).is_some();
+                                    root_changed |=
+                                        e.insert(a.name, a.as_name.unwrap_or(a.name)).is_some();
                                 }
                             } else {
                                 // Already imported as glob
                                 continue;
                             }
-                        },
+                        }
                         Entry::Vacant(e) => {
                             root_changed = true;
-                            e.insert(Some(symbol_aliases.iter().map(|a| (a.name, a.as_name.unwrap_or(a.name))).collect()));
-                        },
+                            e.insert(Some(
+                                symbol_aliases
+                                    .iter()
+                                    .map(|a| (a.name, a.as_name.unwrap_or(a.name)))
+                                    .collect(),
+                            ));
+                        }
                     }
-                },
-                ImportKind::Error => { continue; },
+                }
+                ImportKind::Error => {
+                    continue;
+                }
             }
 
             if root_changed {

@@ -1,10 +1,9 @@
-use rowan::ast::{AstNode, AstPtr};
 use crate::hir;
-use crate::hir::{Expr, ExprId};
 use crate::hir::Ident;
 use crate::hir::Literal;
-use crate::hir::TypeRef;
+use crate::hir::{Expr, ExprId};
 use crate::lower::LowerCtx;
+use rowan::ast::{AstNode, AstPtr};
 use syntax::ast::nodes;
 
 impl<'db> LowerCtx<'db> {
@@ -70,9 +69,9 @@ impl<'db> LowerCtx<'db> {
                     let content = i.exprs().map(|e| self.lower_expr(e)).collect();
                     Expr::Tuple { content }
                 }
-                nodes::Expr::IdentExpr(i) => Expr::Ident {
-                    name_ref: Ident::from_name_ref(self.db, i.name_ref()),
-                },
+                nodes::Expr::IdentExpr(i) => {
+                    Expr::Ident { name_ref: Ident::from_name_ref(self.db, i.name_ref()) }
+                }
                 nodes::Expr::LiteralExpr(lit) => Expr::Literal {
                     data: lit.literal().map(|l| self.lower_literal(l)).unwrap_or(Literal::Error),
                 },
@@ -80,12 +79,12 @@ impl<'db> LowerCtx<'db> {
                     data: self.lower_elementary_name(ty.clone()).unwrap(),
                 },
                 nodes::Expr::NewExpr(new) => Expr::New {
-                    ty: new.ty().map(|a| self.lower_type_ref(a)).unwrap_or(TypeRef::Error),
+                    ty: self.lower_type_ref2(new.ty()),
                 },
             },
-            Some(crate::AstPtr::new(&expr)),
+            Some(crate::FileAstPtr::new(self.file, &expr)),
         );
-        
+
         self.save_expr(expr, res);
         res
     }

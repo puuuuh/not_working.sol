@@ -8,12 +8,8 @@ pub struct ContentChange {
 }
 
 pub enum FileChange {
-    SetContent {
-        data: Arc<str>
-    },
+    SetContent { data: Arc<str> },
     Delete {},
     Create {},
-    Rename {
-        new_file: File,
-    },
+    Rename { new_file: File },
 }

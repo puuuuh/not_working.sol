@@ -1,6 +1,5 @@
 use std::fmt::{Display, Formatter};
 
-
 #[derive(Clone, Eq, PartialEq, Debug, Hash, salsa::Update)]
 pub enum StateMutability {
     Pure,

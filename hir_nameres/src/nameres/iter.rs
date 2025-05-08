@@ -4,21 +4,15 @@ use base_db::BaseDb;
 use hir_def::{Ident, Item};
 use vfs::File;
 
-use crate::scope::{body::Definition, Scope};
+use crate::scope::{Scope, body::Definition};
 
 enum ScopeIterInner<'db> {
-    Expr {
-        items: &'db [(Ident<'db>, Item<'db>)],
-        pos: usize,
-    },
+    Expr { items: &'db [(Ident<'db>, Item<'db>)], pos: usize },
 }
 
 impl<'db> ScopeIterInner<'db> {
     fn expr(data: &'db [(Ident<'db>, Item<'db>)]) -> Self {
-        Self::Expr {
-            items: data,
-            pos: 0
-        }
+        Self::Expr { items: data, pos: 0 }
     }
 }
 
@@ -35,7 +29,7 @@ impl<'db> Iterator for ScopeIterInner<'db> {
                 } else {
                     None
                 }
-            } 
+            }
         }
     }
 }
@@ -43,7 +37,7 @@ impl<'db> Iterator for ScopeIterInner<'db> {
 pub struct ScopeIter<'db> {
     db: &'db dyn BaseDb,
     expr_scopes: ScopeIterInner<'db>,
-    current_scope: Scope<'db>
+    current_scope: Scope<'db>,
 }
 
 impl<'db> Iterator for ScopeIter<'db> {
@@ -62,12 +56,12 @@ impl<'db> Iterator for ScopeIter<'db> {
                     } else {
                         break;
                     }
-                },
+                }
                 Scope::Body(body_scope) => {
                     body_scope.expr_scopes(self.db);
                     //self.expr_scopes = Some(body_scope.expr_scopes(self.db));
                     self.current_scope = Scope::Item(body_scope.parent(self.db));
-                },
+                }
                 Scope::Expr(body_scope, i) => {
                     todo!()
                 }

@@ -1,14 +1,15 @@
 use crate::hir::ident::Ident;
-use crate::hir::type_name::TypeRef;
 use crate::hir::ContractId;
 use crate::items::HirPrint;
 use crate::{impl_major_item, lazy_field, FileAstPtr};
 use base_db::{BaseDb, Project};
 use rowan::ast::AstPtr;
 use salsa::{tracked, Database};
-use vfs::File;
 use std::fmt::Write;
 use syntax::ast::nodes;
+use vfs::File;
+
+use super::TypeRefId;
 
 #[tracked(debug)]
 pub struct EventId<'db> {
@@ -61,7 +62,7 @@ impl HirPrint for EventParameterId<'_> {
 pub struct EventParameter<'db> {
     pub name: Option<Ident<'db>>,
     pub is_indexed: bool,
-    pub ty: TypeRef<'db>,
+    pub ty: TypeRefId<'db>,
 }
 
 impl HirPrint for EventParameter<'_> {

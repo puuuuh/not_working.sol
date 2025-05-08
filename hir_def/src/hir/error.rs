@@ -1,14 +1,15 @@
 use crate::hir::ident::Ident;
-use crate::hir::type_name::TypeRef;
 use crate::hir::ContractId;
 use crate::items::HirPrint;
 use crate::{impl_major_item, lazy_field, FileAstPtr};
 use base_db::{BaseDb, Project};
 use rowan::ast::AstPtr;
 use salsa::{tracked, Database};
-use vfs::File;
 use std::fmt::{Error, Write};
 use syntax::ast::nodes;
+use vfs::File;
+
+use super::TypeRefId;
 
 #[tracked(debug)]
 pub struct ErrorId<'db> {
@@ -53,7 +54,7 @@ impl HirPrint for ErrorParameterId<'_> {
 #[derive(Debug, Clone, Eq, PartialEq, Hash, salsa::Update)]
 pub struct ErrorParameter<'db> {
     pub name: Option<Ident<'db>>,
-    pub ty: TypeRef<'db>,
+    pub ty: TypeRefId<'db>,
 }
 
 impl HirPrint for ErrorParameter<'_> {

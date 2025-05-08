@@ -1,8 +1,7 @@
-use crate::hir::{Ident, IdentPath};
 use crate::hir::Item;
-use crate::hir::{StateVariableId, StateVariableInfo, StateVariableMutability};
-use crate::hir::TypeRef;
 use crate::hir::Visibility;
+use crate::hir::{Ident, IdentPath};
+use crate::hir::{StateVariableId, StateVariableInfo, StateVariableMutability};
 use crate::lower::LowerCtx;
 use crate::FileAstPtr;
 use rowan::ast::{AstNode, AstPtr};
@@ -21,10 +20,8 @@ impl<'db> LowerCtx<'db> {
 
         for m in e {
             if let Some(i) = m.override_specifier() {
-                overrides = i
-                    .ident_paths()
-                    .map(|p| IdentPath::from(self.db, p))
-                    .collect::<Vec<_>>();
+                overrides =
+                    i.ident_paths().map(|p| IdentPath::from(self.db, p)).collect::<Vec<_>>();
             } else {
                 for t in m.syntax().children_with_tokens() {
                     match t.kind() {
@@ -53,13 +50,12 @@ impl<'db> LowerCtx<'db> {
             self.db,
             self.file,
             Ident::from_name(self.db, s.name()),
-            s.ty().map(|t| self.lower_type_ref(t)).unwrap_or(TypeRef::Error),
+            self.lower_type_ref2(s.ty()),
             info,
-
             AstPtr::new(&s),
         );
         self.save_span(s.syntax().text_range(), Item::StateVariable(res));
-        
+
         res
     }
 }

@@ -1,18 +1,18 @@
-use crate::hir::variable_declaration::VariableDeclaration;
 use crate::hir::function::ModifierInvocation;
 use crate::hir::statement::StatementId;
+use crate::hir::variable_declaration::VariableDeclaration;
 use crate::hir::{ContractId, Item};
 use crate::items::HirPrint;
 use crate::lower::LowerCtx;
 use crate::source_map::item_source_map::ItemSourceMap;
 use crate::{impl_major_item, lazy_field, FileAstPtr, FileExt};
 use base_db::{BaseDb, Project};
-use rowan::ast::AstPtr;
 use rowan::ast::AstNode;
+use rowan::ast::AstPtr;
 use salsa::{tracked, Database};
-use vfs::File;
 use std::fmt::Write;
 use syntax::ast::nodes::{self, ConstructorDefinition, UnitSource};
+use vfs::File;
 
 use super::state_mutability::StateMutability;
 use super::visibility::Visibility;
@@ -25,7 +25,7 @@ pub struct ConstructorId<'db> {
 
     #[salsa::tracked]
     pub info: Constructor<'db>,
-    
+
     #[salsa::tracked]
     pub body_node: Option<AstPtr<nodes::Block>>,
 
@@ -44,16 +44,22 @@ impl<'db> ConstructorId<'db> {
         let node = self.body_node(db)?;
         let root = file.node(db);
         let root = root.syntax();
-        
+
         let expr = node.to_node(&root);
 
         let mut lowerer = LowerCtx::new(db, file);
 
         let res = lowerer.lower_stmt(nodes::Stmt::Block(expr));
 
-        return Some((res, ItemSourceMap::new(crate::IndexMapUpdate(lowerer.exprs), crate::IndexMapUpdate(lowerer.stmts))));
+        return Some((
+            res,
+            ItemSourceMap::new(
+                crate::IndexMapUpdate(lowerer.exprs),
+                crate::IndexMapUpdate(lowerer.stmts),
+            ),
+        ));
     }
-}   
+}
 
 impl HirPrint for ConstructorId<'_> {
     fn write<T: Write>(&self, db: &dyn Database, w: &mut T, ident: usize) -> std::fmt::Result {

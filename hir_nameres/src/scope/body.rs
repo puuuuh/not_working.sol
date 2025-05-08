@@ -2,6 +2,8 @@ use std::ops::Range;
 use std::sync::Arc;
 use std::thread::current;
 
+use base_db::{BaseDb, Project};
+use hir_def::IndexMapUpdate;
 use hir_def::hir::EnumerationVariantId;
 use hir_def::hir::ExprId;
 use hir_def::hir::FunctionId;
@@ -11,25 +13,23 @@ use hir_def::hir::Item;
 use hir_def::hir::StructureFieldId;
 use hir_def::hir::VariableDeclaration;
 use hir_def::hir::{Statement, StatementId};
-use hir_def::walk::walk_stmt;
 use hir_def::walk::Visitor;
-use hir_def::IndexMapUpdate;
-use base_db::{BaseDb, Project};
+use hir_def::walk::walk_stmt;
 use indexmap::IndexMap;
 use salsa::Database;
-use smallvec::smallvec;
 use smallvec::SmallVec;
+use smallvec::smallvec;
 use vfs::File;
 
 use crate::scope::ItemScope;
 
-use super::item::ItemScopeIter;
 use super::Scope;
+use super::item::ItemScopeIter;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, salsa::Update)]
 pub enum StmtOrItem<'db> {
     Stmt(StatementId<'db>),
-    Item(Item<'db>)
+    Item(Item<'db>),
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, salsa::Update)]
@@ -37,7 +37,7 @@ pub enum Definition<'db> {
     Item((Item<'db>)),
     Local((StmtOrItem<'db>, VariableDeclaration<'db>)),
     Field(StructureFieldId<'db>),
-    EnumVariant(EnumerationVariantId<'db>)
+    EnumVariant(EnumerationVariantId<'db>),
 }
 
 pub struct BodyScopeIter<'db> {
@@ -46,7 +46,7 @@ pub struct BodyScopeIter<'db> {
     current: ExprScope,
     scopes: &'db [ExprScope],
     definitions: &'db [(Ident<'db>, Definition<'db>)],
-    name: Option<Ident<'db>>
+    name: Option<Ident<'db>>,
 }
 
 impl<'db> BodyScopeIter<'db> {
@@ -79,10 +79,10 @@ impl<'db> Iterator for BodyScopeIter<'db> {
                         return Some(t);
                     }
                 } else {
-                    return Some(t)
+                    return Some(t);
                 }
             } else {
-                return self.item.next().map(|(name, item)| (name, item) );
+                return self.item.next().map(|(name, item)| (name, item));
             }
         }
     }
@@ -109,13 +109,13 @@ pub struct BodyScope<'db> {
 
 impl<'db> BodyScope<'db> {
     pub fn from_body(
-        db: &'db dyn BaseDb, 
-        project: Project, 
-        parent: ItemScope<'db>, 
-        item: Item<'db>, 
-        args: impl Iterator<Item = VariableDeclaration<'db>>, 
-        body: Option<StatementId<'db>>) -> BodyScope<'db> {
-
+        db: &'db dyn BaseDb,
+        project: Project,
+        parent: ItemScope<'db>,
+        item: Item<'db>,
+        args: impl Iterator<Item = VariableDeclaration<'db>>,
+        body: Option<StatementId<'db>>,
+    ) -> BodyScope<'db> {
         resolve_body(db, project, parent, item, args, body)
     }
 
@@ -129,18 +129,14 @@ impl<'db> BodyScope<'db> {
         self.lookup_in_scope(db, scope, name)
     }
 
-    pub fn iter_in_scope(
-        self,
-        db: &'db dyn BaseDb,
-        scope: usize,
-    ) -> BodyScopeIter<'db> {
-        BodyScopeIter { 
-            name: None, 
-            db, 
-            current: self.expr_scopes(db)[scope].clone(), 
-            scopes: self.expr_scopes(db), 
-            definitions: self.definitions(db), 
-            item: self.parent(db).iter(db)  
+    pub fn iter_in_scope(self, db: &'db dyn BaseDb, scope: usize) -> BodyScopeIter<'db> {
+        BodyScopeIter {
+            name: None,
+            db,
+            current: self.expr_scopes(db)[scope].clone(),
+            scopes: self.expr_scopes(db),
+            definitions: self.definitions(db),
+            item: self.parent(db).iter(db),
         }
     }
 
@@ -150,13 +146,14 @@ impl<'db> BodyScope<'db> {
         scope: usize,
         name: Ident<'db>,
     ) -> BodyScopeIter<'db> {
-        BodyScopeIter { 
-            name: Some(name), 
-            db, 
-            current: self.expr_scopes(db)[scope].clone(), 
-            scopes: self.expr_scopes(db), 
-            definitions: self.definitions(db), 
-            item: self.parent(db).name(db, name)  }
+        BodyScopeIter {
+            name: Some(name),
+            db,
+            current: self.expr_scopes(db)[scope].clone(),
+            scopes: self.expr_scopes(db),
+            definitions: self.definitions(db),
+            item: self.parent(db).name(db, name),
+        }
     }
 }
 
@@ -169,9 +166,18 @@ pub struct ScopeResolver<'db> {
     scope_by_stmt: IndexMap<StatementId<'db>, usize>,
 }
 
-fn resolve_body<'db>(db: &'db dyn BaseDb, project: Project, parent: ItemScope<'db>, item: Item<'db>, args: impl Iterator<Item = (VariableDeclaration<'db>)>, body: Option<StatementId<'db>>) -> BodyScope<'db> {
+fn resolve_body<'db>(
+    db: &'db dyn BaseDb,
+    project: Project,
+    parent: ItemScope<'db>,
+    item: Item<'db>,
+    args: impl Iterator<Item = (VariableDeclaration<'db>)>,
+    body: Option<StatementId<'db>>,
+) -> BodyScope<'db> {
     let root_items: SmallVec<[(Ident<'_>, Definition<'_>); 2]> = args
-        .filter_map(|a| a.name(db).map(move |n| (n, Definition::Local((StmtOrItem::Item(item), a)))))
+        .filter_map(|a| {
+            a.name(db).map(move |n| (n, Definition::Local((StmtOrItem::Item(item), a))))
+        })
         .collect();
 
     let root_items_len = root_items.len();
@@ -197,12 +203,13 @@ fn resolve_body<'db>(db: &'db dyn BaseDb, project: Project, parent: ItemScope<'d
     resolver.scope_by_stmt.shrink_to_fit();
 
     BodyScope::new(
-        db, 
+        db,
         parent,
         resolver.definitions,
-        resolver.scopes, 
-        IndexMapUpdate(resolver.scope_by_expr), 
-        IndexMapUpdate(resolver.scope_by_stmt))
+        resolver.scopes,
+        IndexMapUpdate(resolver.scope_by_expr),
+        IndexMapUpdate(resolver.scope_by_stmt),
+    )
 }
 
 impl<'db> ScopeResolver<'db> {
@@ -223,10 +230,10 @@ impl<'db> ScopeResolver<'db> {
             }
         }*/
 
-        self.scopes.push(ExprScope { parent, range: self.definitions.len()..self.definitions.len() });
+        self.scopes
+            .push(ExprScope { parent, range: self.definitions.len()..self.definitions.len() });
         self.scope_item_cnt.push(0);
     }
-
 }
 
 impl<'db> Visitor<'db> for &mut ScopeResolver<'db> {
@@ -245,48 +252,41 @@ impl<'db> Visitor<'db> for &mut ScopeResolver<'db> {
             }
             Statement::Try { expr, returns, body, catch } => {
                 self.new_scope(Some(current_scope));
-                for item in returns
-                    .iter()
-                    .flatten()
-                    .filter_map(|a| {
-                        a.name(self.db).map(|name| (name, Definition::Local((StmtOrItem::Stmt(s), *a))))
-                    }) {
+                for item in returns.iter().flatten().filter_map(|a| {
+                    a.name(self.db).map(|name| (name, Definition::Local((StmtOrItem::Stmt(s), *a))))
+                }) {
                     self.add_item(item);
                 }
             }
             _ => {}
         }
-        
+
         (true, current_scope)
     }
-    
+
     fn stmt_end(&mut self, db: &'db dyn BaseDb, ctx: Self::Ctx, s: StatementId<'db>) {
         match s.kind(self.db) {
             Statement::VarDecl { items, init_expr } => {
                 self.new_scope(Some(ctx));
-                for item in items
-                    .iter()
-                    .flatten()
-                    .filter_map(|a| {
-                        a.name(self.db).map(|name| (name, Definition::Local((StmtOrItem::Stmt(s), *a))))
-                    }) {
+                for item in items.iter().flatten().filter_map(|a| {
+                    a.name(self.db).map(|name| (name, Definition::Local((StmtOrItem::Stmt(s), *a))))
+                }) {
                     self.add_item(item);
                 }
             }
-            Statement::Block { .. } |
-                Statement::Try { .. } => {
+            Statement::Block { .. } | Statement::Try { .. } => {
                 self.new_scope(Some(ctx));
             }
             _ => {}
         }
     }
-    
+
     fn expr_start(&mut self, db: &'db dyn BaseDb, expr: ExprId<'db>) -> (bool, Self::ExprCtx) {
         let current_scope = self.scopes.len() - 1;
         self.scope_by_expr.insert(expr, current_scope);
         self.scope_item_cnt[current_scope] += 1;
-        return (true, ())
+        return (true, ());
     }
-    
+
     fn expr_end(&mut self, db: &'db dyn BaseDb, ctx: Self::ExprCtx, expr: ExprId<'db>) {}
 }

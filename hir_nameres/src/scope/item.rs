@@ -39,31 +39,28 @@ impl<'db> ItemScopeIter<'db> {
 
 impl<'db> Iterator for ItemScopeIter<'db> {
     type Item = (Ident<'db>, Definition<'db>);
-    
+
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             let t = self.next_inner()?;
             if let Some(name) = self.name {
                 if t.0 == name {
-                    return Some((t.0, Definition::Item(t.1)))
+                    return Some((t.0, Definition::Item(t.1)));
                 }
             } else {
-                return Some((t.0, Definition::Item(t.1)))
+                return Some((t.0, Definition::Item(t.1)));
             }
         }
     }
-    
 }
 
 impl<'db> ItemScopeIter<'db> {
-    pub(crate) fn from_scope(db: &'db dyn BaseDb, scope: ItemScope<'db>, name: Option<Ident<'db>>) -> Self {
-        Self {
-            name,
-            db,
-            parent: scope.parent(db),
-            items: scope.items(db),
-            pos: 0
-        }
+    pub(crate) fn from_scope(
+        db: &'db dyn BaseDb,
+        scope: ItemScope<'db>,
+        name: Option<Ident<'db>>,
+    ) -> Self {
+        Self { name, db, parent: scope.parent(db), items: scope.items(db), pos: 0 }
     }
 }
 
@@ -73,7 +70,7 @@ pub struct ItemScope<'db> {
     pub parent: Option<ItemScope<'db>>,
     // Keep this sorted, pls:)
     #[return_ref]
-    pub items: Vec<(Ident<'db>, Item<'db>)>
+    pub items: Vec<(Ident<'db>, Item<'db>)>,
 }
 
 #[salsa::tracked]

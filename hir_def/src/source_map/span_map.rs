@@ -29,9 +29,7 @@ unsafe impl<T: salsa::Update> salsa::Update for SpanMap<T> {
 
 impl<T: salsa::Update + Copy> SpanMap<T> {
     pub fn new(mut data: Vec<(TextRange, T)>) -> Self {
-        data.sort_by(|a, b| {
-            a.0.start().cmp(&b.0.start()).then(b.0.end().cmp(&a.0.end()))
-        });
+        data.sort_by(|a, b| a.0.start().cmp(&b.0.start()).then(b.0.end().cmp(&a.0.end())));
 
         let mut res = Vec::with_capacity(data.len());
         let mut stack: Vec<(TextSize, T)> = Vec::with_capacity(3);
@@ -54,16 +52,16 @@ impl<T: salsa::Update + Copy> SpanMap<T> {
             res.push((range.end(), *item));
         }
 
-        Self {
-            data: res
-        }
+        Self { data: res }
     }
 
     pub fn find_pos(&self, pos: TextSize) -> Option<T> {
-        self.data.get(match self.data.binary_search_by(|a| a.0.cmp(&pos)) {
-            Ok(i) => i,
-            Err(i) => i,
-        }).map(|a| a.1)
+        self.data
+            .get(match self.data.binary_search_by(|a| a.0.cmp(&pos)) {
+                Ok(i) => i,
+                Err(i) => i,
+            })
+            .map(|a| a.1)
     }
 
     pub fn find(&self, range: TextRange) -> Option<T> {

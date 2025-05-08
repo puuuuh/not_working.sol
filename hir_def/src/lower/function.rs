@@ -1,12 +1,11 @@
-use crate::hir::VariableDeclaration;
 use crate::hir::CallOption;
 use crate::hir::ExprId;
-use crate::hir::{Function, FunctionId, ModifierInvocation};
-use crate::hir::{Ident, IdentPath};
 use crate::hir::Item;
 use crate::hir::StateMutability;
-use crate::hir::TypeRef;
+use crate::hir::VariableDeclaration;
 use crate::hir::Visibility;
+use crate::hir::{Function, FunctionId, ModifierInvocation};
+use crate::hir::{Ident, IdentPath};
 use crate::lower::LowerCtx;
 use crate::FileAstPtr;
 use rowan::ast::{AstNode, AstPtr};
@@ -43,11 +42,8 @@ impl<'db> LowerCtx<'db> {
 
         for m in e {
             if let Some(i) = m.override_specifier() {
-                overrides = Some(
-                    i.ident_paths()
-                        .map(|p| IdentPath::from(self.db, p))
-                        .collect::<Vec<_>>(),
-                );
+                overrides =
+                    Some(i.ident_paths().map(|p| IdentPath::from(self.db, p)).collect::<Vec<_>>());
             } else if let Some(i) = m.modifier_invocation() {
                 if let Some(m) = self.lower_modifier_invocation(i) {
                     modifiers.push(m)
@@ -76,10 +72,10 @@ impl<'db> LowerCtx<'db> {
     pub fn lower_parameter(&mut self, p: nodes::VariableDeclaration) -> VariableDeclaration<'db> {
         VariableDeclaration::new(
             self.db,
-            p.ty().map(|ty| self.lower_type_ref(ty)).unwrap_or(TypeRef::Error),
+            self.lower_type_ref2(p.ty()),
             p.location().map(Into::into),
             Ident::from_name_opt(self.db, p.name()),
-            AstPtr::new(&p)
+            AstPtr::new(&p),
         )
     }
 
@@ -126,10 +122,10 @@ impl<'db> LowerCtx<'db> {
         let body = body.map(|a| AstPtr::new(&a));
 
         let args: Vec<_> = parameters
-                    .map(|a| a.variable_declarations().map(|p| self.lower_parameter(p)).collect())
-                    .unwrap_or_default();
-        let returns: Option<Vec<_>> = returns
-                    .map(|a| a.variable_declarations().map(|p| self.lower_parameter(p)).collect());
+            .map(|a| a.variable_declarations().map(|p| self.lower_parameter(p)).collect())
+            .unwrap_or_default();
+        let returns: Option<Vec<_>> =
+            returns.map(|a| a.variable_declarations().map(|p| self.lower_parameter(p)).collect());
 
         let f = FunctionId::new(
             self.db,
@@ -158,12 +154,13 @@ impl<'db> LowerCtx<'db> {
         e: nodes::FallbackFunctionDefinition,
     ) -> FunctionId<'db> {
         self.lower_function_definition_inner(
-            e.function_attributes(), 
-            None, 
-            e.block(), 
-            e.parameter_list(), 
-            e.returns().and_then(|e| e.parameter_list()), 
-            nodes::FunctionDefinition::FallbackFunctionDefinition(e))
+            e.function_attributes(),
+            None,
+            e.block(),
+            e.parameter_list(),
+            e.returns().and_then(|e| e.parameter_list()),
+            nodes::FunctionDefinition::FallbackFunctionDefinition(e),
+        )
     }
 
     pub fn lower_receive_function_definition(
@@ -171,23 +168,25 @@ impl<'db> LowerCtx<'db> {
         e: nodes::ReceiveFunctionDefinition,
     ) -> FunctionId<'db> {
         self.lower_function_definition_inner(
-            e.function_attributes(), 
-            None, 
-            e.block(), 
+            e.function_attributes(),
+            None,
+            e.block(),
             None,
             None,
-            nodes::FunctionDefinition::ReceiveFunctionDefinition(e))
+            nodes::FunctionDefinition::ReceiveFunctionDefinition(e),
+        )
     }
     pub fn lower_named_function_definition(
         &mut self,
         e: nodes::NamedFunctionDefinition,
     ) -> FunctionId<'db> {
         self.lower_function_definition_inner(
-            e.function_attributes(), 
-            e.name(), 
-            e.block(), 
+            e.function_attributes(),
+            e.name(),
+            e.block(),
             e.parameter_list(),
             e.returns().and_then(|e| e.parameter_list()),
-            nodes::FunctionDefinition::NamedFunctionDefinition(e))
+            nodes::FunctionDefinition::NamedFunctionDefinition(e),
+        )
     }
 }

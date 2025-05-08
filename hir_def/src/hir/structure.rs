@@ -1,15 +1,14 @@
 use crate::hir::ident::Ident;
-use crate::hir::type_name::TypeRef;
+use crate::hir::type_name::TypeRefId;
 use crate::hir::ContractId;
 use crate::items::HirPrint;
 use crate::{impl_major_item, lazy_field, FileAstPtr};
 use base_db::{BaseDb, Project};
 use rowan::ast::AstPtr;
 use salsa::{tracked, Database};
-use vfs::File;
 use std::fmt::Write;
 use syntax::ast::nodes;
-
+use vfs::File;
 
 #[tracked(debug)]
 pub struct StructureId<'db> {
@@ -48,7 +47,7 @@ impl HirPrint for StructureId<'_> {
 #[tracked(debug)]
 pub struct StructureFieldId<'db> {
     pub name: Ident<'db>,
-    pub ty: TypeRef<'db>,
+    pub ty: TypeRefId<'db>,
 }
 
 impl HirPrint for StructureFieldId<'_> {

@@ -96,12 +96,13 @@ use syntax::syntax_error::SyntaxError;
 
 impl<'a> Parser<'a> {
     fn new(data: &'a [(SyntaxKind, &'a str)]) -> Self {
-        Self { 
-            pos: 0, 
-            start: data.get(0).map(|s| s.1.as_ptr() as usize).unwrap_or_default(), 
-            tokens: data.to_vec(), 
-            builder: Default::default(), 
-            errors: Vec::new() }
+        Self {
+            pos: 0,
+            start: data.get(0).map(|s| s.1.as_ptr() as usize).unwrap_or_default(),
+            tokens: data.to_vec(),
+            builder: Default::default(),
+            errors: Vec::new(),
+        }
     }
 
     fn tail(&self) -> Self {
@@ -192,7 +193,7 @@ impl<'a> Parser<'a> {
         }
         self.builder.finish_node();
     }
-    
+
     pub(crate) fn name_ref(&mut self) {
         assert!(self.at(IDENT));
         self.builder.start_node(NAME_REF.into());
@@ -203,7 +204,8 @@ impl<'a> Parser<'a> {
     }
 
     fn current_offset(&self) -> usize {
-        self.tokens.get(self.pos)
+        self.tokens
+            .get(self.pos)
             .or(self.tokens.last())
             .map(|s| s.1.as_ptr() as usize)
             .unwrap_or(self.start)
@@ -214,7 +216,17 @@ impl<'a> Parser<'a> {
         let (_, next_token) = self.current_full().unwrap_or_default();
 
         let start = self.current_offset();
-        if self.at_oneof(&[SyntaxKind::L_CURLY, SyntaxKind::R_CURLY, SyntaxKind::L_BRACK, SyntaxKind::R_BRACK, SyntaxKind::L_PAREN, SyntaxKind::R_PAREN]).is_none() {
+        if self
+            .at_oneof(&[
+                SyntaxKind::L_CURLY,
+                SyntaxKind::R_CURLY,
+                SyntaxKind::L_BRACK,
+                SyntaxKind::R_BRACK,
+                SyntaxKind::L_PAREN,
+                SyntaxKind::R_PAREN,
+            ])
+            .is_none()
+        {
             self.bump_any();
         }
         let end = self.current_offset();
@@ -230,7 +242,17 @@ impl<'a> Parser<'a> {
     fn recover(&mut self, expected: &[SyntaxKind], until: SyntaxKind) {
         let (_, next_token) = self.current_full().unwrap_or_default();
         let start = self.current_offset();
-        if self.at_oneof(&[SyntaxKind::L_CURLY, SyntaxKind::R_CURLY, SyntaxKind::L_BRACK, SyntaxKind::R_BRACK, SyntaxKind::L_PAREN, SyntaxKind::R_PAREN]).is_none() {
+        if self
+            .at_oneof(&[
+                SyntaxKind::L_CURLY,
+                SyntaxKind::R_CURLY,
+                SyntaxKind::L_BRACK,
+                SyntaxKind::R_BRACK,
+                SyntaxKind::L_PAREN,
+                SyntaxKind::R_PAREN,
+            ])
+            .is_none()
+        {
             self.bump_any();
         }
         let end = self.current_offset();

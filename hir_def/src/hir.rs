@@ -1,4 +1,4 @@
-mod variable_declaration;
+mod call_options;
 mod constructor;
 mod contract;
 mod data_location;
@@ -13,17 +13,17 @@ mod import;
 mod literal;
 mod modifier;
 mod op;
+mod pragma;
+mod source_unit;
+mod state_mutability;
 mod state_variable;
 mod statement;
 mod structure;
 mod type_name;
 mod user_defined_value_type;
 mod using;
+mod variable_declaration;
 mod visibility;
-mod pragma;
-mod source_unit;
-mod call_options;
-mod state_mutability;
 
 use base_db::BaseDb;
 use rowan::ast::AstNode;
@@ -33,7 +33,7 @@ use vfs::File;
 
 use std::fmt::{Display, Formatter};
 
-pub use variable_declaration::*;
+pub use call_options::*;
 pub use constructor::*;
 pub use contract::*;
 pub use data_location::*;
@@ -48,17 +48,17 @@ pub use import::*;
 pub use literal::*;
 pub use modifier::*;
 pub use op::*;
+pub use pragma::*;
+pub use source_unit::*;
+pub use state_mutability::*;
 pub use state_variable::*;
 pub use statement::*;
 pub use structure::*;
 pub use type_name::*;
 pub use user_defined_value_type::*;
 pub use using::*;
+pub use variable_declaration::*;
 pub use visibility::*;
-pub use pragma::*;
-pub use source_unit::*;
-pub use call_options::*;
-pub use state_mutability::*;
 
 use crate::{source_map::item_source_map::ItemSourceMap, FileExt, InFile};
 
@@ -75,7 +75,6 @@ macro_rules! impl_major_item {
         )+
     };
 }
-
 
 pub trait HasSyntax<'db> {
     type Node;
@@ -96,7 +95,7 @@ macro_rules! impl_has_syntax {
                 node
             }
         }
-    }
+    };
 }
 
 pub trait HasFile<'db> {
@@ -129,6 +128,9 @@ impl<'db> HasSyntax<'db> for &InFile<VariableDeclaration<'db>> {
 }
 
 pub trait HasBody<'db> {
-    fn body(self, db: &'db dyn BaseDb, file: File) -> Option<(StatementId<'db>, ItemSourceMap<'db>)>;
+    fn body(
+        self,
+        db: &'db dyn BaseDb,
+        file: File,
+    ) -> Option<(StatementId<'db>, ItemSourceMap<'db>)>;
 }
-

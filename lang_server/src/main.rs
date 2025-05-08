@@ -8,10 +8,10 @@ use tower::ServiceBuilder;
 use tracing::Level;
 
 mod db;
-mod server;
 pub mod from_proto;
-pub mod to_proto;
+mod server;
 pub mod tasks;
+pub mod to_proto;
 
 #[tokio::main]
 async fn main() {

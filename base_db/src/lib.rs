@@ -2,11 +2,12 @@ mod input;
 
 use std::sync::Arc;
 
+pub use crate::input::Project;
 use rowan::TextSize;
 use salsa::Event;
+use tracing::warn;
 use vfs::Vfs;
 pub use vfs::{AnchoredPath, File, VfsPath};
-pub use crate::input::Project;
 
 #[salsa::db]
 pub trait BaseDb: salsa::Database {
@@ -19,23 +20,19 @@ pub trait BaseDb: salsa::Database {
 
 pub struct TestFixture {
     pub files: Vec<(String, Arc<str>)>,
-    pub position: Option<TextSize>
+    pub position: Option<TextSize>,
 }
 
 impl TestFixture {
     pub fn parse(data: &str) -> Self {
-        if let Some(t) = data.find("$0") {
-            let data = data[..t].to_string() + &data[t+2..];
-            Self {
-                files: vec![("test_file.sol".to_owned(), Arc::from(data.as_str()))],
-                position: Some(TextSize::new(t as _))
-            }
-        } else {
-            Self {
-                files: vec![("test_file.sol".to_string(), Arc::from(data))],
-                position: None
-            }
-        }
+        let pos = data.find("$0").map(|pos| TextSize::new(pos as _));
+        let data = data.replacen("$0", "", 1);
+        let files = data.split("/// ENDFILE").map(|d| {
+            let (name, data) = d.trim_start().split_once("\n").unwrap();
+            (name.to_string(), Arc::from(data.to_string()))
+        }).collect();
+
+        Self { files, position: pos }
     }
 }
 
@@ -50,7 +47,7 @@ impl TestDatabase {
     pub fn from_fixture(data: TestFixture) -> (Self, File) {
         let mut db = Self::default();
         let mut first_file = None;
-        let f= data.files.into_iter().map(|(p, f)| {
+        let f = data.files.into_iter().map(|(p, f)| {
             if first_file.is_none() {
                 first_file = Some(VfsPath::from_virtual(p.clone()));
             }
@@ -69,8 +66,7 @@ impl BaseDb for TestDatabase {
     }
 
     fn anchored_file(&self, project: Project, path: &AnchoredPath) -> Option<File> {
-        self.resolve_path(project, path)
-            .and_then(|p| self.file(&p))
+        self.resolve_path(project, path).and_then(|p| self.file(&p))
     }
 
     fn file(&self, path: &VfsPath) -> Option<File> {

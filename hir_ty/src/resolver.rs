@@ -1,40 +1,55 @@
-use base_db::{BaseDb, File, Project};
-use hir_def::{hir::{BinaryOp, ElementaryTypeRef, Expr, ExprId, Ident, Item, Statement, 
-    StatementId, TypeRef}, walk::{walk_stmt, Visitor}, IndexMapUpdate};
-use hir_nameres::{container::{self, Container}, scope::{body::Definition, Scope}};
-use hir_nameres::scope::HasScope;
-use indexmap::IndexMap;
-use salsa::Database;
+use std::cmp::Reverse;
 
-use crate::tys::{unknown, Ty, TyKind};
+use base_db::{BaseDb, File, Project};
+use hir_def::{
+    hir::{
+        BinaryOp, ElementaryTypeRef, Expr, ExprId, Ident, Item, Statement, StatementId,
+    }, lower_file, walk::{walk_stmt, Visitor}, FileAstPtr, InFile, IndexMapUpdate, TypeRefId, TypeRefKind
+};
+use hir_nameres::scope::HasScope;
+use hir_nameres::{
+    container::{self, Container},
+    scope::{body::Definition, Scope},
+};
+use indexmap::IndexMap;
+use salsa::{Accumulator, Database};
+use syntax::ast::nodes;
+
+use crate::{
+    error::TypeResolutionError, tys::{unknown, Ty, TyKind}
+};
+
+use hir_def::hir::HasSyntax;
+use rowan::ast::AstNode;
 
 #[salsa::tracked(debug)]
 pub struct TypeResolution<'db> {
     #[returns_ref]
     pub expr_map: IndexMapUpdate<ExprId<'db>, Ty<'db>>,
     #[returns_ref]
-    pub typeref_map: IndexMapUpdate<TypeRef<'db>, Ty<'db>>
+    pub typeref_map: IndexMapUpdate<TypeRefId<'db>, Ty<'db>>,
 }
 
 #[salsa::tracked]
 impl<'db> TypeResolution<'db> {
     #[salsa::tracked]
-    fn expr(self, db: &'db dyn BaseDb, expr: ExprId<'db>) -> Ty<'db> {
-        self.expr_map(db).get(&expr).cloned().unwrap_or_else(|| Ty::new(db, TyKind::Unknown))
+    pub fn expr(self, db: &'db dyn BaseDb, expr: ExprId<'db>) -> Ty<'db> {
+        self.expr_map(db).get(&expr).cloned().unwrap_or_else(|| unknown(db))
     }
 
     #[salsa::tracked]
-    fn type_ref(self, db: &'db dyn BaseDb, r: TypeRef<'db>) -> Ty<'db> {
-        self.typeref_map(db).get(&r).cloned().unwrap_or_else(|| Ty::new(db, TyKind::Unknown))
+    pub fn type_ref(self, db: &'db dyn BaseDb, r: TypeRefId<'db>) -> Ty<'db> {
+        self.typeref_map(db).get(&r).cloned().unwrap_or_else(|| unknown(db))
     }
 }
 
 pub struct TypeResolutionCtx<'db> {
     scope: Scope<'db>,
     project: Project,
+    unknown: Ty<'db>,
 
     expr_map: IndexMap<ExprId<'db>, Ty<'db>>,
-    typeref_map: IndexMap<TypeRef<'db>, Ty<'db>>
+    typeref_map: IndexMap<TypeRefId<'db>, Ty<'db>>,
 }
 
 impl<'db> Visitor<'db> for &mut TypeResolutionCtx<'db> {
@@ -48,56 +63,87 @@ impl<'db> Visitor<'db> for &mut TypeResolutionCtx<'db> {
     fn expr_end(&mut self, db: &'db dyn BaseDb, ctx: (), expr: ExprId<'db>) {
         self.resolve_expr(db, expr);
     }
-    
+
     fn stmt_start(&mut self, db: &'db dyn BaseDb, stmt: StatementId<'db>) -> (bool, Self::Ctx) {
         (true, ())
     }
-    
+
     fn expr_start(&mut self, db: &'db dyn BaseDb, expr: ExprId<'db>) -> (bool, Self::ExprCtx) {
         (true, ())
     }
 }
+
+fn resolve_all<'db>(db: &'db dyn BaseDb, project: Project, items: impl Iterator<Item = Item<'db>>) {
+    for i in items {
+        if let Item::Contract(c) = i {
+            resolve_all(db, project, c.items(db).iter().copied().map(Item::from));
+        }
+        resolve_item(db, project, i);
+    }
+}
+
 #[salsa::tracked]
-pub fn resolve_item<'db>(db: &'db dyn BaseDb, project: Project, item: Item<'db>) -> TypeResolution<'db> {
+pub fn resolve_file<'db>(db: &'db dyn BaseDb, project: Project, file: File) {
+    let s = lower_file(db, file);
+    resolve_all(db, project, s.items(db).iter().copied());
+}
+
+#[salsa::tracked]
+pub fn resolve_item<'db>(
+    db: &'db dyn BaseDb,
+    project: Project,
+    item: Item<'db>,
+) -> TypeResolution<'db> {
     let resolution = TypeResolutionCtx::resolve_item(db, project, item);
 
-    return TypeResolution::new(db, IndexMapUpdate(resolution.expr_map), IndexMapUpdate(resolution.typeref_map));
+    return TypeResolution::new(
+        db,
+        IndexMapUpdate(resolution.expr_map),
+        IndexMapUpdate(resolution.typeref_map),
+    );
 }
 
 impl<'db> TypeResolutionCtx<'db> {
-    pub fn resolve_item(db: &'db dyn BaseDb, project: Project, item: Item<'db>) -> TypeResolutionCtx<'db> {
-        let mut ctx = TypeResolutionCtx { 
+    pub fn resolve_item(
+        db: &'db dyn BaseDb,
+        project: Project,
+        item: Item<'db>,
+    ) -> TypeResolutionCtx<'db> {
+        let file = item.file(db);
+        let mut ctx = TypeResolutionCtx {
             project,
-            scope: item.scope(db, project), 
-            expr_map: Default::default(), 
+            scope: item.scope(db, project),
+            expr_map: Default::default(),
             typeref_map: Default::default(),
+
+            unknown: unknown(db),
         };
         match item {
             Item::UserDefinedValueType(user_defined_value_type_id) => {
                 ctx.resolve_type_ref(db, ctx.scope, user_defined_value_type_id.ty(db));
-            },
+            }
             Item::Error(error_id) => {
                 for p in error_id.parameters(db) {
                     let ty = p.info(db).ty;
                     ctx.resolve_type_ref(db, ctx.scope, ty);
                 }
-            },
+            }
             Item::Event(event_id) => {
                 for p in event_id.parameters(db) {
                     let ty = p.info(db).ty;
                     ctx.resolve_type_ref(db, ctx.scope, ty);
                 }
-            },
+            }
             Item::StateVariable(state_variable_id) => {
                 let ty = state_variable_id.ty(db);
                 ctx.resolve_type_ref(db, ctx.scope, ty);
-            },
+            }
             Item::Struct(structure_id) => {
                 for f in structure_id.fields(db) {
                     let ty = f.ty(db);
                     ctx.resolve_type_ref(db, ctx.scope, ty);
                 }
-            },
+            }
             Item::Function(function_id) => {
                 let info = function_id.info(db);
                 for a in info.args {
@@ -108,11 +154,11 @@ impl<'db> TypeResolutionCtx<'db> {
                     let ty = a.ty(db);
                     ctx.resolve_type_ref(db, ctx.scope, ty);
                 }
-                
+
                 if let Some((body, map)) = function_id.body(db) {
                     walk_stmt(db, body, &mut ctx);
                 }
-            },
+            }
             Item::Constructor(constructor_id) => {
                 let info = constructor_id.info(db);
                 for f in info.args {
@@ -122,7 +168,7 @@ impl<'db> TypeResolutionCtx<'db> {
                 if let Some((body, map)) = constructor_id.body(db) {
                     walk_stmt(db, body, &mut ctx);
                 }
-            },
+            }
             Item::Modifier(modifier_id) => {
                 let info = modifier_id.info(db);
                 for f in info.args {
@@ -132,7 +178,7 @@ impl<'db> TypeResolutionCtx<'db> {
                 if let Some((body, map)) = modifier_id.body(db) {
                     walk_stmt(db, body, &mut ctx);
                 }
-            },
+            }
             _ => {}
         }
 
@@ -142,24 +188,51 @@ impl<'db> TypeResolutionCtx<'db> {
     fn resolve_stmt(&mut self, db: &'db dyn BaseDb, stmt: StatementId<'db>) {
         match stmt.kind(db) {
             hir_def::hir::Statement::VarDecl { items, init_expr } => {
-                for i in items.iter().flatten() {
-                    let t = i.ty(db);
-                    self.resolve_type_ref(db, self.scope, t);
+                let lhs_ty = items.iter().map(|vardecl| {
+                    let t = (*vardecl)?.ty(db);
+                    let expected = self.resolve_type_ref(db, self.scope, t);
+                    Some((t, expected))
+                }).collect::<Vec<_>>();
+
+                if let Some(init) = init_expr {
+                    let init_ty = self.resolve_expr(db, *init);
+                    if init_ty.component_count(db) != items.len() as _ {
+                        self.emit_expr_error(db, init.node(db), "different component count".to_string());
+                        return;
+                    }
+
+                    let init_kind = init_ty.kind(db);
+                    let tys = match &init_kind {
+                        TyKind::Tuple(tys) => tys.as_slice(),
+                        _ => &[init_ty][..]
+                    };
+                    for (lhs, rhs) in lhs_ty.into_iter().zip(tys.iter()) {
+                        if let Some((ty_ref, ty)) = lhs {
+                            if !rhs.can_coerce(db, ty) {
+                                self.emit_expr_error(db, ty_ref.node(db), format!("can't implicitly cast {} to {}", rhs.pretty_print(db), ty.pretty_print(db)));
+                            }
+                        }
+                    }
                 }
-            },
+            }
             hir_def::hir::Statement::ForLoop { init, cond, finish_action, body } => {
                 if let Some(stmt) = init {
                     self.resolve_stmt(db, *stmt);
                 }
-            },
+            }
             hir_def::hir::Statement::Try { expr, returns, body, catch } => {
                 // TODO: Implement
-            },
+            }
             _ => {}
         }
     }
 
-    fn resolve_expr_with_args(&mut self, db: &'db dyn BaseDb, expr: ExprId<'db>, args: Ty<'db>) -> Ty<'db> {
+    fn resolve_expr_with_args(
+        &mut self,
+        db: &'db dyn BaseDb,
+        expr: ExprId<'db>,
+        args: Ty<'db>,
+    ) -> Ty<'db> {
         self.expr_map.swap_remove(&expr);
         let t = self.resolve_expr_with_args_inner(db, expr, args);
 
@@ -169,20 +242,22 @@ impl<'db> TypeResolutionCtx<'db> {
     }
 
     fn resolve_expr(&mut self, db: &'db dyn BaseDb, expr: ExprId<'db>) -> Ty<'db> {
-        if let Some(t) =  self.expr_map.get(&expr) {
+        if let Some(t) = self.expr_map.get(&expr) {
             return *t;
         }
-        let t = match self.resolve_expr_inner(db, expr) {
-            Some(t) => t,
-            None => Ty::new(db, TyKind::Unknown),
-        };
+        let t = self.resolve_expr_inner(db, expr).unwrap_or(self.unknown);
 
         self.expr_map.insert(expr, t);
 
         t
     }
 
-    fn resolve_expr_with_args_inner(&mut self, db: &'db dyn BaseDb, expr: ExprId<'db>, args_type: Ty<'db>) -> Ty<'db> {
+    fn resolve_expr_with_args_inner(
+        &mut self,
+        db: &'db dyn BaseDb,
+        expr: ExprId<'db>,
+        args_type: Ty<'db>,
+    ) -> Ty<'db> {
         let kind = match expr.kind(db) {
             Expr::MemberAccess { owner, member_name } => {
                 let owner_ty = self.resolve_expr(db, *owner);
@@ -207,11 +282,10 @@ impl<'db> TypeResolutionCtx<'db> {
                         }
                     }
                 }
-            },
+            }
             Expr::Ident { name_ref } if false => {
-                /*
                 let defs = self.scope.for_expr(db, expr);
-                let mut defs = defs.iter().filter(|(name, _)| *name == *member_name);
+                let mut defs = defs.iter(db).filter(|(name, _)| *name == *name_ref);
                 loop {
                     let Some((_, def)) = defs.next() else {
                         break TyKind::Unknown;
@@ -221,17 +295,15 @@ impl<'db> TypeResolutionCtx<'db> {
                         continue;
                     };
 
-                    let ty = self.resolve_item_type(db, *item);
+                    let ty = self.resolve_item_type(db, item);
                     if let TyKind::Function(args, _) = ty.kind(db) {
                         if args == args_type {
                             return ty;
                         }
                     }
                 }
-                 */
-                todo!()
-            },
-            _ => return self.resolve_expr(db, expr)
+            }
+            _ => return self.resolve_expr(db, expr),
         };
 
         Ty::new(db, kind)
@@ -243,74 +315,108 @@ impl<'db> TypeResolutionCtx<'db> {
                 return match self.resolve_expr(db, *target).kind(db) {
                     TyKind::Array(ty, _) => Some(ty),
                     TyKind::Mapping(_k, v) => Some(v),
-                    _ => None
+                    _ => None,
                 }
-            },
+            }
             Expr::Slice { base, start, end } => return Some(self.resolve_expr(db, *base)),
             Expr::MemberAccess { owner, member_name } => {
                 let owner_ty = self.resolve_expr(db, *owner);
-                let Some(container) = owner_ty.container(db) else {
-                    return None;
-                };
-                if let Some(def) =  container.defs(db).iter().find(|(name, _)| *name == *member_name) {
-                    match def.1 {
-                        Definition::Item(item) => return Some(self.resolve_item_type(db, item)),
-                        Definition::EnumVariant(e) => {
-                            TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 256 })
-                        },
-                        Definition::Field(f) => {
-                            if let TyKind::Struct(s) = owner_ty.kind(db) {
-                                return Some(self.resolve_type_ref(db, Item::Struct(s).scope(db, self.project), f.ty(db)));
-                            }
-                            return None
-                        },
-                        Definition::Local((origin, item)) => return None,
+                let container = owner_ty.container(db)?;
+                let def =
+                    container.defs(db).iter().copied().find(|(name, _)| *name == *member_name)?;
+
+                match def.1 {
+                    Definition::Item(item) => {
+                        return Some(match owner_ty.kind(db) {
+                            TyKind::ItemRef(item) => self.resolve_item_ref(db, item),
+                            _ => self.resolve_item_type(db, item),
+                        })
                     }
-                } else {
-                    return None
+                    Definition::EnumVariant(e) => {
+                        TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 256 })
+                    }
+                    Definition::Field(f) => {
+                        if let TyKind::Struct(s) = owner_ty.kind(db) {
+                            return Some(self.resolve_type_ref(
+                                db,
+                                Item::Struct(s).scope(db, self.project),
+                                f.ty(db),
+                            ));
+                        }
+                        return None;
+                    }
+                    Definition::Local((origin, item)) => return None,
                 }
-            },
+            }
             Expr::CallOptions { base, options } => return Some(self.resolve_expr(db, *base)),
             Expr::Call { callee, args } => {
-                let args_type = args.iter()
-                    .map(|(_, a)| self.resolve_expr(db, *a))
-                    .collect();
-                return Some(self.resolve_expr_with_args(db, *callee, Ty::new(db, TyKind::Tuple(args_type))));
-            },
+                let args_type = args.iter().map(|(_, a)| self.resolve_expr(db, *a)).collect();
+                let receiver_type = self.resolve_expr_with_args(
+                    db,
+                    *callee,
+                    Ty::new(db, TyKind::Tuple(args_type)),
+                );
+                let result_type = match receiver_type.kind(db) {
+                    TyKind::Function(_, result_type) => result_type,
+                    TyKind::Error(_) | TyKind::Event(_) => {
+                        receiver_type
+                    },
+                    _ => return None,
+                };
+                return Some(result_type);
+            }
             Expr::PrefixOp { expr, op } => return Some(self.resolve_expr(db, *expr)),
             Expr::PostfixOp { expr, op } => return Some(self.resolve_expr(db, *expr)),
             Expr::Ternary { cond, lhs, rhs } => return Some(self.resolve_expr(db, *lhs)),
-            Expr::Tuple { content } => TyKind::Tuple(content.iter().copied().map(|expr| self.resolve_expr(db, expr)).collect()),
+            Expr::Tuple { content } => TyKind::Tuple(
+                content.iter().copied().map(|expr| self.resolve_expr(db, expr)).collect(),
+            ),
             Expr::Array { content } => TyKind::Array(
-                content.get(0)
-                    .map(|expr| self.resolve_expr(db, *expr)).unwrap_or_else(|| Ty::new(db, TyKind::Unknown)), 0),
+                content
+                    .get(0)
+                    .map(|expr| self.resolve_expr(db, *expr))
+                    .unwrap_or_else(|| Ty::new(db, TyKind::Unknown)),
+                0,
+            ),
             Expr::BinaryOp { lhs, op, rhs } => {
                 if let Some(op) = op {
                     return Some(match op {
                         BinaryOp::LogicOp(logic_op) => self.resolve_expr(db, *lhs),
                         BinaryOp::ArithOp(arith_op) => self.resolve_expr(db, *lhs),
-                        BinaryOp::CmpOp(cmp_op) => Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Bool)),
+                        BinaryOp::CmpOp(cmp_op) => {
+                            Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Bool))
+                        }
                         BinaryOp::Assignment { op } => self.resolve_expr(db, *rhs),
-                    })
+                    });
                 };
-                return None
-            },
+                return None;
+            }
             Expr::Ident { name_ref } => {
                 return Some(match self.scope.lookup_in_expr(db, expr, *name_ref).next()?.1 {
-                    Definition::Item(item) => 
-                        self.resolve_item_type(db, item),
-                    Definition::Local((origin, item)) =>
-                        self.resolve_type_ref(db, self.scope, item.ty(db)),
-                    Definition::EnumVariant(_) |
-                        Definition::Field(_) => return None,
+                    Definition::Item(item @ Item::StateVariable(state_variable)) => {
+                        self.resolve_item_type(db, item)
+                    }
+                    Definition::Item(item) => self.resolve_item_ref(db, item),
+                    Definition::Local((origin, item)) => {
+                        self.resolve_type_ref(db, self.scope, item.ty(db))
+                    }
+                    Definition::EnumVariant(_) | Definition::Field(_) => return None,
                 })
-            },
+            }
             Expr::Literal { data } => match data {
-                hir_def::hir::Literal::String(items) => TyKind::Elementary(ElementaryTypeRef::String),
-                hir_def::hir::Literal::Number(big_int) => TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 256 }),
+                hir_def::hir::Literal::String(items) => {
+                    TyKind::Elementary(ElementaryTypeRef::String)
+                }
+                hir_def::hir::Literal::Number(big_int) => {
+                    TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 256 })
+                }
                 hir_def::hir::Literal::Boolean(_) => TyKind::Elementary(ElementaryTypeRef::Bool),
-                hir_def::hir::Literal::HexString(items) => TyKind::Elementary(ElementaryTypeRef::String),
-                hir_def::hir::Literal::UnicodeStringLiteral() => TyKind::Elementary(ElementaryTypeRef::String),
+                hir_def::hir::Literal::HexString(items) => {
+                    TyKind::Elementary(ElementaryTypeRef::String)
+                }
+                hir_def::hir::Literal::UnicodeStringLiteral() => {
+                    TyKind::Elementary(ElementaryTypeRef::String)
+                }
                 hir_def::hir::Literal::Error => return None,
             },
             Expr::ElementaryTypeName { data } => TyKind::Elementary(*data),
@@ -321,73 +427,187 @@ impl<'db> TypeResolutionCtx<'db> {
         Some(Ty::new(db, kind))
     }
 
-    fn resolve_type_ref(&mut self, db: &'db dyn BaseDb, scope: Scope<'db>, t: TypeRef<'db>) -> Ty<'db> {
+    fn resolve_type_ref(
+        &mut self,
+        db: &'db dyn BaseDb,
+        scope: Scope<'db>,
+        t: TypeRefId<'db>,
+    ) -> Ty<'db> {
         if let Some(t) = self.typeref_map.get(&t) {
             return *t;
         }
-        let ty = self.resolve_type_ref_inner(db, scope, t.clone());
+        let ty = self.resolve_type_ref_inner(db, scope, t);
         self.typeref_map.insert(t, ty);
 
         ty
     }
 
-    fn resolve_type_ref_inner(&mut self, db: &'db dyn BaseDb, scope: Scope<'db>, t: TypeRef<'db>) -> Ty<'db> {
-        let ty = Ty::new(db, match &t { 
-            TypeRef::Elementary(elementary_type_ref) => return Ty::new(db, TyKind::Elementary(*elementary_type_ref)),
-            TypeRef::Function { arguments, visibility, mutability, returns } => {
-                return unknown(db)
-            },
-            TypeRef::Mapping { key_type, value_type, .. } => {
-                TyKind::Mapping(self.resolve_type_ref(db, scope,  *key_type.clone()), self.resolve_type_ref(db, scope, *value_type.clone()))
-            },
-            TypeRef::Array { ty, len } => {
-                TyKind::Array(self.resolve_type_ref(db, scope, *ty.clone()), 0)
-            },
-            TypeRef::Path(ref idents) => {
-                if let Some(Definition::Item(item)) = scope.lookup_path(db, &idents) {
-                    return self.resolve_item_type(db, item)
-                } else {
-                    TyKind::Unknown
+    fn emit_expr_error<N: AstNode>(&self, db: &'db dyn BaseDb, node: Option<FileAstPtr<N>>, desc: String) {
+        dbg!(&desc);
+        if let Some(node) = node {
+            TypeResolutionError {
+                file: node.file,
+                text: desc,
+                range: node.ptr.syntax_node_ptr().text_range(),
+            }.accumulate(db);
+        }
+    }
+
+    fn resolve_type_ref_inner(
+        &mut self,
+        db: &'db dyn BaseDb,
+        scope: Scope<'db>,
+        t: TypeRefId<'db>,
+    ) -> Ty<'db> {
+        let ty = Ty::new(
+            db,
+            match t.kind(db) {
+                TypeRefKind::Elementary(elementary_type_ref) => {
+                    return Ty::new(db, TyKind::Elementary(elementary_type_ref))
                 }
+                TypeRefKind::Function { arguments, visibility, mutability, returns } => {
+                    let args = arguments
+                        .iter()
+                        .map(|vardecl| {
+                            self.resolve_type_ref(db, scope, vardecl.ty(db))
+                        })
+                        .collect();
+
+                    let returns = returns
+                        .iter()
+                        .map(|vardecl| {
+                            self.resolve_type_ref(db, scope, vardecl.ty(db))
+                        })
+                        .collect();
+                    return Ty::new(
+                        db,
+                        TyKind::Function(
+                            Ty::new(db, TyKind::Tuple(args)),
+                            Ty::new(db, TyKind::Tuple(returns)),
+                        ),
+                    );
+                }
+                TypeRefKind::Mapping { key_type, value_type, .. } => TyKind::Mapping(
+                    self.resolve_type_ref(db, scope, key_type),
+                    self.resolve_type_ref(db, scope, value_type),
+                ),
+                TypeRefKind::Array { ty, len } => {
+                    TyKind::Array(self.resolve_type_ref(db, scope, ty), 0)
+                }
+                TypeRefKind::Path(ref idents) => {
+                    if let Some(Definition::Item(item)) = scope.lookup_path(db, &idents) {
+                        let kind = match item {
+                            Item::Contract(contract_id) => {
+                                TyKind::Contract(contract_id)
+                            },
+                            Item::Enum(enumeration_id) => {
+                                TyKind::Enum(enumeration_id)
+                            },
+                            Item::UserDefinedValueType(user_defined_value_type_id) => {
+                                return self.resolve_type_ref(db, user_defined_value_type_id.scope(db, self.project), user_defined_value_type_id.ty(db));
+                            },
+                            Item::Error(error_id) => {
+                                TyKind::Error(error_id)
+                            },
+                            Item::Event(event_id) => TyKind::Event(event_id),
+                            Item::Struct(structure_id) => TyKind::Struct(structure_id),
+                            _ => {
+                                if let Some(node) = t.node(db) {
+                                    TypeResolutionError {
+                                        file: node.file,
+                                        text: "This item can't be used as type".to_string(),
+                                        range: node.ptr.syntax_node_ptr().text_range(),
+                                    }.accumulate(db);
+                                };
+                                return self.resolve_item_ref(db, item)
+                            }
+                        };
+                        return Ty::new(db, kind)
+                    } else {
+                        if let Some(node) = t.node(db) {
+                            TypeResolutionError {
+                                file: node.file,
+                                text: "Undeclared item".to_string(),
+                                range: node.ptr.syntax_node_ptr().text_range(),
+                            }.accumulate(db);
+                        }
+                        TyKind::Unknown
+                    }
+                }
+                TypeRefKind::Error => TyKind::Unknown,
             },
-            TypeRef::Error => TyKind::Unknown,
-        });
+        );
 
         ty
     }
 
+    fn resolve_item_ref(&mut self, db: &'db dyn BaseDb, item: Item<'db>) -> Ty<'db> {
+        match item {
+            Item::Function(function_id) => {
+                return self.resolve_item_type(db, item);
+            },
+            Item::Modifier(modifier_id) => {
+                return self.resolve_item_type(db, item)
+            },
+            _ => {
+                return Ty::new(db, TyKind::ItemRef(item))
+            }
+        }
+    }
+
     fn resolve_item_type(&mut self, db: &'db dyn BaseDb, item: Item<'db>) -> Ty<'db> {
         let kind = match item {
-            Item::Contract(contract_id) => TyKind::Contract(contract_id),
-            Item::Enum(enumeration_id) => TyKind::Enum(enumeration_id),
-            Item::UserDefinedValueType(user_defined_value_type_id) => TyKind::Unknown,
             Item::StateVariable(state_variable_id) => {
-                return self.resolve_type_ref_inner(db, item.scope(db, self.project), state_variable_id.ty(db));
-            },
-            Item::Struct(structure_id) => TyKind::Struct(structure_id),
-            Item::Module(source_unit) => TyKind::Module(source_unit),
+                return self.resolve_type_ref_inner(
+                    db,
+                    item.scope(db, self.project),
+                    state_variable_id.ty(db),
+                );
+            }
             Item::Modifier(modifier_id) => {
+                /*
                 let scope = modifier_id.item_scope(db, self.project);
-                let info = modifier_id.info(db);
-                let args = info.args.iter()
-                    .map(|vardecl| self.resolve_type_ref(db, Scope::Item(scope), vardecl.ty(db)) ).collect();
 
-                TyKind::Modifier(Ty::new(db, TyKind::Tuple(args)))
-            } 
-            Item::Error(error_id) => TyKind::Error(error_id),
-            Item::Event(event_id) => TyKind::Event(event_id),
+                let info = modifier_id.info(db);
+                let args = info
+                    .args
+                    .iter()
+                    .map(|vardecl| self.resolve_type_ref(db, Scope::Item(scope), vardecl.ty(db)))
+                    .collect();
+                 */
+                TyKind::Modifier(modifier_id)
+            }
             Item::Function(function_id) => {
                 let scope = function_id.item_scope(db, self.project);
                 let info = function_id.info(db);
-                let args = info.args.iter()
-                    .map(|vardecl| self.resolve_type_ref(db, Scope::Item(scope), vardecl.ty(db)) ).collect();
+                let args = info
+                    .args
+                    .iter()
+                    .map(|vardecl| self.resolve_type_ref(db, Scope::Item(scope), vardecl.ty(db)))
+                    .collect();
 
-                let returns = info.returns.iter().flatten()
-                    .map(|vardecl| self.resolve_type_ref(db, Scope::Item(scope), vardecl.ty(db)) ).collect();
+                let returns = info
+                    .returns
+                    .iter()
+                    .flatten()
+                    .map(|vardecl| self.resolve_type_ref(db, Scope::Item(scope), vardecl.ty(db)))
+                    .collect();
 
-                TyKind::Function(Ty::new(db, TyKind::Tuple(args)), Ty::new(db, TyKind::Tuple(returns)))
-            } 
-            _ => TyKind::Unknown,
+                TyKind::Function(
+                    Ty::new(db, TyKind::Tuple(args)),
+                    Ty::new(db, TyKind::Tuple(returns)),
+                )
+            }
+            Item::UserDefinedValueType(user_defined_value_type_id) => {
+                return self.resolve_type_ref(
+                    db,
+                    user_defined_value_type_id.scope(db, self.project),
+                    user_defined_value_type_id.ty(db),
+                )
+            }
+            _ => {
+                return self.unknown;
+            },
         };
 
         Ty::new(db, kind)
@@ -397,14 +617,65 @@ impl<'db> TypeResolutionCtx<'db> {
 #[cfg(test)]
 mod tests {
     use base_db::{Project, TestDatabase, TestFixture, VfsPath};
-    use hir_def::{items::HirPrint, lower_file};
+    use hir_def::{items::HirPrint, lower_file, FileExt};
     use salsa::Database;
+    use rowan::ast::AstNode;
 
     use super::resolve_item;
 
     #[test]
-    fn basic_goto() {
-        let fixture = TestFixture::parse(r"
+    fn ident_path_in_mapping() {
+        let fixture = TestFixture::parse(
+            r#"
+            /main.sol
+            import * as hw from "./test.sol";
+
+            contract Test
+            {
+                function t$0mp() {
+                    hw.Helloworld tmp = "aa";
+                    tmp.unknown;
+                    mapping(hw.Helloworld => uint256) memory test;
+                }
+            }
+            /// ENDFILE
+            /test.sol
+            contract Helloworld
+            {
+                struct Test {}
+            }
+        "#,
+        );
+        let pos = fixture.position.unwrap();
+        let (db, file) = TestDatabase::from_fixture(fixture);
+        let lowered_file = lower_file(&db, file);
+        let item = lowered_file.source_map(&db).find_pos(pos);
+        let types = resolve_item(
+            &db,
+            Project::new(&db, VfsPath::from_virtual("".to_owned())),
+            item.unwrap(),
+        );
+        for (expr, ty) in types.expr_map(&db).0 {
+            if let Some(e) = expr.node(&db) {
+                let root = file.node(&db);
+                let data = e.to_node(&db).syntax().text().to_string();
+                println!("{}: {}", data, ty.pretty_print(&db));
+            }
+        }
+
+        for (expr, ty) in types.typeref_map(&db).0 {
+            if let Some(e) = expr.node(&db) {
+                let root = file.node(&db);
+                let data = e.to_node(&db).syntax().text().to_string();
+                println!("{}: {}", data, ty.pretty_print(&db));
+            }
+        }
+    }
+
+    #[test]
+    fn basic_typeresolve() {
+        let fixture = TestFixture::parse(
+            r"
             struct TestStruct {
                 uint256 field;
                 uint128 field2;
@@ -424,11 +695,16 @@ mod tests {
                     test.field;
                 }
             }
-        ");
+        ",
+        );
         let pos = fixture.position.unwrap();
         let (db, file) = TestDatabase::from_fixture(fixture);
         let item = lower_file(&db, file).source_map(&db).find_pos(pos);
-        let types = resolve_item(&db, Project::new(&db, VfsPath::from_virtual("".to_owned())), item.unwrap());
+        let types = resolve_item(
+            &db,
+            Project::new(&db, VfsPath::from_virtual("".to_owned())),
+            item.unwrap(),
+        );
         for (expr, ty) in types.expr_map(&db).0 {
             let mut t = String::new();
             expr.write(&db, &mut t, 0).unwrap();

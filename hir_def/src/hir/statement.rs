@@ -1,33 +1,36 @@
-use crate::hir::variable_declaration::VariableDeclaration;
 use crate::hir::expr::ExprId;
 use crate::hir::ident::Ident;
 use crate::hir::source_unit::{self, Item};
+use crate::hir::variable_declaration::VariableDeclaration;
 use crate::items::HirPrint;
 use crate::{impl_has_syntax, impl_major_item, lazy_field, FileAstPtr, FileExt};
 use base_db::{BaseDb, Project};
+use rowan::ast::AstNode;
 use rowan::ast::AstPtr;
 use salsa::Database;
-use vfs::File;
 use std::fmt::Write;
 use syntax::ast::nodes;
-use rowan::ast::AstNode;
+use vfs::File;
 
-use super::{DataLocation, HasFile, HasSyntax, TypeRef};
+use super::{DataLocation, HasFile, HasSyntax, TypeRefId};
 
 #[salsa::tracked(debug)]
 pub struct StatementId<'db> {
     #[return_ref]
     pub kind: Statement<'db>,
 
-    pub node: Option<AstPtr<nodes::Stmt>>,
+    pub node: Option<FileAstPtr<nodes::Stmt>>,
 }
 
 #[salsa::tracked]
 impl<'db> StatementId<'db> {
     #[salsa::tracked]
-    pub fn owner(self, db: &'db dyn BaseDb, file: File) -> Item<'db> {
+    pub fn owner(self, db: &'db dyn BaseDb) -> Item<'db> {
         let node = self.node(db).unwrap();
-        source_unit::lower_file(db, file).source_map(db).find(node.syntax_node_ptr().text_range()).unwrap()
+        source_unit::lower_file(db, node.file)
+            .source_map(db)
+            .find(node.ptr.syntax_node_ptr().text_range())
+            .unwrap()
     }
 }
 

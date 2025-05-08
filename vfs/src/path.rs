@@ -1,7 +1,7 @@
 use std::{fmt::Display, path::PathBuf, str::FromStr};
 
-use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use crate::File;
+use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 
 #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Clone)]
 pub struct AnchoredPath {
@@ -11,10 +11,7 @@ pub struct AnchoredPath {
 
 impl AnchoredPath {
     pub fn new(parent: File, path: String) -> Self {
-        Self {
-            parent,
-            path
-        }
+        Self { parent, path }
     }
 
     pub fn path(&self) -> &String {
@@ -33,10 +30,10 @@ impl Display for VfsPath {
         match self {
             VfsPath::Path(utf8_path_buf) => {
                 write!(f, "{utf8_path_buf}")
-            },
+            }
             VfsPath::Virtual(virtual_path) => {
                 write!(f, "{}", virtual_path.0)
-            },
+            }
         }
     }
 }
@@ -65,12 +62,8 @@ impl VfsPath {
 
     pub fn join(&self, path: &str) -> Option<Self> {
         Some(match self {
-            VfsPath::Path(pbuf) => {
-                VfsPath::from_path(normalize_path(&pbuf.join(path)))
-            }
-            VfsPath::Virtual(p) => {
-                VfsPath::Virtual(p.join(path)?)
-            }
+            VfsPath::Path(pbuf) => VfsPath::from_path(normalize_path(&pbuf.join(path))),
+            VfsPath::Virtual(p) => VfsPath::Virtual(p.join(path)?),
         })
     }
 
@@ -109,7 +102,7 @@ impl VirtualPath {
 
     fn join(&self, mut path: &str) -> Option<VirtualPath> {
         if path.starts_with('/') {
-            return Some(VirtualPath(path.to_owned()))
+            return Some(VirtualPath(path.to_owned()));
         }
         let mut res = self.clone();
         while path.starts_with("../") {

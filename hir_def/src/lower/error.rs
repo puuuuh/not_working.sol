@@ -1,17 +1,16 @@
-use rowan::ast::{AstNode, AstPtr};
-use crate::hir::{ErrorId, ErrorParameter, ErrorParameterId};
 use crate::hir::Ident;
 use crate::hir::Item;
-use crate::hir::TypeRef;
+use crate::hir::{ErrorId, ErrorParameter, ErrorParameterId};
 use crate::lower::LowerCtx;
 use crate::FileAstPtr;
+use rowan::ast::{AstNode, AstPtr};
 use syntax::ast::nodes;
 
 impl<'db> LowerCtx<'db> {
     pub fn lower_error_parameter(&mut self, e: nodes::ErrorParameter) -> ErrorParameterId<'db> {
         let info = ErrorParameter {
             name: e.name().map(|e| Ident::from_name(self.db, Some(e))),
-            ty: e.ty().map(|e| self.lower_type_ref(e)).unwrap_or(TypeRef::Error),
+            ty: self.lower_type_ref2(e.ty()),
         };
         ErrorParameterId::new(self.db, info)
     }

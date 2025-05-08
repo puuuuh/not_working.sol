@@ -14,17 +14,21 @@ mod structure;
 pub mod types;
 mod user_defined_value_type;
 
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
+
 use crate::hir::ContractType;
 use crate::hir::ExprId;
-use crate::hir::{Ident, IdentPath};
-use crate::hir::UserDefineableOp;
-use crate::hir::PragmaId;
 use crate::hir::Item;
+use crate::hir::PragmaId;
 use crate::hir::StatementId;
+use crate::hir::UserDefineableOp;
+use crate::hir::{Ident, IdentPath};
 use crate::hir::{UsingAlias, UsingData, UsingId};
 use crate::source_map::span_map::SpanMap;
 use crate::FileAstPtr;
 use crate::IndexMapUpdate;
+use crate::TypeRefId;
 use base_db::{BaseDb, File};
 use indexmap::IndexMap;
 use rowan::ast::{AstNode, AstPtr};
@@ -35,6 +39,8 @@ use syntax::TextRange;
 pub(crate) struct LowerCtx<'a> {
     db: &'a dyn BaseDb,
     file: File,
+    missing_typeref: TypeRefId<'a>,
+    missing_expr: ExprId<'a>,
     pub(crate) spans: Vec<(TextRange, Item<'a>)>,
     pub(crate) exprs: IndexMap<AstPtr<Expr>, ExprId<'a>>,
     pub(crate) stmts: IndexMap<AstPtr<Stmt>, StatementId<'a>>,
@@ -42,7 +48,15 @@ pub(crate) struct LowerCtx<'a> {
 
 impl<'a> LowerCtx<'a> {
     pub fn new(db: &'a dyn BaseDb, file: File) -> Self {
-        Self { db, file, spans: Vec::new(), exprs: Default::default(), stmts: Default::default() }
+        Self { 
+            db, 
+            file, 
+            missing_expr: ExprId::missing(db), 
+            missing_typeref: TypeRefId::missing(db), 
+            spans: Vec::new(), 
+            exprs: Default::default(), 
+            stmts: Default::default() 
+        }
     }
 
     pub fn save_span(&mut self, range: TextRange, data: Item<'a>) {
@@ -57,7 +71,7 @@ impl<'a> LowerCtx<'a> {
         self.stmts.insert(AstPtr::new(&s), data);
     }
 
-    pub fn lower_source(&mut self, src: nodes::UnitSource) -> Vec<Item<'a>> {
+    pub fn lower_source(&mut self, src: nodes::UnitSource) -> BTreeSet<Item<'a>> {
         src.items().map(|i| self.lower_item(i)).collect()
     }
 
@@ -69,14 +83,17 @@ impl<'a> LowerCtx<'a> {
             nodes::Item::Contract(contract) => match self.lower_contract(contract) {
                 (_, c) => Item::Contract(c),
             },
-            nodes::Item::NamedFunctionDefinition(f) =>
-                Item::Function(self.lower_named_function_definition(f)),
-            nodes::Item::StateVariableDeclaration(v) =>
-                Item::StateVariable(self.lower_state_variable(v)),
+            nodes::Item::NamedFunctionDefinition(f) => {
+                Item::Function(self.lower_named_function_definition(f))
+            }
+            nodes::Item::StateVariableDeclaration(v) => {
+                Item::StateVariable(self.lower_state_variable(v))
+            }
             nodes::Item::StructDefinition(s) => Item::Struct(self.lower_structure(s)),
             nodes::Item::EnumDefinition(e) => Item::Enum(self.lower_enumeration(e)),
-            nodes::Item::UserDefinedValueTypeDefinition(t) =>
-                Item::UserDefinedValueType(self.lower_user_defined_value_type(t)),
+            nodes::Item::UserDefinedValueTypeDefinition(t) => {
+                Item::UserDefinedValueType(self.lower_user_defined_value_type(t))
+            }
             nodes::Item::ErrorDefinition(e) => Item::Error(self.lower_error(e)),
             nodes::Item::EventDefinition(e) => Item::Event(self.lower_event(e)),
         }
@@ -90,10 +107,7 @@ impl<'a> LowerCtx<'a> {
     pub fn lower_using(&mut self, s: nodes::Using) -> UsingId<'a> {
         let items = match s.using_item() {
             Some(nodes::UsingItem::IdentPath(p)) => {
-                vec![UsingAlias {
-                    path: IdentPath::from(self.db, p),
-                    as_name: None,
-                }]
+                vec![UsingAlias { path: IdentPath::from(self.db, p), as_name: None }]
             }
             Some(nodes::UsingItem::UsingAliases(a)) => {
                 a.using_aliases().map(|a| self.lower_using_alias(a)).collect::<Vec<_>>()

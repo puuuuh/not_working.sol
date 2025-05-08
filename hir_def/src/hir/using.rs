@@ -1,13 +1,13 @@
 use crate::hir::ident::IdentPath;
 use crate::hir::op::UserDefineableOp;
-use crate::hir::{ContractId, TypeRef};
+use crate::hir::{ContractId, TypeRefId};
 use crate::items::HirPrint;
 use crate::{impl_major_item, lazy_field, FileAstPtr};
 use rowan::ast::AstPtr;
 use salsa::{tracked, Database};
-use vfs::File;
 use std::fmt::Write;
 use syntax::ast::nodes;
+use vfs::File;
 
 #[tracked(debug)]
 pub struct UsingId<'db> {
@@ -32,7 +32,7 @@ impl HirPrint for UsingId<'_> {
 #[derive(Debug, Clone, Eq, PartialEq, Hash, salsa::Update)]
 pub struct UsingData<'db> {
     pub items: Vec<UsingAlias<'db>>,
-    pub type_name: Option<TypeRef<'db>>,
+    pub type_name: Option<TypeRefId<'db>>,
     pub is_global: bool,
 }
 
