@@ -16,14 +16,19 @@ use vfs::File;
 
 #[tracked(debug)]
 pub struct ModifierId<'db> {
-    #[tracked]
+    #[id]
     pub file: File,
 
     #[id]
     pub name: Ident<'db>,
+
+    #[tracked]
     pub info: Modifier<'db>,
+
+    #[tracked]
     pub body_node: Option<AstPtr<nodes::Block>>,
 
+    #[tracked]
     pub node: AstPtr<nodes::ModifierDefinition>,
 }
 

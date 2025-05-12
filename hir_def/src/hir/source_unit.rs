@@ -1,4 +1,5 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+use std::ops::Index;
 
 use crate::hir::constructor::ConstructorId;
 use crate::hir::contract::{ContractId, ContractItem};
@@ -22,6 +23,7 @@ use base_db::{BaseDb, File, Project};
 use indexmap::IndexMap;
 use rowan::TextRange;
 use salsa::Database;
+use smallvec::SmallVec;
 
 use super::statement::StatementId;
 use super::{user_defined_value_type};
@@ -31,12 +33,12 @@ pub struct SourceUnit<'db> {
     #[id]
     pub file: File,
 
-    #[return_ref]
     #[tracked]
-    pub items: BTreeSet<Item<'db>>,
+    #[returns(ref)]
+    pub items: Vec<Item<'db>>,
 
-    #[return_ref]
     #[tracked]
+    #[returns(ref)]
     pub source_map: SpanMap<Item<'db>>,
 }
 
@@ -54,13 +56,7 @@ pub fn lower_file<'db>(db: &'db dyn BaseDb, file: File) -> SourceUnit<'db> {
 
 #[salsa::tracked]
 impl<'db> SourceUnit<'db> {
-    #[salsa::tracked(return_ref)]
-    pub fn named_items(self, db: &'db dyn BaseDb) -> IndexMap<Ident<'db>, Item<'db>> {
-        let top_items = self.items(db);
-        top_items.iter().filter_map(|a| a.name(db).map(|name| (name, *a))).collect()
-    }
-
-    #[salsa::tracked(return_ref)]
+    #[salsa::tracked(returns(ref))]
     pub fn data(self, db: &'db dyn BaseDb) -> ItemTreeData<'db> {
         let mut imports = vec![];
         let mut pragmas = vec![];
@@ -112,30 +108,47 @@ impl<'db> SourceUnit<'db> {
 
 #[salsa::tracked(debug)]
 pub struct ItemTreeData<'db> {
+    #[returns(ref)]
     #[tracked]
-    #[return_ref]
     pub imports: Vec<ImportId<'db>>,
-    #[return_ref]
+    #[returns(ref)]
+    #[tracked]
     pub pragmas: Vec<PragmaId<'db>>,
-    #[return_ref]
+    #[returns(ref)]
+    #[tracked]
     pub usings: Vec<UsingId<'db>>,
-    #[return_ref]
+    #[returns(ref)]
+    #[tracked]
     pub contracts: Vec<ContractId<'db>>,
 
-    #[return_ref]
+    #[returns(ref)]
+    #[tracked]
     pub enums: Vec<EnumerationId<'db>>,
-    #[return_ref]
+    #[returns(ref)]
+    #[tracked]
     pub structs: Vec<StructureId<'db>>,
-    #[return_ref]
+    #[returns(ref)]
+    #[tracked]
     pub user_type_definitions: Vec<UserDefinedValueTypeId<'db>>,
-    #[return_ref]
+    #[returns(ref)]
+    #[tracked]
     pub errors: Vec<ErrorId<'db>>,
-    #[return_ref]
+    #[returns(ref)]
+    #[tracked]
     pub events: Vec<EventId<'db>>,
-    #[return_ref]
+    #[returns(ref)]
+    #[tracked]
     pub functions: Vec<FunctionId<'db>>,
-    #[return_ref]
+    #[returns(ref)]
+    #[tracked]
     pub state_variables: Vec<StateVariableId<'db>>,
+}
+
+impl<'db> ItemTreeData<'db> {
+    pub fn contract(self, db: &'db dyn BaseDb, name: &str) -> ContractId<'db> {
+        let n = Ident::from_str(db, Some(name));
+        *self.contracts(db).iter().find(|c| c.name(db) == n).unwrap()
+    }
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, PartialOrd, Ord, salsa::Update)]

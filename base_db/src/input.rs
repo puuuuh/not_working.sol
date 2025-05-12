@@ -4,13 +4,13 @@ use crate::BaseDb;
 
 #[salsa::input(debug)]
 pub struct Project {
-    #[return_ref]
+    #[returns(ref)]
     pub root: VfsPath,
 }
 
 #[salsa::tracked]
 impl<'db> Project {
-    #[salsa::tracked(return_ref)]
+    #[salsa::tracked(returns(ref))]
     pub fn remappings(self, db: &'db dyn BaseDb) -> Vec<(String, String)> {
         let Some(root) = self.root(db).join("remappings.txt") else {
             return vec![];
@@ -30,7 +30,7 @@ impl<'db> Project {
         return remappings;
     }
 
-    #[salsa::tracked(return_ref)]
+    #[salsa::tracked(returns(ref))]
     pub fn import_paths(self, db: &'db dyn BaseDb) -> Vec<VfsPath> {
         let r = self.root(db);
         vec![r.join("src").unwrap(), r.join("dependencies").unwrap(), r.clone()]

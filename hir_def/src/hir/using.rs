@@ -14,8 +14,10 @@ pub struct UsingId<'db> {
     #[tracked]
     pub file: File,
 
+    #[tracked]
     pub data: UsingData<'db>,
 
+    #[tracked]
     pub node: AstPtr<nodes::Using>,
 }
 

@@ -20,16 +20,16 @@ use super::{HasFile, SourceUnit};
 
 #[tracked(debug)]
 pub struct ConstructorId<'db> {
-    #[salsa::tracked]
+    #[id]
     pub file: File,
 
-    #[salsa::tracked]
+    #[id]
     pub info: Constructor<'db>,
 
-    #[salsa::tracked]
+    #[tracked]
     pub body_node: Option<AstPtr<nodes::Block>>,
 
-    #[salsa::tracked]
+    #[tracked]
     pub node: AstPtr<nodes::ConstructorDefinition>,
 }
 

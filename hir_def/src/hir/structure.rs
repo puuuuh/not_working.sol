@@ -15,9 +15,12 @@ pub struct StructureId<'db> {
     #[tracked]
     pub file: File,
 
+    #[id]
     pub name: Ident<'db>,
+    #[tracked]
     pub fields: Vec<StructureFieldId<'db>>,
 
+    #[tracked]
     pub node: AstPtr<nodes::StructDefinition>,
 }
 

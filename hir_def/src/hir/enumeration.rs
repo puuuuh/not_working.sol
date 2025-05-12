@@ -11,13 +11,16 @@ use vfs::File;
 
 #[salsa::tracked(debug)]
 pub struct EnumerationId<'db> {
-    #[tracked]
+    #[id]
     pub file: File,
 
     #[id]
     pub name: Ident<'db>,
+
+    #[tracked]
     pub fields: Vec<EnumerationVariantId<'db>>,
 
+    #[tracked]
     pub node: AstPtr<nodes::EnumDefinition>,
 }
 

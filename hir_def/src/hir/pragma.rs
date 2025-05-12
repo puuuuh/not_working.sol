@@ -10,7 +10,8 @@ pub struct PragmaId<'db> {
     #[tracked]
     pub file: File,
 
-    #[return_ref]
+    #[returns(ref)]
+    #[tracked]
     pub data: String,
 
     pub node: AstPtr<nodes::Pragma>,

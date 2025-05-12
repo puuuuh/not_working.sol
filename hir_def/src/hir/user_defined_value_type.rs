@@ -15,9 +15,13 @@ pub struct UserDefinedValueTypeId<'db> {
     #[tracked]
     pub file: File,
 
+    #[id]
     pub name: Ident<'db>,
+
+    #[tracked]
     pub ty: TypeRefId<'db>,
 
+    #[tracked]
     pub node: AstPtr<nodes::UserDefinedValueTypeDefinition>,
 }
 

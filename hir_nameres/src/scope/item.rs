@@ -69,7 +69,7 @@ impl<'db> ItemScopeIter<'db> {
 pub struct ItemScope<'db> {
     pub parent: Option<ItemScope<'db>>,
     // Keep this sorted, pls:)
-    #[return_ref]
+    #[returns(ref)]
     pub items: Vec<(Ident<'db>, Item<'db>)>,
 }
 

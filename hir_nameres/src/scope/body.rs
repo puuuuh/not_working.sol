@@ -97,13 +97,13 @@ pub struct ExprScope {
 #[salsa::tracked(debug)]
 pub struct BodyScope<'db> {
     pub parent: ItemScope<'db>,
-    #[return_ref]
+    #[returns(ref)]
     pub definitions: SmallVec<[(Ident<'db>, Definition<'db>); 2]>,
-    #[return_ref]
+    #[returns(ref)]
     pub expr_scopes: SmallVec<[ExprScope; 1]>,
-    #[return_ref]
+    #[returns(ref)]
     pub scope_by_expr: IndexMapUpdate<ExprId<'db>, usize>,
-    #[return_ref]
+    #[returns(ref)]
     pub scope_by_stmt: IndexMapUpdate<StatementId<'db>, usize>,
 }
 

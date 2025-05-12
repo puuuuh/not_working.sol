@@ -19,9 +19,14 @@ pub struct StateVariableId<'db> {
 
     #[id]
     pub name: Ident<'db>,
+
+    #[tracked]
     pub ty: TypeRefId<'db>,
+
+    #[tracked]
     pub info: StateVariableInfo<'db>,
 
+    #[tracked]
     pub node: AstPtr<nodes::StateVariableDeclaration>,
 }
 

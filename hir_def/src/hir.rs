@@ -109,7 +109,7 @@ impl_major_item!(
     ErrorId<'db>: nodes::ErrorDefinition,
     EventId<'db>: nodes::EventDefinition,
     FunctionId<'db>: nodes::FunctionDefinition,
-    ImportId<'db>: nodes::Import,
+    //ImportId<'db>: nodes::Import,
     ModifierId<'db>: nodes::ModifierDefinition,
     PragmaId<'db>: nodes::Pragma,
     StateVariableId<'db>: nodes::StateVariableDeclaration,

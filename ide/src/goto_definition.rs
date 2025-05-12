@@ -39,7 +39,7 @@ pub fn goto_definition(
                 let defs = match e.kind(db) {
                     hir_def::hir::Expr::MemberAccess { owner, member_name } => {
                         let expr_map = type_inference.expr_map(db);
-                        let owner_ty = dbg!(expr_map.get(owner)?);
+                        let owner_ty = expr_map.get(owner)?;
                         let container = owner_ty.container(db)?;
                         container
                             .defs(db)
@@ -153,11 +153,11 @@ mod tests {
         let pos = fixture.position.unwrap();
         let (db, file) = TestDatabase::from_fixture(fixture);
         db.attach(|db| {
-            dbg!(goto_definition(
+            goto_definition(
                 db,
                 Project::new(db, vfs::VfsPath::from_virtual("".to_owned())),
                 FilePosition { offset: pos, file }
-            ));
+            );
         })
     }
 }

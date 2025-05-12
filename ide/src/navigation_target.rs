@@ -63,8 +63,9 @@ impl NavigationTarget {
         let name_range = |n: Name| n.syntax().text_range();
         let (full_range, focus_range) = match d {
             Item::Import(import_id) => {
-                let node = import_id.syntax(db);
-                (node.syntax().text_range(), None)
+                todo!();
+                //let node = import_id.syntax(db);
+                //(node.syntax().text_range(), None)
             }
             Item::Pragma(pragma_id) => {
                 let node = pragma_id.syntax(db);

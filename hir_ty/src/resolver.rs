@@ -443,7 +443,6 @@ impl<'db> TypeResolutionCtx<'db> {
     }
 
     fn emit_expr_error<N: AstNode>(&self, db: &'db dyn BaseDb, node: Option<FileAstPtr<N>>, desc: String) {
-        dbg!(&desc);
         if let Some(node) = node {
             TypeResolutionError {
                 file: node.file,

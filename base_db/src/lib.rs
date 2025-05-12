@@ -5,7 +5,6 @@ use std::sync::Arc;
 pub use crate::input::Project;
 use rowan::TextSize;
 use salsa::Event;
-use tracing::warn;
 use vfs::Vfs;
 pub use vfs::{AnchoredPath, File, VfsPath};
 
@@ -89,5 +88,4 @@ impl BaseDb for TestDatabase {
 
 #[salsa::db]
 impl salsa::Database for TestDatabase {
-    fn salsa_event(&self, _event: &dyn Fn() -> Event) {}
 }

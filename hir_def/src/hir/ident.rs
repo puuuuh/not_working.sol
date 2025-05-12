@@ -37,7 +37,7 @@ impl<'db> IdentPath<'db> {
 
 #[salsa::interned(debug)]
 pub struct Ident<'db> {
-    #[return_ref]
+    #[returns(ref)]
     pub data: String,
 }
 

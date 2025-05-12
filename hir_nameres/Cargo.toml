@@ -22,3 +22,5 @@ derive_more.workspace = true
 sorted-vec.workspace = true
 smallvec.workspace = true
 either.workspace = true
+cov-mark.workspace = true
+tracing-subscriber.workspace = true

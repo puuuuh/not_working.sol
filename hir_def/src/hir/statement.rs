@@ -16,7 +16,7 @@ use super::{DataLocation, HasFile, HasSyntax, TypeRefId};
 
 #[salsa::tracked(debug)]
 pub struct StatementId<'db> {
-    #[return_ref]
+    #[returns(ref)]
     pub kind: Statement<'db>,
 
     pub node: Option<FileAstPtr<nodes::Stmt>>,
@@ -37,7 +37,7 @@ impl<'db> StatementId<'db> {
 #[salsa::tracked(debug)]
 pub struct CatchClause<'db> {
     pub name: Option<Ident<'db>>,
-    #[return_ref]
+    #[returns(ref)]
     pub args: Option<Vec<VariableDeclaration<'db>>>,
     pub body: StatementId<'db>,
 }

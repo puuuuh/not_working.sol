@@ -1,5 +1,5 @@
 use async_lsp::lsp_types::{
-    CompletionItem, CompletionItemKind, CompletionTextEdit, Position, Range, TextEdit,
+    CompletionItem, CompletionTextEdit, Position, Range, TextEdit,
 };
 use ide::completion::Completion;
 use line_index::WideEncoding;

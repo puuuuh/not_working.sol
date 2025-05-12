@@ -1,7 +1,7 @@
-use std::{os::raw, str::FromStr};
+use std::str::FromStr;
 
 use async_lsp::lsp_types::{Position, Range, TextDocumentPositionParams, Url};
-use base_db::{BaseDb, File};
+use base_db::File;
 use camino::Utf8PathBuf;
 use ide::AnalysisHost;
 use line_index::{WideEncoding, WideLineCol};

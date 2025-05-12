@@ -15,14 +15,15 @@ use super::{HasFile, StatementId};
 
 #[salsa::tracked(debug)]
 pub struct VariableDeclaration<'db> {
-    #[salsa::tracked(debug)]
+    #[id]
     pub ty: TypeRefId<'db>,
-    #[salsa::tracked(debug)]
+
+    #[tracked]
     pub location: Option<DataLocation>,
-    #[salsa::tracked(debug)]
+    #[tracked]
     pub name: Option<Ident<'db>>,
 
-    #[salsa::tracked(debug)]
+    #[tracked]
     pub node: AstPtr<nodes::VariableDeclaration>,
 }
 

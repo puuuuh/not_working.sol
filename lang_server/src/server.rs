@@ -11,7 +11,6 @@ use line_index::LineIndex;
 use std::collections::HashSet;
 use std::ops::ControlFlow;
 use std::sync::Arc;
-use tracing::info;
 
 use crate::from_proto::ToCaminoPathBuf;
 use crate::{from_proto, to_proto};

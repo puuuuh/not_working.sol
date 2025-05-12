@@ -169,7 +169,7 @@ impl<'db> HasScope<'db> for ContractId<'db> {
     }
 
     fn item_scope(self, db: &'db dyn BaseDb, project: Project) -> ItemScope<'db> {
-        let chain = inheritance_chain(db, project, self).clone().unwrap_or(vec![self]);
+        let chain = inheritance_chain(db, project, self);
 
         let items: Vec<_> = chain
             .into_iter()
@@ -251,7 +251,7 @@ impl<'db> HasScope<'db> for SourceUnit<'db> {
     #[salsa::tracked]
     fn item_scope(self, db: &'db dyn BaseDb, project: Project) -> ItemScope<'db> {
         let imports = resolve_file_root(db, project, self.file(db));
-        ItemScope::new(db, None, imports.clone())
+        ItemScope::new(db, None, imports.iter().flat_map(|(name, items)| items.iter().map(|i| (*name, *i))).collect())
     }
 
     #[salsa::tracked]

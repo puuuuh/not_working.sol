@@ -20,15 +20,19 @@ use super::Item;
 
 #[salsa::tracked(debug)]
 pub struct FunctionId<'db> {
-    #[tracked]
+    #[id]
     pub file: File,
 
     #[id]
     pub name: Option<Ident<'db>>,
+
+    #[tracked]
     pub info: Function<'db>,
 
+    #[tracked]
     pub body_node: Option<AstPtr<nodes::Block>>,
 
+    #[tracked]
     pub node: AstPtr<nodes::FunctionDefinition>,
 }
 

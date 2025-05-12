@@ -109,10 +109,9 @@ impl AnalysisHost {
 
     pub fn diagnostics(&self, file: File) -> Vec<Diagnostic> {
         let syntax: Vec<&SyntaxError> = lower_file::accumulated::<SyntaxError>(&self.db, file);
-        dbg!(syntax.len());
         self.db.attach(|_| {
             let typeres: Vec<&TypeResolutionError> = resolve_file::accumulated::<TypeResolutionError>(&self.db, self.project, file);
-            dbg!(typeres.len());
+            typeres.len();
             let typeres = typeres.into_iter().map(Diagnostic::TypeResolution);
             syntax.into_iter().map(Diagnostic::Syntax).chain(typeres).collect()
         })

@@ -22,14 +22,14 @@ pub struct SymbolAlias<'db> {
 
 #[salsa::tracked(debug)]
 pub struct ImportId<'db> {
-    #[tracked]
+    #[id]
     pub file: File,
 
-    #[salsa::tracked(debug)]
+    #[id]
     pub kind: ImportKind<'db>,
 
-    #[salsa::tracked(debug)]
-    pub node: AstPtr<nodes::Import>,
+    #[tracked]
+    pub node: AstPtr<nodes::Import>
 }
 
 impl<'db> ImportId<'db> {

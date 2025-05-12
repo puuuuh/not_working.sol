@@ -22,7 +22,7 @@ use vfs::File;
 
 #[salsa::tracked(debug)]
 pub struct ContractId<'db> {
-    #[tracked]
+    #[id]
     pub file: File,
 
     #[id]
@@ -34,12 +34,12 @@ pub struct ContractId<'db> {
     #[tracked]
     pub is_abstract: bool,
 
+    #[returns(ref)]
     #[tracked]
-    #[return_ref]
     pub inheritance_chain: Vec<InheritanceSpecifier<'db>>,
 
+    #[returns(ref)]
     #[tracked]
-    #[return_ref]
     pub items: Vec<ContractItem<'db>>,
 
     #[tracked]

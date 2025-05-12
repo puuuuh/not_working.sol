@@ -18,9 +18,14 @@ pub struct EventId<'db> {
 
     #[id]
     pub name: Ident<'db>,
+
+    #[tracked]
     pub is_anon: bool,
+
+    #[tracked]
     pub parameters: Vec<EventParameterId<'db>>,
 
+    #[tracked]
     pub node: AstPtr<nodes::EventDefinition>,
 }
 

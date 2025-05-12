@@ -71,7 +71,7 @@ impl<'a> LowerCtx<'a> {
         self.stmts.insert(AstPtr::new(&s), data);
     }
 
-    pub fn lower_source(&mut self, src: nodes::UnitSource) -> BTreeSet<Item<'a>> {
+    pub fn lower_source(&mut self, src: nodes::UnitSource) -> Vec<Item<'a>> {
         src.items().map(|i| self.lower_item(i)).collect()
     }
 

@@ -18,8 +18,11 @@ pub struct ErrorId<'db> {
 
     #[id]
     pub name: Ident<'db>,
+
+    #[tracked]
     pub parameters: Vec<ErrorParameterId<'db>>,
 
+    #[tracked]
     pub node: AstPtr<nodes::ErrorDefinition>,
 }
 

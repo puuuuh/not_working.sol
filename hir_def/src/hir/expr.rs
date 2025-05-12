@@ -17,9 +17,10 @@ use super::{TypeRefId, TypeRefKind};
 
 #[salsa::tracked(debug)]
 pub struct ExprId<'db> {
-    #[return_ref]
+    #[returns(ref)]
     pub kind: Expr<'db>,
 
+    #[tracked]
     pub node: Option<FileAstPtr<nodes::Expr>>,
 }
 
