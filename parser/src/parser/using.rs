@@ -72,7 +72,7 @@ impl Parser<'_> {
             if self.eat(AS_KW) {
                 let Some(op) = self.at_oneof(USER_DEFINABLE_OP) else {
                     self.err_unexpected_token(USER_DEFINABLE_OP);
-                    return;
+                    break 'parse;
                 };
                 self.builder.start_node(USER_DEFINEABLE_OPERATOR.into());
                 self.bump(op);

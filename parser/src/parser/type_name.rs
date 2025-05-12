@@ -104,8 +104,8 @@ impl<'a> Parser<'a> {
     }
 
     fn elementary_type_name(&mut self) {
+        self.builder.start_node(ELEMENTARY_TYPE.into());
         'parse: {
-            self.builder.start_node(ELEMENTARY_TYPE.into());
             match peek!([IDENT, ADDRESS_KW], 'parse, self) {
                 ADDRESS_KW => {
                     self.bump(ELEMENTARY_TYPE_IDENT);

@@ -1,6 +1,8 @@
 mod split;
 
-use std::path::{Path, PathBuf};
+use std::{fs, path::{Path, PathBuf}};
+
+use parser::parser::{common::format_node, lexer::Lexer, Parser};
 
 fn enum_files(dir: impl AsRef<Path>, cb: &mut impl FnMut(PathBuf)) {
     let files = std::fs::read_dir(dir).unwrap();
@@ -14,12 +16,11 @@ fn enum_files(dir: impl AsRef<Path>, cb: &mut impl FnMut(PathBuf)) {
     }
 }
 
-/*
 #[test]
 fn parser_tests() {
     let mut n = 0;
     let start = std::time::Instant::now();
-    enum_files("\\node_modules\\", &mut |path| {
+    enum_files("test_data\\", &mut |path| {
         if path.extension().map(|f| f == "sol") != Some(true) {
             return;
         }
@@ -39,17 +40,8 @@ fn parser_tests() {
             })
             .collect::<Vec<_>>();
 
-        let res = Parser::parse(&tokens);
-        let node = res.syntax_node();
-        if !res.errors().is_empty() {
-            let mut data = String::new();
-            format_node(&mut data, 0, &mut node.children_with_tokens());
-            println!("{data}");
-            dbg!(res.errors());
-            panic!()
-        }
+        Parser::parse(&tokens);
     });
     dbg!(n);
     dbg!(start.elapsed());
 }
-*/
