@@ -3,8 +3,6 @@ pub mod item;
 
 use base_db::{BaseDb, Project};
 pub use body::BodyScope;
-use body::BodyScopeIter;
-use either::Either;
 use hir_def::{
     Constructor, ConstructorId, ContractId, EnumerationId, ErrorId, EventId, ExprId, FunctionId,
     Ident, IdentPath, ImportId, Item, ModifierId, PragmaId, SourceUnit, StateVariableId,
@@ -13,11 +11,10 @@ use hir_def::{
 pub use item::ItemScope;
 
 use indexmap::IndexMap;
-use item::ItemScopeIter;
 use salsa::{Database, Update};
+use smallvec::SmallVec;
 use std::{
-    hash::{Hash, Hasher},
-    ops::{Deref, DerefMut},
+    collections::{btree_map, BTreeMap}, hash::{Hash, Hasher}, ops::{Deref, DerefMut}
 };
 use vfs::File;
 
@@ -47,36 +44,51 @@ impl<'db> From<BodyScope<'db>> for Scope<'db> {
 }
 
 impl<'db> Scope<'db> {
-    pub fn iter(self, db: &'db dyn BaseDb) -> Either<ItemScopeIter<'db>, BodyScopeIter<'db>> {
+    pub fn all_definitions(
+        self,
+        db: &'db dyn BaseDb,
+    ) -> BTreeMap<Ident<'db>, SmallVec<[Definition<'db>; 1]>> {
         match self {
-            Scope::Item(item_scope) => Either::Left(item_scope.iter(db)),
-            Scope::Body(body_scope) => Either::Left(body_scope.parent(db).iter(db)),
-            Scope::Expr(body_scope, i) => Either::Right(body_scope.iter_in_scope(db, i)),
+            Scope::Item(item_scope) => item_scope.all_definitions(db),
+            Scope::Body(body_scope) => body_scope.parent(db).all_definitions(db),
+            Scope::Expr(body_scope, i) => body_scope.all_definitions(db, i),
         }
     }
 
-    pub fn lookup(
+    pub fn find_all(
         self,
         db: &'db dyn BaseDb,
         name: Ident<'db>,
-    ) -> Either<ItemScopeIter<'db>, BodyScopeIter<'db>> {
+    ) -> SmallVec<[Definition<'db>; 1]> {
         match self {
-            Scope::Item(item_scope) => Either::Left(item_scope.name(db, name)),
-            Scope::Body(body_scope) => Either::Left(body_scope.parent(db).name(db, name)),
-            Scope::Expr(body_scope, i) => Either::Right(body_scope.lookup_in_scope(db, i, name)),
+            Scope::Item(item_scope) => item_scope.find_all(db, name),
+            Scope::Body(body_scope) => body_scope.parent(db).find_all(db, name),
+            Scope::Expr(body_scope, i) => body_scope.find_all(db, i, name),
         }
     }
 
-    pub fn lookup_in_expr(
+    pub fn find(
+        self,
+        db: &'db dyn BaseDb,
+        name: Ident<'db>,
+    ) -> Option<Definition<'db>> {
+        match self {
+            Scope::Item(item_scope) => item_scope.find(db, name),
+            Scope::Body(body_scope) => body_scope.parent(db).find(db, name),
+            Scope::Expr(body_scope, i) => body_scope.find(db, i, name),
+        }
+    }
+
+    pub fn find_in_expr(
         self,
         db: &'db dyn BaseDb,
         expr: ExprId<'db>,
         name: Ident<'db>,
-    ) -> Either<ItemScopeIter<'db>, BodyScopeIter<'db>> {
+    ) -> Option<Definition<'db>> {
         match self {
-            Scope::Item(item_scope) => Either::Left(item_scope.name(db, name)),
+            Scope::Item(item_scope) => item_scope.find(db, name),
             Scope::Body(expr_scope_root) | Scope::Expr(expr_scope_root, _) => {
-                Either::Right(expr_scope_root.lookup_in_expr(db, expr, name))
+                expr_scope_root.find_in_expr(db, expr, name)
             }
         }
     }
@@ -84,7 +96,7 @@ impl<'db> Scope<'db> {
     pub fn lookup_path(self, db: &'db dyn BaseDb, path: &[Ident<'db>]) -> Option<Definition<'db>> {
         let mut path = path.into_iter();
         let start = path.next()?;
-        if let mut def @ Definition::Item(item) = self.lookup(db, *start).next()?.1 {
+        if let mut def @ Definition::Item(item) = self.find(db, *start)? {
             let mut file = item.file(db);
             'ident_loop: for ident in path {
                 let container = Container::try_from(item).ok()?;
@@ -154,7 +166,7 @@ impl<'db> HasScope<'db> for ConstructorId<'db> {
             project,
             self.item_scope(db, project),
             Item::Constructor(self),
-            self.info(db).args.iter().copied(),
+            self.info(db).args.iter().copied().collect(),
             self.body(db).map(|a| a.0),
         )
         .into()
@@ -168,16 +180,26 @@ impl<'db> HasScope<'db> for ContractId<'db> {
         Scope::Item(self.item_scope(db, project))
     }
 
+    #[salsa::tracked]
     fn item_scope(self, db: &'db dyn BaseDb, project: Project) -> ItemScope<'db> {
         let chain = inheritance_chain(db, project, self);
 
-        let items: Vec<_> = chain
-            .into_iter()
-            .rev()
-            .flat_map(|c| {
-                c.items(db).iter().filter_map(|a| a.name(db).map(|name| (name, (*a).into())))
-            })
-            .collect();
+        let mut items: BTreeMap<Ident<'_>, smallvec::SmallVec<[Definition<'_>; 1]>> = BTreeMap::new();
+        for c in chain.into_iter() {
+            let named_items = c.items(db)
+                .iter()
+                .filter_map(|a| Some((a.name(db)?, Definition::Item((*a).into()))));
+            for (name, def) in named_items {
+                match items.entry(name) {
+                    btree_map::Entry::Vacant(vacant_entry) => {
+                        vacant_entry.insert([def].into_iter().collect());
+                    },
+                    btree_map::Entry::Occupied(mut occupied_entry) => {
+                        occupied_entry.get_mut().push(def);
+                    },
+                }
+            }
+        }
 
         ItemScope::new(
             db,
@@ -201,7 +223,7 @@ impl<'db> HasScope<'db> for FunctionId<'db> {
             project,
             self.item_scope(db, project),
             Item::Function(self),
-            self.info(db).args.iter().copied(),
+            self.info(db).args.iter().copied().collect(),
             self.body(db).map(|a| a.0),
         )
         .into()
@@ -251,7 +273,14 @@ impl<'db> HasScope<'db> for SourceUnit<'db> {
     #[salsa::tracked]
     fn item_scope(self, db: &'db dyn BaseDb, project: Project) -> ItemScope<'db> {
         let imports = resolve_file_root(db, project, self.file(db));
-        ItemScope::new(db, None, imports.iter().flat_map(|(name, items)| items.iter().map(|i| (*name, *i))).collect())
+
+        ItemScope::new(db, 
+            None, 
+            imports.iter()
+                .map(|(name, defs)| (
+                    *name, 
+                    defs.iter().map(|t| Definition::Item(*t)).collect())
+                ).collect())
     }
 
     #[salsa::tracked]

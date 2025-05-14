@@ -61,6 +61,7 @@ Literal =
 | HexStringLiteral
 | DecimalNumberLiteral
 | HexNumberLiteral
+| BoolLiteral
 
 StringLiteral =
   'string'*
@@ -73,6 +74,10 @@ DecimalNumberLiteral =
 
 HexNumberLiteral =
   'hex_number'
+
+BoolLiteral =
+  'true'
+| 'false'
 
 ElementaryType =
   'elementary_type_ident' 'payable'?

@@ -50,7 +50,7 @@ pub fn goto_definition(
                                 Definition::Local(variable_declaration) => {
                                     NavigationTarget::from_local(
                                         db,
-                                        InFile { file: pos.file, data: variable_declaration.1 },
+                                        variable_declaration,
                                     )
                                 }
                                 Definition::Field(structure_field_id) => {
@@ -64,14 +64,14 @@ pub fn goto_definition(
                             .collect()
                     }
                     hir_def::hir::Expr::Ident { name_ref } => scopes
-                        .lookup_in_expr(db, *e, *name_ref)
+                        .find_in_expr(db, *e, *name_ref)
                         .into_iter()
-                        .flat_map(|defsite| match defsite.1 {
+                        .flat_map(|defsite| match defsite {
                             Definition::Item(item) => NavigationTarget::from_item(db, item),
                             Definition::Local(variable_declaration) => {
                                 NavigationTarget::from_local(
                                     db,
-                                    InFile { file: pos.file, data: variable_declaration.1 },
+                                    variable_declaration,
                                 )
                             }
                             _ => None,
@@ -91,13 +91,13 @@ pub fn goto_definition(
 
     return Some(
         scope
-            .lookup(db, Ident::new(db, token.text()))
+            .find(db, Ident::new(db, token.text()))
             .into_iter()
-            .flat_map(|defsite| match defsite.1 {
+            .flat_map(|defsite| match defsite {
                 Definition::Item(item) => NavigationTarget::from_item(db, item),
                 Definition::Local(variable_declaration) => NavigationTarget::from_local(
                     db,
-                    InFile { file: pos.file, data: variable_declaration.1 },
+                    variable_declaration,
                 ),
                 _ => None,
             })

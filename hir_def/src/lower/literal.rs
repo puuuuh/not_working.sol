@@ -29,6 +29,7 @@ impl<'db> LowerCtx<'db> {
                 .and_then(|t| BigInt::parse_bytes(t.text().replace('_', "").as_bytes(), 16))
                 .map(Literal::Number)
                 .unwrap_or(Literal::Error),
+            nodes::Literal::BoolLiteral(d) => Literal::Boolean(d.true_token().is_some())
         }
     }
 }

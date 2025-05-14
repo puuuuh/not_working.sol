@@ -7,3 +7,5 @@ use tys::{Ty, TyKind};
 pub mod error;
 pub mod resolver;
 pub mod tys;
+
+pub mod type_check;

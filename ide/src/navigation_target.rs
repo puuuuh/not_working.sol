@@ -48,12 +48,13 @@ impl NavigationTarget {
 
     pub fn from_local(
         db: &'_ dyn BaseDb,
-        d: InFile<VariableDeclaration<'_>>,
+        d: VariableDeclaration<'_>,
     ) -> Option<NavigationTarget> {
+        let pos = d.node(db);
         let node = d.syntax(db);
         let full_range = node.syntax().text_range();
         Some(NavigationTarget {
-            file: d.file,
+            file: pos.file,
             full_range,
             focus_range: node.name().map(|n| n.syntax().text_range()).unwrap_or(full_range),
         })
@@ -63,9 +64,8 @@ impl NavigationTarget {
         let name_range = |n: Name| n.syntax().text_range();
         let (full_range, focus_range) = match d {
             Item::Import(import_id) => {
-                todo!();
-                //let node = import_id.syntax(db);
-                //(node.syntax().text_range(), None)
+                let node = import_id.syntax(db);
+                (node.syntax().text_range(), None)
             }
             Item::Pragma(pragma_id) => {
                 let node = pragma_id.syntax(db);

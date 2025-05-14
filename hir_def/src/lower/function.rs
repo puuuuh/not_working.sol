@@ -75,7 +75,7 @@ impl<'db> LowerCtx<'db> {
             self.lower_type_ref2(p.ty()),
             p.location().map(Into::into),
             Ident::from_name_opt(self.db, p.name()),
-            AstPtr::new(&p),
+            FileAstPtr::new(self.file, &p),
         )
     }
 

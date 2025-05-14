@@ -6,7 +6,6 @@ use scope::body::Definition;
 use vfs::File;
 pub mod container;
 pub mod inheritance;
-pub mod nameres;
 pub mod scope;
 pub mod import;
 

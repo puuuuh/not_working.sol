@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 pub use crate::input::Project;
 use rowan::TextSize;
-use salsa::Event;
 use vfs::Vfs;
 pub use vfs::{AnchoredPath, File, VfsPath};
 

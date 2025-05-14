@@ -24,7 +24,7 @@ pub struct VariableDeclaration<'db> {
     pub name: Option<Ident<'db>>,
 
     #[tracked]
-    pub node: AstPtr<nodes::VariableDeclaration>,
+    pub node: FileAstPtr<nodes::VariableDeclaration>,
 }
 
 impl HirPrint for VariableDeclaration<'_> {

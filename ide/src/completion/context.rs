@@ -94,7 +94,8 @@ impl<'db> CompletionCtx<'db> {
             }
             CompletionKind::Name => {
                 let s = self.item.scope(self.db, self.project);
-                s.iter(self.db)
+                s.all_definitions(self.db)
+                    .into_iter()
                     .map(|a| Completion {
                         label: a.0.data(self.db).clone(),
                         src_range: self.pos,

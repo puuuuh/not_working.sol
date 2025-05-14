@@ -120,6 +120,8 @@ pub(crate) const KINDS_SRC: KindsSrc<'_> = KindsSrc {
         "days",
         "weeks",
         "years",
+        "true",
+        "false"
     ],
     contextual_keywords: &[
         "from",
@@ -136,6 +138,7 @@ pub(crate) const KINDS_SRC: KindsSrc<'_> = KindsSrc {
         "HEX_STRING_LITERAL",
         "DECIMAL_NUMBER_LITERAL",
         "HEX_NUMBER_LITERAL",
+        "BOOL_LITERAL"
     ],
     tokens: &[
         "STRING",

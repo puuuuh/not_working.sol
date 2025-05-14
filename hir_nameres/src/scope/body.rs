@@ -1,3 +1,5 @@
+use std::collections::btree_map;
+use std::collections::BTreeMap;
 use std::ops::Range;
 use std::sync::Arc;
 use std::thread::current;
@@ -24,68 +26,13 @@ use vfs::File;
 use crate::scope::ItemScope;
 
 use super::Scope;
-use super::item::ItemScopeIter;
-
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, salsa::Update)]
-pub enum StmtOrItem<'db> {
-    Stmt(StatementId<'db>),
-    Item(Item<'db>),
-}
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, salsa::Update)]
 pub enum Definition<'db> {
     Item((Item<'db>)),
-    Local((StmtOrItem<'db>, VariableDeclaration<'db>)),
+    Local(VariableDeclaration<'db>),
     Field(StructureFieldId<'db>),
     EnumVariant(EnumerationVariantId<'db>),
-}
-
-pub struct BodyScopeIter<'db> {
-    item: ItemScopeIter<'db>,
-    db: &'db dyn Database,
-    current: ExprScope,
-    scopes: &'db [ExprScope],
-    definitions: &'db [(Ident<'db>, Definition<'db>)],
-    name: Option<Ident<'db>>,
-}
-
-impl<'db> BodyScopeIter<'db> {
-    #[inline(always)]
-    fn next_inner(&mut self) -> Option<(Ident<'db>, Definition<'db>)> {
-        while self.current.range.is_empty() {
-            if let Some(p) = self.current.parent {
-                self.current = self.scopes[p].clone();
-            } else {
-                return self.item.next().map(|(name, item)| (name, item));
-            }
-        }
-
-        self.current.range.end -= 1;
-
-        let t = Some(self.definitions[self.current.range.end]);
-
-        t
-    }
-}
-
-impl<'db> Iterator for BodyScopeIter<'db> {
-    type Item = (Ident<'db>, Definition<'db>);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            if let Some(t) = self.next_inner() {
-                if let Some(name) = self.name {
-                    if t.0 == name {
-                        return Some(t);
-                    }
-                } else {
-                    return Some(t);
-                }
-            } else {
-                return self.item.next().map(|(name, item)| (name, item));
-            }
-        }
-    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, salsa::Update)]
@@ -98,85 +45,135 @@ pub struct ExprScope {
 pub struct BodyScope<'db> {
     pub parent: ItemScope<'db>,
     #[returns(ref)]
-    pub definitions: SmallVec<[(Ident<'db>, Definition<'db>); 2]>,
+    pub definitions: Vec<(Ident<'db>, Definition<'db>)>,
     #[returns(ref)]
     pub expr_scopes: SmallVec<[ExprScope; 1]>,
     #[returns(ref)]
-    pub scope_by_expr: IndexMapUpdate<ExprId<'db>, usize>,
+    pub scope_by_expr: BTreeMap<ExprId<'db>, usize>,
     #[returns(ref)]
-    pub scope_by_stmt: IndexMapUpdate<StatementId<'db>, usize>,
+    pub scope_by_stmt: BTreeMap<StatementId<'db>, usize>,
 }
 
+#[salsa::tracked]
 impl<'db> BodyScope<'db> {
     pub fn from_body(
         db: &'db dyn BaseDb,
         project: Project,
         parent: ItemScope<'db>,
         item: Item<'db>,
-        args: impl Iterator<Item = VariableDeclaration<'db>>,
+        args: SmallVec<[VariableDeclaration<'db>; 8]>,
         body: Option<StatementId<'db>>,
     ) -> BodyScope<'db> {
         resolve_body(db, project, parent, item, args, body)
     }
 
-    pub fn lookup_in_expr(
+    #[salsa::tracked]
+    pub fn all_definitions(self, db: &'db dyn BaseDb, scope: usize) -> BTreeMap<Ident<'db>, SmallVec<[Definition<'db>; 1]>> {
+        let mut res = BTreeMap::new();
+        let scopes = self.expr_scopes(db);
+        let defintions = self.definitions(db);
+        let mut s = scopes.get(scope).cloned();
+        while let Some(scope) = s {
+            let items = &defintions[scope.range];
+            for (name, items) in items {
+                if let btree_map::Entry::Vacant(v) = res.entry(*name) {
+                    v.insert(smallvec![items.clone()]);
+                }
+            }
+
+            s = scope.parent.map(|scope| scopes[scope].clone());
+        }
+
+        for (name, items) in self.parent(db).all_definitions(db) {
+            if let btree_map::Entry::Vacant(v) = res.entry(name) {
+                v.insert(items.clone());
+            }
+        }
+
+        res
+    }
+
+    #[salsa::tracked]
+    pub fn find_in_expr(
         self,
         db: &'db dyn BaseDb,
         expr: ExprId<'db>,
         name: Ident<'db>,
-    ) -> BodyScopeIter<'db> {
-        let scope = self.scope_by_expr(db).0.get(&expr).copied().unwrap_or_default();
-        self.lookup_in_scope(db, scope, name)
+    ) -> Option<Definition<'db>> {
+        let scope = self.scope_by_expr(db).get(&expr).copied().unwrap_or_default();
+        self.find(db, scope, name)
     }
 
-    pub fn iter_in_scope(self, db: &'db dyn BaseDb, scope: usize) -> BodyScopeIter<'db> {
-        BodyScopeIter {
-            name: None,
-            db,
-            current: self.expr_scopes(db)[scope].clone(),
-            scopes: self.expr_scopes(db),
-            definitions: self.definitions(db),
-            item: self.parent(db).iter(db),
-        }
-    }
-
-    pub fn lookup_in_scope(
+    #[salsa::tracked]
+    pub fn find(
         self,
         db: &'db dyn BaseDb,
         scope: usize,
         name: Ident<'db>,
-    ) -> BodyScopeIter<'db> {
-        BodyScopeIter {
-            name: Some(name),
-            db,
-            current: self.expr_scopes(db)[scope].clone(),
-            scopes: self.expr_scopes(db),
-            definitions: self.definitions(db),
-            item: self.parent(db).name(db, name),
+    ) -> Option<Definition<'db>> {
+        let scopes = self.expr_scopes(db);
+        let defintions = self.definitions(db);
+        let mut s = scopes.get(scope).cloned();
+        while let Some(scope) = s {
+            let items = &defintions[scope.range];
+            if let Some(def) = items.iter().find_map(|(n, item)| (*n == name).then_some(item)) {
+                return Some(*def);
+            }
+
+            s = scope.parent.map(|scope| scopes[scope].clone());
         }
+
+        return self.parent(db).find(db, name);
+    }
+
+    #[salsa::tracked]
+    pub fn find_all(
+        self,
+        db: &'db dyn BaseDb,
+        scope: usize,
+        name: Ident<'db>,
+    ) -> SmallVec<[Definition<'db>; 1]> {
+        let mut res = SmallVec::new();
+        let scopes = self.expr_scopes(db);
+        let defintions = self.definitions(db);
+        let mut s = scopes.get(scope).cloned();
+        while let Some(scope) = s {
+            let items = &defintions[scope.range];
+            for i in items.iter().filter_map(|(n, item)| (*n == name).then_some(item)) {
+                res.push(*i);
+            }
+
+            s = scope.parent.map(|scope| scopes[scope].clone());
+        }
+
+        res.extend(self.parent(db).find_all(db, name));
+
+        res
     }
 }
 
 pub struct ScopeResolver<'db> {
     db: &'db dyn Database,
     scopes: SmallVec<[ExprScope; 1]>,
-    definitions: SmallVec<[(Ident<'db>, Definition<'db>); 2]>,
+    definitions: Vec<(Ident<'db>, Definition<'db>)>,
     scope_item_cnt: Vec<usize>,
-    scope_by_expr: IndexMap<ExprId<'db>, usize>,
-    scope_by_stmt: IndexMap<StatementId<'db>, usize>,
+    scope_by_expr: BTreeMap<ExprId<'db>, usize>,
+    scope_by_stmt: BTreeMap<StatementId<'db>, usize>,
 }
 
+#[salsa::tracked]
 fn resolve_body<'db>(
     db: &'db dyn BaseDb,
     project: Project,
     parent: ItemScope<'db>,
     item: Item<'db>,
-    args: impl Iterator<Item = (VariableDeclaration<'db>)>,
+    args: SmallVec<[VariableDeclaration<'db>; 8]>,
     body: Option<StatementId<'db>>,
 ) -> BodyScope<'db> {
-    let root_items: SmallVec<[(Ident<'_>, Definition<'_>); 2]> = args
+    let root_items: Vec<_> = args
+        .into_iter()
         .filter_map(|a| {
-            a.name(db).map(move |n| (n, Definition::Local((StmtOrItem::Item(item), a))))
+            a.name(db).map(move |n| (n, Definition::Local(a)))
         })
         .collect();
 
@@ -199,16 +196,14 @@ fn resolve_body<'db>(
         resolver.scopes.pop();
     }
     resolver.scopes.shrink_to_fit();
-    resolver.scope_by_expr.shrink_to_fit();
-    resolver.scope_by_stmt.shrink_to_fit();
 
     BodyScope::new(
         db,
         parent,
         resolver.definitions,
         resolver.scopes,
-        IndexMapUpdate(resolver.scope_by_expr),
-        IndexMapUpdate(resolver.scope_by_stmt),
+        resolver.scope_by_expr,
+        resolver.scope_by_stmt,
     )
 }
 
@@ -253,7 +248,7 @@ impl<'db> Visitor<'db> for &mut ScopeResolver<'db> {
             Statement::Try { expr, returns, body, catch } => {
                 self.new_scope(Some(current_scope));
                 for item in returns.iter().flatten().filter_map(|a| {
-                    a.name(self.db).map(|name| (name, Definition::Local((StmtOrItem::Stmt(s), *a))))
+                    a.name(self.db).map(|name| (name, Definition::Local(*a)))
                 }) {
                     self.add_item(item);
                 }
@@ -269,7 +264,7 @@ impl<'db> Visitor<'db> for &mut ScopeResolver<'db> {
             Statement::VarDecl { items, init_expr } => {
                 self.new_scope(Some(ctx));
                 for item in items.iter().flatten().filter_map(|a| {
-                    a.name(self.db).map(|name| (name, Definition::Local((StmtOrItem::Stmt(s), *a))))
+                    a.name(self.db).map(|name| (name, Definition::Local(*a)))
                 }) {
                     self.add_item(item);
                 }

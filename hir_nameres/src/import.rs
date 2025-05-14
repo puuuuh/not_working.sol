@@ -261,7 +261,6 @@ mod tests {
 
     #[test]
     fn import_cache_invalidation() {
-        tracing_subscriber::fmt().with_max_level(LevelFilter::DEBUG).init();
         let fixture = TestFixture::parse(
             r#"
             /main.sol
@@ -284,6 +283,9 @@ mod tests {
                 super::resolve_file_root(&db, project, file);
             }
             file.set_content(&mut db).to(r#"
+
+
+
             import "main.sol";
 
             contract A2 {}

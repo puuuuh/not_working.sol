@@ -109,7 +109,7 @@ impl_major_item!(
     ErrorId<'db>: nodes::ErrorDefinition,
     EventId<'db>: nodes::EventDefinition,
     FunctionId<'db>: nodes::FunctionDefinition,
-    //ImportId<'db>: nodes::Import,
+    ImportId<'db>: nodes::Import,
     ModifierId<'db>: nodes::ModifierDefinition,
     PragmaId<'db>: nodes::Pragma,
     StateVariableId<'db>: nodes::StateVariableDeclaration,
@@ -118,12 +118,11 @@ impl_major_item!(
     UsingId<'db>: nodes::Using
 );
 
-impl<'db> HasSyntax<'db> for &InFile<VariableDeclaration<'db>> {
+impl<'db> HasSyntax<'db> for VariableDeclaration<'db> {
     type Node = nodes::VariableDeclaration;
 
     fn syntax(self, db: &'db dyn BaseDb) -> Self::Node {
-        let root = self.file.node(db);
-        self.data.node(db).to_node(&root.syntax())
+        self.node(db).to_node(db)
     }
 }
 

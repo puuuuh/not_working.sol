@@ -5,9 +5,11 @@ use change::FileChange;
 use completion::{completion, Completion};
 use diagnostic::Diagnostic;
 use hir_def::{hir::FilePosition, lower_file, FileExt, SyntaxError};
-use hir_ty::error::TypeResolutionError;
+use hir_ty::error::TypeCheckError;
 use hir_ty::resolver::resolve_file;
+use hover::hover;
 use navigation_target::NavigationTarget;
+use rowan::TextRange;
 use rowan::TextSize;
 use salsa::Database;
 use salsa::Setter;
@@ -17,9 +19,10 @@ use vfs::VfsPath;
 
 pub mod change;
 pub mod completion;
-pub mod diagnostic;
+mod diagnostic;
 mod goto_definition;
 mod navigation_target;
+mod hover;
 
 #[derive(Clone)]
 pub struct AnalysisHost {
@@ -76,6 +79,10 @@ impl AnalysisHost {
         completion::completion(&self.db, self.project, pos)
     }
 
+    pub fn hover(&self, file: File, pos: FilePosition) -> Option<(TextRange, String)> {
+        hover::hover(&self.db, self.project, pos)
+    }
+
     pub fn apply_change(&mut self, file: File, change: FileChange) {
         match change {
             FileChange::SetContent { data } => {
@@ -110,9 +117,9 @@ impl AnalysisHost {
     pub fn diagnostics(&self, file: File) -> Vec<Diagnostic> {
         let syntax: Vec<&SyntaxError> = lower_file::accumulated::<SyntaxError>(&self.db, file);
         self.db.attach(|_| {
-            let typeres: Vec<&TypeResolutionError> = resolve_file::accumulated::<TypeResolutionError>(&self.db, self.project, file);
+            let typeres: Vec<&TypeCheckError> = resolve_file::accumulated::<TypeCheckError>(&self.db, self.project, file);
             typeres.len();
-            let typeres = typeres.into_iter().map(Diagnostic::TypeResolution);
+            let typeres = typeres.into_iter().map(Diagnostic::TypeCheck);
             syntax.into_iter().map(Diagnostic::Syntax).chain(typeres).collect()
         })
     }

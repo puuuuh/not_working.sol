@@ -55,6 +55,7 @@ impl LanguageServer for Server {
             Ok(InitializeResult {
                 capabilities: ServerCapabilities {
                     definition_provider: Some(OneOf::Left(true)),
+                    hover_provider: Some(HoverProviderCapability::Simple(true)),
                     type_definition_provider: Some(TypeDefinitionProviderCapability::Simple(true)),
                     position_encoding: Some(PositionEncodingKind::UTF16),
                     text_document_sync: Some(TextDocumentSyncCapability::Kind(
@@ -223,6 +224,27 @@ impl LanguageServer for Server {
         _params: DidChangeWatchedFilesParams,
     ) -> ControlFlow<async_lsp::Result<()>> {
         ControlFlow::Continue(())
+    }
+    
+    fn hover(&mut self, params: HoverParams) -> BoxFuture<'static, Result<Option<Hover>, ResponseError>> {
+        let snap = self.snap.clone();
+
+        Box::pin(async move {
+            let (f, pos) = from_proto::file_position(&snap, params.text_document_position_params).unwrap();
+
+            let Some(result) =
+                snap.hover(f, FilePosition { file: f, offset: pos }) else {
+                return Ok(None);
+            };
+            let line_index = snap.line_index(f);
+            Ok(Some(Hover {
+                contents: HoverContents::Scalar(MarkedString::LanguageString(LanguageString { 
+                    language: "solidity".to_owned(), 
+                    value: result.1 
+                })),
+                range: Some(to_proto::text_range(&line_index, result.0)),
+            }))
+        })
     }
 
     fn completion(

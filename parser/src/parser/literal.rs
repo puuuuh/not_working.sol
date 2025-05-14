@@ -38,6 +38,10 @@ impl<'a> Parser<'a> {
                         self.builder.finish_node();
                     }
                 }
+                TRUE_KW | FALSE_KW => {
+                    self.builder.start_node(BOOL_LITERAL.into());
+                    self.bump_any();
+                }
                 _ => unreachable!(),
             }
             self.builder.finish_node();

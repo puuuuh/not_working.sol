@@ -191,3 +191,49 @@ impl<'db> Ty<'db> {
 pub fn unknown<'db>(db: &'db dyn BaseDb) -> Ty<'db> {
     Ty::new(db, TyKind::Unknown)
 }
+
+#[derive(Debug, PartialEq, Eq, salsa::Update, Clone, Copy)]
+pub struct ElementaryTypes<'db> {
+    pub address: Ty<'db>,
+    pub payable_address: Ty<'db>,
+    pub bool: Ty<'db>,
+    pub string: Ty<'db>,
+    pub bytes: Ty<'db>,
+    pub int8: Ty<'db>,
+    pub int16: Ty<'db>,
+    pub int32: Ty<'db>,
+    pub int64: Ty<'db>,
+    pub int128: Ty<'db>,
+    pub int256: Ty<'db>,
+    pub uint8: Ty<'db>,
+    pub uint16: Ty<'db>,
+    pub uint32: Ty<'db>,
+    pub uint64: Ty<'db>,
+    pub uint128: Ty<'db>,
+    pub uint256: Ty<'db>,
+    pub unknown: Ty<'db>,
+}
+
+#[salsa::tracked]
+pub fn common_types<'db>(db: &'db dyn BaseDb) -> ElementaryTypes<'db> {
+    ElementaryTypes { 
+        address: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Address { payable: false })), 
+        payable_address: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Address { payable: true })), 
+        bool: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Bool)), 
+        string: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::String)), 
+        bytes: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Bytes)), 
+        int8: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: true, size: 8 })), 
+        int16: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: true, size: 16 })), 
+        int32: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: true, size: 32 })), 
+        int64: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: true, size: 64 })), 
+        int128: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: true, size: 128 })), 
+        int256: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: true, size: 256 })), 
+        uint8: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 8 })), 
+        uint16: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 16 })), 
+        uint32: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 32 })), 
+        uint64: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 64 })), 
+        uint128: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 128 })), 
+        uint256: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 256 })), 
+        unknown: Ty::new(db, TyKind::Unknown)
+    }
+}

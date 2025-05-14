@@ -78,7 +78,7 @@ impl<'a> Parser<'a> {
                 self.builder.start_node_at(start, IDENT_EXPR.into());
                 self.name_ref();
             }
-            STRING | HEX_STRING | DECIMAL_NUMBER | HEX_NUMBER => {
+            STRING | HEX_STRING | DECIMAL_NUMBER | HEX_NUMBER | TRUE_KW | FALSE_KW => {
                 self.builder.start_node_at(start, LITERAL_EXPR.into());
                 self.literal();
             }

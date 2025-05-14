@@ -4,7 +4,7 @@ use syntax::TextRange;
 
 #[salsa::accumulator]
 #[derive(Debug, Hash, Clone, Eq, PartialEq)]
-pub struct TypeResolutionError {
+pub struct TypeCheckError {
     pub file: File,
     pub text: String,
     pub range: TextRange,
