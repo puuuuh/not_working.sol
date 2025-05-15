@@ -1,4 +1,4 @@
-use async_lsp::lsp_types::*;
+use async_lsp::{lsp_types::*, LanguageClient};
 use async_lsp::router::Router;
 use async_lsp::{ClientSocket, LanguageServer, ResponseError};
 use base_db::File;
@@ -12,6 +12,7 @@ use std::collections::HashSet;
 use std::ops::ControlFlow;
 use std::sync::Arc;
 
+use crate::flycheck::Flycheck;
 use crate::from_proto::ToCaminoPathBuf;
 use crate::{from_proto, to_proto};
 
@@ -19,6 +20,9 @@ pub struct Server {
     pub(crate) client: ClientSocket,
     pub(crate) opened_files: HashSet<File>,
     pub(crate) snap: AnalysisHost,
+
+    root: Utf8PathBuf,
+    flycheck: Flycheck,
 }
 
 struct TickEvent;
@@ -29,6 +33,8 @@ impl Server {
             client,
             opened_files: Default::default(),
             snap: AnalysisHost::new(),
+            flycheck: Flycheck::new(Utf8PathBuf::new()),
+            root: Utf8PathBuf::new()
         });
         router.event(Self::on_tick);
         router
@@ -47,8 +53,13 @@ impl LanguageServer for Server {
         &mut self,
         params: InitializeParams,
     ) -> BoxFuture<'static, Result<InitializeResult, Self::Error>> {
+        let root = Utf8PathBuf::from_path_buf(params.root_uri.unwrap().to_file_path().unwrap()).unwrap();
+        let fly = Flycheck::new(root.clone());
+
+        self.flycheck = fly;
+        self.root = root.clone();
         self.snap.reload_project(
-            Utf8PathBuf::from_path_buf(params.root_uri.unwrap().to_file_path().unwrap()).unwrap(),
+            root,
         );
 
         Box::pin(async move {
@@ -214,8 +225,29 @@ impl LanguageServer for Server {
 
     fn did_save(
         &mut self,
-        _params: DidSaveTextDocumentParams,
+        params: DidSaveTextDocumentParams,
     ) -> ControlFlow<async_lsp::Result<()>> {
+        let fly = self.flycheck.clone();
+        let mut client = self.client.clone();
+        let root = self.root.clone();
+
+        tokio::spawn(async move {
+            let diagnostics = fly.check().await;
+            match diagnostics.await {
+                Ok(d) => {
+                    for (fname, diags) in to_proto::flycheck_diagnostic(d) {
+                        if let Ok(uri) = Url::from_file_path(root.join(fname).as_std_path().to_owned()) {
+                            let _ = client.publish_diagnostics(PublishDiagnosticsParams {
+                                uri,
+                                diagnostics: diags,
+                                version: None,
+                            });
+                        }
+                    }
+                },
+                Err(e) =>  {}
+            }
+        });
         ControlFlow::Continue(())
     }
 
