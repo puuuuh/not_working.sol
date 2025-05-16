@@ -57,8 +57,9 @@ impl<'db> FunctionId<'db> {
         return Some((
             res,
             ItemSourceMap::new(
-                crate::IndexMapUpdate(lowerer.exprs),
-                crate::IndexMapUpdate(lowerer.stmts),
+                db,
+                (crate::IndexMapUpdate(lowerer.exprs),
+                crate::IndexMapUpdate(lowerer.stmts))
             ),
         ));
     }

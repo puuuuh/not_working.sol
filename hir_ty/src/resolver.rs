@@ -81,7 +81,7 @@ fn resolve_all<'db>(db: &'db dyn BaseDb, project: Project, items: impl Iterator<
             resolve_all(db, project, c.items(db).iter().copied().map(Item::from));
         }
         resolve_item(db, project, i);
-        check_item(db, project, i);
+        //check_item(db, project, i);
     }
 }
 
@@ -112,6 +112,7 @@ impl<'db> TypeResolutionCtx<'db> {
         project: Project,
         item: Item<'db>,
     ) -> TypeResolutionCtx<'db> {
+        cov_mark::hit!(hir_ty_resolve_item);
         let file = item.file(db);
         let mut ctx = TypeResolutionCtx {
             project,
@@ -422,15 +423,6 @@ impl<'db> TypeResolutionCtx<'db> {
         ty
     }
 
-    fn emit_expr_error<N: AstNode>(&self, db: &'db dyn BaseDb, node: Option<FileAstPtr<N>>, desc: String) {
-        if let Some(node) = node {
-            TypeCheckError {
-                file: node.file,
-                text: desc,
-                range: node.ptr.syntax_node_ptr().text_range(),
-            }.accumulate(db);
-        }
-    }
 
     fn resolve_type_ref_inner(
         &mut self,
@@ -491,25 +483,13 @@ impl<'db> TypeResolutionCtx<'db> {
                             Item::Event(event_id) => TyKind::Event(event_id),
                             Item::Struct(structure_id) => TyKind::Struct(structure_id),
                             _ => {
-                                if let Some(node) = t.node(db) {
-                                    TypeCheckError {
-                                        file: node.file,
-                                        text: "This item can't be used as type".to_string(),
-                                        range: node.ptr.syntax_node_ptr().text_range(),
-                                    }.accumulate(db);
-                                };
+                                emit_typeref_error(db, t, "This item can't be used as type".to_string());
                                 return self.resolve_item_ref(db, item)
                             }
                         };
                         return Ty::new(db, kind)
                     } else {
-                        if let Some(node) = t.node(db) {
-                            TypeCheckError {
-                                file: node.file,
-                                text: "Undeclared item".to_string(),
-                                range: node.ptr.syntax_node_ptr().text_range(),
-                            }.accumulate(db);
-                        }
+                        emit_typeref_error(db, t, "Undeclared item".to_string());
                         TyKind::Unknown
                     }
                 }
@@ -593,14 +573,66 @@ impl<'db> TypeResolutionCtx<'db> {
     }
 }
 
+#[salsa::tracked]
+fn emit_typeref_error<'db>(db: &'db dyn BaseDb, expr: TypeRefId<'db>, desc: String) {
+    if let Some(node) = expr.node(db) {
+        TypeCheckError {
+            file: node.file,
+            text: desc,
+            range: node.ptr.syntax_node_ptr().text_range(),
+        }.accumulate(db);
+    }
+}
+
+#[salsa::tracked]
+fn emit_expr_error<'db>(db: &'db dyn BaseDb, expr: ExprId<'db>, desc: String) {
+    if let Some(node) = expr.node(db) {
+        TypeCheckError {
+            file: node.file,
+            text: desc,
+            range: node.ptr.syntax_node_ptr().text_range(),
+        }.accumulate(db);
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use base_db::{Project, TestDatabase, TestFixture, VfsPath};
-    use hir_def::{items::HirPrint, lower_file, FileExt};
-    use salsa::Database;
+    use base_db::{BaseDb, Project, TestDatabase, TestFixture, VfsPath};
+    use hir_def::{items::HirPrint, lower_file, FileExt, Item};
+    use salsa::{Database, Setter};
     use rowan::ast::AstNode;
+    use tracing_subscriber::filter::LevelFilter;
+
+    use crate::resolver::{resolve_all, resolve_file};
 
     use super::resolve_item;
+
+    fn check_types(fixture: TestFixture, expected: &str) {
+        let pos = fixture.position.unwrap();
+        let (db, file) = TestDatabase::from_fixture(fixture);
+        let item = lower_file(&db, file).source_map(&db).find_pos(pos);
+        let types = resolve_item(
+            &db,
+            Project::new(&db, VfsPath::from_virtual("".to_owned())),
+            item.unwrap(),
+        );
+        let mut res = String::new();
+        for (expr, ty) in types.expr_map(&db).0 {
+            expr.write(&db, &mut res, 0).unwrap();
+            res += ": ";
+            res += &ty.pretty_print(&db);
+            res += "\n";
+        }
+        res += "\n";
+        for (type_ref, ty) in types.typeref_map(&db).0 {
+            type_ref.write(&db, &mut res, 0).unwrap();
+            res += ": ";
+            res += &ty.pretty_print(&db);
+            res += "\n";
+        }
+
+        assert_eq!(expected, res, "expected: \n{}, found: \n{}", expected, res)
+    }
 
     #[test]
     fn ident_path_in_mapping() {
@@ -625,36 +657,22 @@ mod tests {
             }
         "#,
         );
-        let pos = fixture.position.unwrap();
-        let (db, file) = TestDatabase::from_fixture(fixture);
-        let lowered_file = lower_file(&db, file);
-        let item = lowered_file.source_map(&db).find_pos(pos);
-        let types = resolve_item(
-            &db,
-            Project::new(&db, VfsPath::from_virtual("".to_owned())),
-            item.unwrap(),
-        );
-        for (expr, ty) in types.expr_map(&db).0 {
-            if let Some(e) = expr.node(&db) {
-                let root = file.node(&db);
-                let data = e.to_node(&db).syntax().text().to_string();
-                println!("{}: {}", data, ty.pretty_print(&db));
-            }
-        }
+        check_types(fixture, "String([[97, 97]]): string
+tmp: Helloworld
+tmp.unknown: {unknown}
 
-        for (expr, ty) in types.typeref_map(&db).0 {
-            if let Some(e) = expr.node(&db) {
-                let root = file.node(&db);
-                let data = e.to_node(&db).syntax().text().to_string();
-                println!("{}: {}", data, ty.pretty_print(&db));
-            }
-        }
+hw.Helloworld: Helloworld
+hw.Helloworld: Helloworld
+uint256: uint256
+mapping(hw.Helloworld => uint256): mapping(Helloworld => uint256)
+");
     }
 
     #[test]
     fn function_overloading() {
         let fixture = TestFixture::parse(
             r"
+            /main.sol
             contract Test
             {
                 uint64 testvar = 1;
@@ -671,25 +689,31 @@ mod tests {
             }
         ",
         );
-        let pos = fixture.position.unwrap();
-        let (db, file) = TestDatabase::from_fixture(fixture);
-        let item = lower_file(&db, file).source_map(&db).find_pos(pos);
-        let types = resolve_item(
-            &db,
-            Project::new(&db, VfsPath::from_virtual("".to_owned())),
-            item.unwrap(),
-        );
-        for (expr, ty) in types.expr_map(&db).0 {
-            let mut t = String::new();
-            expr.write(&db, &mut t, 0).unwrap();
-            println!("{t}: {}", ty.pretty_print(&db));
-        }
+        check_types(fixture, "Number(1): uint256
+arg: uint256
+arg: uint256
+test: function((uint256,uint256,)) -> ((uint256,))
+test(arg,arg): (uint256,)
+Boolean(true): bool
+arg: uint256
+test: function((uint256,bool,)) -> ((bool,))
+test(arg,Boolean(true)): (bool,)
+
+uint256: uint256
+uint256: uint256
+bool: bool
+bool: bool
+uint256: uint256
+uint256: uint256
+uint256: uint256
+");
     }
 
     #[test]
-    fn basic_typeresolve() {
+    fn basic_field_typeresolve() {
         let fixture = TestFixture::parse(
             r"
+            /main.sol
             struct TestStruct {
                 uint256 field;
                 uint128 field2;
@@ -698,30 +722,86 @@ mod tests {
                 uint256 field5;
             }
 
-            contract Test is
-                ReentrancyGuardUpgradeable,
-                ERC2771ContextUpgradeable(address(0))
+            contract Test
             {
-                uint64 testvar = 1;
-
-                function h$0elloWorld(IERC20 memory tmp) {
+                function h$0elloWorld() {
                     TestStruct memory test = 1;
                     test.field;
                 }
             }
         ",
         );
-        let pos = fixture.position.unwrap();
-        let (db, file) = TestDatabase::from_fixture(fixture);
-        let item = lower_file(&db, file).source_map(&db).find_pos(pos);
-        let types = resolve_item(
-            &db,
-            Project::new(&db, VfsPath::from_virtual("".to_owned())),
-            item.unwrap(),
+        check_types(fixture, "Number(1): uint256
+test: TestStruct
+test.field: uint256
+
+TestStruct: TestStruct
+uint256: uint256
+");
+    }
+
+    #[test]
+    fn basic_invalidation_test() {
+        let fixture = TestFixture::parse(
+            r"
+            /main.sol
+            struct TestStruct {
+                uint256 field;
+                uint128 field2;
+                uint256 field3;
+                uint256 field4;
+                uint256 field5;
+            }
+
+            contract Test
+            {
+                function helloWorld() {
+                    TestStruct memory test = 1;
+                    test.field;
+                }
+            }
+        ",
         );
-        for (expr, ty) in types.expr_map(&db).0 {
-            let mut t = String::new();
-            expr.write(&db, &mut t, 0).unwrap();
+
+        let (mut db, file) = TestDatabase::from_fixture(fixture);
+        let project = Project::new(&db, VfsPath::from_virtual("".to_owned()));
+        {
+            cov_mark::check_count!(hir_ty_resolve_item, 3);
+            resolve_file(
+                &db,
+                project,
+                file
+            );
+        }
+        file.set_content(&mut db).to("
+    struct TestStruct {
+                uint256 field;
+                uint128 field2;
+
+
+                uint256 field3;
+                uint256 field4;
+                uint256 field5;
+            }
+
+            contract Test
+            {
+                function helloWorld() {
+
+                    TestStruct memory test = 1;
+                    test.field;
+                }
+    }
+        ".into()
+        );
+        {
+            cov_mark::check_count!(hir_ty_resolve_item, 0);
+            let item = lower_file(&db, file).data(&db).contract(&db, "Test");
+            resolve_file(
+                &db,
+                project,
+                file
+            );
         }
     }
 }

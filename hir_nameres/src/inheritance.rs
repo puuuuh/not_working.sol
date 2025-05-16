@@ -164,7 +164,6 @@ mod tests {
     /// Checks if inheritance chain dont recompute after small unrelated changes
     #[test]
     fn invalidation_test() {
-        tracing_subscriber::fmt().with_max_level(LevelFilter::DEBUG).init();
         let fixture = TestFixture::parse(
             r"
             main.sol

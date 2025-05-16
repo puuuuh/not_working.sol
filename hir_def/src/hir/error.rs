@@ -13,7 +13,7 @@ use super::TypeRefId;
 
 #[tracked(debug)]
 pub struct ErrorId<'db> {
-    #[tracked]
+    #[id]
     pub file: File,
 
     #[id]

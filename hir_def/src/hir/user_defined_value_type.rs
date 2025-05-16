@@ -12,7 +12,7 @@ use vfs::File;
 
 #[tracked(debug)]
 pub struct UserDefinedValueTypeId<'db> {
-    #[tracked]
+    #[id]
     pub file: File,
 
     #[id]

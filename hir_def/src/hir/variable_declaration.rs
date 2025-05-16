@@ -20,6 +20,7 @@ pub struct VariableDeclaration<'db> {
 
     #[tracked]
     pub location: Option<DataLocation>,
+
     #[tracked]
     pub name: Option<Ident<'db>>,
 

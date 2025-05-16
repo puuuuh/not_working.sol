@@ -1,3 +1,5 @@
+use std::convert::Infallible;
+
 use base_db::BaseDb;
 use hir_def::{ContractId, EnumerationId, Ident, Item, SourceUnit, StructureId};
 use vfs::File;
@@ -15,16 +17,21 @@ pub enum Container<'db> {
 }
 
 impl<'db> TryFrom<Item<'db>> for Container<'db> {
-    type Error = ();
+    type Error = Infallible;
 
     fn try_from(value: Item<'db>) -> Result<Self, Self::Error> {
-        Ok(Self::Item(value))
+        Ok(match value {
+            Item::Contract(contract_id) => Self::Contract(contract_id),
+            Item::Enum(enumeration_id) => Self::Enum(enumeration_id),
+            Item::Struct(structure_id) => Self::Structure(structure_id),
+            item => Self::Item(value)
+        })
     }
 }
 
+
 #[salsa::tracked]
 impl<'db> Container<'db> {
-    #[salsa::tracked]
     pub fn defs(self, db: &'db dyn BaseDb) -> Vec<(Ident<'db>, Definition<'db>)> {
         match self {
             Self::Item(item) => match item {

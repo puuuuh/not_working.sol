@@ -14,7 +14,7 @@ use super::TypeRefId;
 
 #[tracked(debug)]
 pub struct StateVariableId<'db> {
-    #[tracked]
+    #[id]
     pub file: File,
 
     #[id]

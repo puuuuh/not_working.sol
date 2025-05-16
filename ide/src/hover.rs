@@ -15,8 +15,8 @@ pub fn hover(db: &dyn BaseDb, project: Project, pos: FilePosition) -> Option<(Te
     let item = parsed.source_map(db).find_pos(pos.offset)?;
     let (stmt, map) = item.body(db)?;
 
-    let expr = map.expr_map.get(&AstPtr::new(&e))?;
+    let expr = map.expr(db, AstPtr::new(&e))?;
     let type_resolution = resolve_item(db, project, item);
 
-    Some((expr.node(db)?.ptr.syntax_node_ptr().text_range(), type_resolution.expr(db, *expr).pretty_print(db)))
+    Some((expr.node(db)?.ptr.syntax_node_ptr().text_range(), type_resolution.expr(db, expr).pretty_print(db)))
 }

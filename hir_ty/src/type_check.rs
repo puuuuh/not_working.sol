@@ -1,5 +1,5 @@
 use base_db::{BaseDb, Project};
-use hir_def::{walk::{walk_expr, walk_stmt, Visitor}, Expr, ExprId, FileAstPtr, Item, StatementId};
+use hir_def::{walk::{walk_expr, walk_stmt, Visitor}, Expr, ExprId, FileAstPtr, Item, StatementId, TypeRefId};
 use hir_nameres::scope::Scope;
 use salsa::{Accumulator, Backtrace};
 
@@ -40,7 +40,7 @@ impl<'db> Visitor<'db> for &mut TypeCheckWalker<'db> {
                     for (lhs, rhs) in lhs_ty.into_iter().zip(tys.iter()) {
                         if let Some((ty_ref, ty)) = lhs {
                             if !rhs.can_coerce(db, ty) {
-                                emit_type_mismatch(db, ty_ref.node(db), ty, *rhs);
+                                emit_typeref_type_mismatch(db, ty_ref, ty, *rhs);
                             }
                         }
                     }
@@ -128,7 +128,7 @@ impl<'db> TypeCheckWalker<'db> {
     fn check_expr_type(&self, db: &'db dyn BaseDb, expr: ExprId<'db>, expected: Ty<'db>) {
         let ty = self.type_resolution.expr(db, expr);
         if !ty.can_coerce(db, expected) {
-            emit_type_mismatch(db, expr.node(db), expected, ty);
+            emit_expr_type_mismatch(db, expr, expected, ty);
         }
     }
 }
@@ -159,6 +159,18 @@ fn emit_error<'db, T: rowan::ast::AstNode>(db: &'db dyn BaseDb, node: Option<Fil
     }
 }
 
+#[salsa::tracked]
+fn emit_typeref_error<'db>(db: &'db dyn BaseDb, expr: TypeRefId<'db>, msg: String) {
+    if let Some(node) = expr.node(db) {
+        TypeCheckError {
+            file: node.file,
+            text: msg,
+            range: node.ptr.syntax_node_ptr().text_range(),
+        }.accumulate(db);
+    }
+}
+
+#[salsa::tracked]
 fn emit_expr_error<'db>(db: &'db dyn BaseDb, expr: ExprId<'db>, msg: String) {
     if let Some(node) = expr.node(db) {
         TypeCheckError {
@@ -169,7 +181,10 @@ fn emit_expr_error<'db>(db: &'db dyn BaseDb, expr: ExprId<'db>, msg: String) {
     }
 }
 
-fn emit_type_mismatch<'db, T: rowan::ast::AstNode>(db: &'db dyn BaseDb, node: Option<FileAstPtr<T>>, expected: Ty<'db>, found: Ty<'db>) {
-    emit_error(db, node, format!("can't implicitly cast {} to {}", found.pretty_print(db), expected.pretty_print(db)));
+fn emit_expr_type_mismatch<'db>(db: &'db dyn BaseDb, node: ExprId<'db>, expected: Ty<'db>, found: Ty<'db>) {
+    emit_expr_error(db, node, format!("can't implicitly cast {} to {}", found.pretty_print(db), expected.pretty_print(db)));
 }
 
+fn emit_typeref_type_mismatch<'db>(db: &'db dyn BaseDb, node: TypeRefId<'db>, expected: Ty<'db>, found: Ty<'db>) {
+    emit_typeref_error(db, node, format!("can't implicitly cast {} to {}", found.pretty_print(db), expected.pretty_print(db)));
+}

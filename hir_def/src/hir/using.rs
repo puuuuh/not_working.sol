@@ -11,7 +11,7 @@ use vfs::File;
 
 #[tracked(debug)]
 pub struct UsingId<'db> {
-    #[tracked]
+    #[id]
     pub file: File,
 
     #[tracked]

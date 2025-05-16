@@ -68,7 +68,9 @@ impl HirPrint for ElementaryTypeRef {
 
 #[salsa::tracked(debug)]
 pub struct TypeRefId<'db> {
+    #[id]
     pub kind: TypeRefKind<'db>,
+    #[tracked]
     pub node: Option<FileAstPtr<nodes::Type>>,
 }
 

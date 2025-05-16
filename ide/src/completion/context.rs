@@ -37,8 +37,8 @@ fn find_expr<'db>(
     mut scope: Scope<'db>,
 ) -> Option<ExprId<'db>> {
     let e = token.parent_ancestors().find_map(|p| nodes::Expr::cast(p))?;
-    let e = source_map.expr_map.get(&AstPtr::new(&e))?;
-    Some(*e)
+
+    source_map.expr(db, AstPtr::new(&e))
 }
 
 fn prev_token(token: &SyntaxToken) -> Option<SyntaxToken> {
@@ -174,6 +174,6 @@ impl<'db> CompletionCtx<'db> {
         let e = token.parent_ancestors().find_map(|t| nodes::Expr::cast(t))?;
         let (stmt, map) = self.item.body(self.db)?;
 
-        return map.expr_map.get(&AstPtr::new(&e)).copied();
+        return map.expr(self.db, AstPtr::new(&e))
     }
 }

@@ -1,22 +1,30 @@
 use crate::hir::ExprId;
 use crate::hir::StatementId;
 use crate::IndexMapUpdate;
+use base_db::BaseDb;
 use rowan::ast::AstPtr;
 use std::collections::HashMap;
 use syntax::ast::nodes::{Expr, Stmt};
 
-#[derive(Clone, Hash, PartialEq, Eq, salsa::Update)]
+#[salsa::tracked(debug)]
 pub struct ItemSourceMap<'db> {
-    pub expr_map: IndexMapUpdate<AstPtr<Expr>, ExprId<'db>>,
-
-    pub stmt_map: IndexMapUpdate<AstPtr<Stmt>, StatementId<'db>>,
+    #[tracked]
+    #[no_eq]
+    pub data: (
+        IndexMapUpdate<AstPtr<Expr>, ExprId<'db>>, 
+        IndexMapUpdate<AstPtr<Stmt>, StatementId<'db>>
+    )
 }
 
+#[salsa::tracked]
 impl<'db> ItemSourceMap<'db> {
-    pub fn new(
-        exprs: IndexMapUpdate<AstPtr<Expr>, ExprId<'db>>,
-        stmts: IndexMapUpdate<AstPtr<Stmt>, StatementId<'db>>,
-    ) -> Self {
-        ItemSourceMap { expr_map: exprs, stmt_map: stmts }
+    #[salsa::tracked]
+    pub fn expr(self, db: &'db dyn BaseDb, ptr: AstPtr<Expr>) -> Option<ExprId<'db>> {
+        self.data(db).0.get(&ptr).copied()
+    }
+
+    #[salsa::tracked]
+    pub fn stmt(self, db: &'db dyn BaseDb, ptr: AstPtr<Stmt>) -> Option<StatementId<'db>> {
+        self.data(db).1.get(&ptr).copied()
     }
 }

@@ -7,7 +7,7 @@ use crate::{hir::ContractId, impl_major_item, lazy_field};
 
 #[salsa::tracked(debug)]
 pub struct PragmaId<'db> {
-    #[tracked]
+    #[id]
     pub file: File,
 
     #[returns(ref)]

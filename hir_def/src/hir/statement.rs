@@ -17,8 +17,10 @@ use super::{DataLocation, HasFile, HasSyntax, TypeRefId};
 #[salsa::tracked(debug)]
 pub struct StatementId<'db> {
     #[returns(ref)]
+    #[tracked]
     pub kind: Statement<'db>,
 
+    #[tracked]
     pub node: Option<FileAstPtr<nodes::Stmt>>,
 }
 

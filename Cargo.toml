@@ -43,6 +43,7 @@ async-lsp = "0.2.2"
 either = "1.15.0"
 cov-mark = "2.0"
 tracing-subscriber = "0.3"
+serde = { version = "1.0", features = ["derive"] }
 
 [workspace.lints.rust]
 unused = "allow"

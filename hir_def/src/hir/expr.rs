@@ -18,6 +18,7 @@ use super::{TypeRefId, TypeRefKind};
 #[salsa::tracked(debug)]
 pub struct ExprId<'db> {
     #[returns(ref)]
+    #[id]
     pub kind: Expr<'db>,
 
     #[tracked]

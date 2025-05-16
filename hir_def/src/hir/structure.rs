@@ -12,11 +12,12 @@ use vfs::File;
 
 #[tracked(debug)]
 pub struct StructureId<'db> {
-    #[tracked]
+    #[id]
     pub file: File,
 
     #[id]
     pub name: Ident<'db>,
+
     #[tracked]
     pub fields: Vec<StructureFieldId<'db>>,
 
@@ -49,7 +50,9 @@ impl HirPrint for StructureId<'_> {
 
 #[tracked(debug)]
 pub struct StructureFieldId<'db> {
+    #[id]
     pub name: Ident<'db>,
+    #[tracked]
     pub ty: TypeRefId<'db>,
 }
 

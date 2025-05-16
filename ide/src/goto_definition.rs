@@ -35,7 +35,7 @@ pub fn goto_definition(
 
     if let Some((Some((_, source_map)), scopes)) = body {
         if let Some(expr) = expr {
-            if let Some(e) = source_map.expr_map.get(&AstPtr::new(&expr)) {
+            if let Some(e) = source_map.expr(db, AstPtr::new(&expr)) {
                 let defs = match e.kind(db) {
                     hir_def::hir::Expr::MemberAccess { owner, member_name } => {
                         let expr_map = type_inference.expr_map(db);
@@ -64,7 +64,7 @@ pub fn goto_definition(
                             .collect()
                     }
                     hir_def::hir::Expr::Ident { name_ref } => scopes
-                        .find_in_expr(db, *e, *name_ref)
+                        .find_in_expr(db, e, *name_ref)
                         .into_iter()
                         .flat_map(|defsite| match defsite {
                             Definition::Item(item) => NavigationTarget::from_item(db, item),
