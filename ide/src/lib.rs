@@ -21,8 +21,8 @@ pub mod change;
 pub mod completion;
 mod diagnostic;
 mod goto_definition;
-mod navigation_target;
 mod hover;
+mod navigation_target;
 
 #[derive(Clone)]
 pub struct AnalysisHost {
@@ -117,7 +117,8 @@ impl AnalysisHost {
     pub fn diagnostics(&self, file: File) -> Vec<Diagnostic> {
         let syntax: Vec<&SyntaxError> = lower_file::accumulated::<SyntaxError>(&self.db, file);
         self.db.attach(|_| {
-            let typeres: Vec<&TypeCheckError> = resolve_file::accumulated::<TypeCheckError>(&self.db, self.project, file);
+            let typeres: Vec<&TypeCheckError> =
+                resolve_file::accumulated::<TypeCheckError>(&self.db, self.project, file);
             typeres.len();
             let typeres = typeres.into_iter().map(Diagnostic::TypeCheck);
             syntax.into_iter().map(Diagnostic::Syntax).chain(typeres).collect()

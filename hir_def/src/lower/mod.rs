@@ -48,14 +48,14 @@ pub(crate) struct LowerCtx<'a> {
 
 impl<'a> LowerCtx<'a> {
     pub fn new(db: &'a dyn BaseDb, file: File) -> Self {
-        Self { 
-            db, 
-            file, 
-            missing_expr: ExprId::missing(db), 
-            missing_typeref: TypeRefId::missing(db), 
-            spans: Vec::new(), 
-            exprs: Default::default(), 
-            stmts: Default::default() 
+        Self {
+            db,
+            file,
+            missing_expr: ExprId::missing(db),
+            missing_typeref: TypeRefId::missing(db),
+            spans: Vec::new(),
+            exprs: Default::default(),
+            stmts: Default::default(),
         }
     }
 

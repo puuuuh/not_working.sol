@@ -1,8 +1,8 @@
 use base_db::{BaseDb, Project};
 use hir_def::{lower_file, FileExt, FilePosition};
 use hir_ty::resolver::resolve_item;
-use rowan::TextRange;
 use rowan::ast::{AstNode, AstPtr};
+use rowan::TextRange;
 use syntax::ast::nodes;
 
 pub fn hover(db: &dyn BaseDb, project: Project, pos: FilePosition) -> Option<(TextRange, String)> {
@@ -18,5 +18,8 @@ pub fn hover(db: &dyn BaseDb, project: Project, pos: FilePosition) -> Option<(Te
     let expr = map.expr(db, AstPtr::new(&e))?;
     let type_resolution = resolve_item(db, project, item);
 
-    Some((expr.node(db)?.ptr.syntax_node_ptr().text_range(), type_resolution.expr(db, expr).pretty_print(db)))
+    Some((
+        expr.node(db)?.ptr.syntax_node_ptr().text_range(),
+        type_resolution.expr(db, expr).human_readable(db),
+    ))
 }

@@ -1,6 +1,9 @@
 mod split;
 
-use std::{fs, path::{Path, PathBuf}};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use parser::parser::{common::format_node, lexer::Lexer, Parser};
 

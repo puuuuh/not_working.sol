@@ -1,6 +1,8 @@
 use syntax::ast::nodes;
 
-#[derive(Clone, Eq, PartialEq, Debug, Hash, salsa::Update, derive_more::Display)]
+#[derive(
+    Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Debug, Hash, salsa::Update, derive_more::Display,
+)]
 pub enum DataLocation {
     #[display("memory")]
     Memory,

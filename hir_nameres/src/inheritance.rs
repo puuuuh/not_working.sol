@@ -1,5 +1,5 @@
 use base_db::{BaseDb, Project};
-use hir_def::{lower_file, ContractId, ContractType, Item};
+use hir_def::{ContractId, ContractType, Item, lower_file};
 use salsa::tracked;
 use smallvec::SmallVec;
 use tracing::warn;
@@ -79,8 +79,10 @@ fn inheritance_chain_cycle<'db>(
         let mut data = vec![vec![]];
         for p in parents.into_iter() {
             let path = &p.path.0;
-            let scope = c.origin(db).map(|c| c.scope(db, project))
-                .unwrap_or_else(|| { lower_file(db, c.file(db)).scope(db, project) });
+            let scope = c
+                .origin(db)
+                .map(|c| c.scope(db, project))
+                .unwrap_or_else(|| lower_file(db, c.file(db)).scope(db, project));
             if let Some(Definition::Item(Item::Contract(p))) = scope.lookup_path(db, path) {
                 data[0].push(p);
                 data.push(inheritance_chain_cycle(db, project, p)?);
@@ -102,10 +104,10 @@ pub fn inheritance_chain<'db>(
         Ok(mut data) => {
             data.reverse();
             data
-        },
+        }
         Err(e) => {
             vec![c]
-        },
+        }
     }
 }
 
@@ -160,7 +162,6 @@ mod tests {
         );
     }
 
-
     /// Checks if inheritance chain dont recompute after small unrelated changes
     #[test]
     fn invalidation_test() {
@@ -205,7 +206,8 @@ mod tests {
             }
             contract K2 is E,D,B {}
             contract Z is K2,K3,K1 {}
-        ".into());
+        "
+        .into());
         {
             cov_mark::check_count!(hir_nameres_inheritance_chain, 0);
             let source_unit = lower_file(&db, file);
@@ -241,12 +243,7 @@ mod tests {
         let source_unit = lower_file(&db, file);
         let data = source_unit.data(&db);
         let c = *data.contracts(&db).last().unwrap();
-        assert_eq!(
-            inheritance_chain(&db, project, c), 
-            vec![
-                c
-            ]
-        );
+        assert_eq!(inheritance_chain(&db, project, c), vec![c]);
     }
 
     #[test]

@@ -33,10 +33,7 @@ pub struct InFile<T> {
 
 impl<T> InFile<T> {
     pub fn new(file: File, data: T) -> Self {
-        Self {
-            file,
-            data
-        }
+        Self { file, data }
     }
 }
 

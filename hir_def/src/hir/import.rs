@@ -29,7 +29,7 @@ pub struct ImportId<'db> {
     pub kind: ImportKind<'db>,
 
     #[tracked]
-    pub node: AstPtr<nodes::Import>
+    pub node: AstPtr<nodes::Import>,
 }
 
 impl<'db> ImportId<'db> {

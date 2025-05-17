@@ -14,15 +14,18 @@ use indexmap::IndexMap;
 use salsa::{Database, Update};
 use smallvec::SmallVec;
 use std::{
-    collections::{btree_map, BTreeMap}, hash::{Hash, Hasher}, ops::{Deref, DerefMut}
+    collections::{BTreeMap, btree_map},
+    hash::{Hash, Hasher},
+    ops::{Deref, DerefMut},
 };
 use vfs::File;
 
 use crate::{
-    container::Container, import::resolve_file_root, inheritance::inheritance_chain, HasDefs
+    HasDefs, container::Container, import::resolve_file_root, inheritance::inheritance_chain,
 };
 
 use super::scope::body::Definition;
+use salsa::plumbing::AsId;
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, PartialOrd, Ord, salsa::Update)]
 pub enum Scope<'db> {
@@ -55,11 +58,7 @@ impl<'db> Scope<'db> {
         }
     }
 
-    pub fn find_all(
-        self,
-        db: &'db dyn BaseDb,
-        name: Ident<'db>,
-    ) -> SmallVec<[Definition<'db>; 1]> {
+    pub fn find_all(self, db: &'db dyn BaseDb, name: Ident<'db>) -> SmallVec<[Definition<'db>; 1]> {
         match self {
             Scope::Item(item_scope) => item_scope.find_all(db, name),
             Scope::Body(body_scope) => body_scope.parent(db).find_all(db, name),
@@ -67,11 +66,7 @@ impl<'db> Scope<'db> {
         }
     }
 
-    pub fn find(
-        self,
-        db: &'db dyn BaseDb,
-        name: Ident<'db>,
-    ) -> Option<Definition<'db>> {
+    pub fn find(self, db: &'db dyn BaseDb, name: Ident<'db>) -> Option<Definition<'db>> {
         match self {
             Scope::Item(item_scope) => item_scope.find(db, name),
             Scope::Body(body_scope) => body_scope.parent(db).find(db, name),
@@ -122,7 +117,7 @@ impl<'db> Scope<'db> {
         match self {
             Scope::Item(item_scope) => Scope::Item(item_scope),
             Scope::Body(body_scope) | Scope::Expr(body_scope, _) => {
-                if let Some(i) = body_scope.scope_by_stmt(db).get(&stmt) {
+                if let Some(i) = body_scope.scope_by_salsa_id(db).get(&stmt.as_id()) {
                     Scope::Expr(body_scope, *i)
                 } else {
                     Scope::Body(body_scope)
@@ -135,7 +130,7 @@ impl<'db> Scope<'db> {
         match self {
             Scope::Item(item_scope) => Scope::Item(item_scope),
             Scope::Body(body_scope) | Scope::Expr(body_scope, _) => {
-                if let Some(i) = body_scope.scope_by_expr(db).get(&expr) {
+                if let Some(i) = body_scope.scope_by_salsa_id(db).get(&expr.as_id()) {
                     Scope::Expr(body_scope, *i)
                 } else {
                     Scope::Body(body_scope)
@@ -184,19 +179,21 @@ impl<'db> HasScope<'db> for ContractId<'db> {
     fn item_scope(self, db: &'db dyn BaseDb, project: Project) -> ItemScope<'db> {
         let chain = inheritance_chain(db, project, self);
 
-        let mut items: BTreeMap<Ident<'_>, smallvec::SmallVec<[Definition<'_>; 1]>> = BTreeMap::new();
+        let mut items: BTreeMap<Ident<'_>, smallvec::SmallVec<[Definition<'_>; 1]>> =
+            BTreeMap::new();
         for c in chain.into_iter() {
-            let named_items = c.items(db)
+            let named_items = c
+                .items(db)
                 .iter()
                 .filter_map(|a| Some((a.name(db)?, Definition::Item((*a).into()))));
             for (name, def) in named_items {
                 match items.entry(name) {
                     btree_map::Entry::Vacant(vacant_entry) => {
                         vacant_entry.insert([def].into_iter().collect());
-                    },
+                    }
                     btree_map::Entry::Occupied(mut occupied_entry) => {
                         occupied_entry.get_mut().push(def);
-                    },
+                    }
                 }
             }
         }
@@ -274,13 +271,14 @@ impl<'db> HasScope<'db> for SourceUnit<'db> {
     fn item_scope(self, db: &'db dyn BaseDb, project: Project) -> ItemScope<'db> {
         let imports = resolve_file_root(db, project, self.file(db));
 
-        ItemScope::new(db, 
-            None, 
-            imports.iter()
-                .map(|(name, defs)| (
-                    *name, 
-                    defs.iter().map(|t| Definition::Item(*t)).collect())
-                ).collect())
+        ItemScope::new(
+            db,
+            None,
+            imports
+                .iter()
+                .map(|(name, defs)| (*name, defs.iter().map(|t| Definition::Item(*t)).collect()))
+                .collect(),
+        )
     }
 
     #[salsa::tracked]

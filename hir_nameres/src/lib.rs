@@ -5,13 +5,13 @@ use inheritance::LinearizationError;
 use scope::body::Definition;
 use vfs::File;
 pub mod container;
+pub mod import;
 pub mod inheritance;
 pub mod scope;
-pub mod import;
 
 pub enum NameresErrorKind {
     Linearization(LinearizationError),
-    Import(ImportResolutionError)
+    Import(ImportResolutionError),
 }
 
 #[salsa::accumulator]

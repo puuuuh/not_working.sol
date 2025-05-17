@@ -1,11 +1,14 @@
-use std::{process::Stdio, sync::{atomic::{AtomicBool}}};
+use std::{process::Stdio, sync::atomic::AtomicBool};
 mod output;
 
 use camino::Utf8PathBuf;
 pub use output::{Diagnostic, Output};
-use tokio::{select, sync::{mpsc, oneshot}};
-use tracing::warn;
 use tokio::io::AsyncReadExt;
+use tokio::{
+    select,
+    sync::{mpsc, oneshot},
+};
+use tracing::warn;
 
 #[derive(Clone)]
 pub struct Flycheck {
@@ -16,15 +19,17 @@ impl Flycheck {
     pub fn new(root: Utf8PathBuf) -> Self {
         let (tx, rx) = mpsc::channel(1);
         tokio::runtime::Handle::current().spawn(Self::background_worker(root, rx));
-        Self {
-            cmd: tx,
-        }
+        Self { cmd: tx }
     }
 
-    async fn background_worker(root: Utf8PathBuf, mut channel: mpsc::Receiver<oneshot::Sender<Output>>) {
+    async fn background_worker(
+        root: Utf8PathBuf,
+        mut channel: mpsc::Receiver<oneshot::Sender<Output>>,
+    ) {
         let mut opt_task = None;
         let mut output = Vec::new();
         loop {
+            // TODO: Fix this?
             if opt_task.is_none() {
                 opt_task = channel.recv().await;
             }
@@ -38,10 +43,11 @@ impl Flycheck {
                 return;
             };
             let mut process = match tokio::process::Command::new("forge")
-                    .args(["compile", "--json"])
-                    .current_dir(&root)
-                    .stdout(Stdio::piped())
-                    .spawn() {
+                .args(["compile", "--json"])
+                .current_dir(&root)
+                .stdout(Stdio::piped())
+                .spawn()
+            {
                 Ok(process) => process,
                 Err(e) => {
                     warn!("Can't spawn forge for flycheck: {e}");
@@ -66,13 +72,12 @@ impl Flycheck {
                 Err(e) => {
                     warn!("Forge output deserialization error: {e}");
                     continue;
-                },
+                }
             };
 
             _ = task.send(res);
         }
     }
-
 
     pub async fn check(&self) -> tokio::sync::oneshot::Receiver<Output> {
         let (tx, rx) = oneshot::channel();

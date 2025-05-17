@@ -46,10 +46,7 @@ impl NavigationTarget {
         Some(NavigationTarget { file: s.file(db), full_range, focus_range })
     }
 
-    pub fn from_local(
-        db: &'_ dyn BaseDb,
-        d: VariableDeclaration<'_>,
-    ) -> Option<NavigationTarget> {
+    pub fn from_local(db: &'_ dyn BaseDb, d: VariableDeclaration<'_>) -> Option<NavigationTarget> {
         let pos = d.node(db);
         let node = d.syntax(db);
         let full_range = node.syntax().text_range();

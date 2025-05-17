@@ -5,10 +5,10 @@ use rowan::TextRange;
 #[derive(Debug, Clone, Copy)]
 pub enum Diagnostic<'db> {
     Syntax(&'db SyntaxError),
-    TypeCheck(&'db TypeCheckError)
+    TypeCheck(&'db TypeCheckError),
 }
 
-impl <'db> Diagnostic<'db> {
+impl<'db> Diagnostic<'db> {
     pub fn range(self) -> TextRange {
         match self {
             Diagnostic::Syntax(syntax_error) => syntax_error.range,

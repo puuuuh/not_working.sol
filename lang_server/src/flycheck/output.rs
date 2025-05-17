@@ -5,7 +5,7 @@ use std::collections::HashMap;
 pub struct SourceLocation {
     pub file: String,
     pub start: u32,
-    pub end: u32
+    pub end: u32,
 }
 
 #[derive(serde::Deserialize, Debug)]
@@ -30,7 +30,7 @@ pub struct Input {
 #[derive(serde::Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct BuildInfo {
-    pub input: Input
+    pub input: Input,
 }
 
 #[derive(serde::Deserialize, Debug)]

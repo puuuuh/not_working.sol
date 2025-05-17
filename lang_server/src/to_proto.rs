@@ -1,7 +1,7 @@
 use std::{collections::HashMap, hash::Hash};
 
 use async_lsp::lsp_types::{
-    CompletionItem, CompletionTextEdit, Diagnostic, Position, Range, TextEdit
+    CompletionItem, CompletionTextEdit, Diagnostic, Position, Range, TextEdit,
 };
 use ide::completion::Completion;
 use line_index::{LineIndex, WideEncoding};
@@ -55,16 +55,25 @@ pub fn completion_item(line_index: &line_index::LineIndex, src: Completion) -> C
 pub fn flycheck_diagnostic(mut d: flycheck::Output) -> HashMap<String, Vec<Diagnostic>> {
     let mut res: HashMap<String, Vec<Diagnostic>> = HashMap::with_capacity(d.errors.len());
     let mut li_cache = HashMap::new();
-    let inputs = d.build_infos.into_iter().flat_map(|bi| bi.input.sources.into_iter()).collect::<HashMap<_,_>>();
+    let inputs = d
+        .build_infos
+        .into_iter()
+        .flat_map(|bi| bi.input.sources.into_iter())
+        .collect::<HashMap<_, _>>();
     for diag in &mut d.errors {
         let li = li_cache.entry(diag.source_location.file.as_str()).or_insert_with(|| {
-            let content: &str = inputs.get(&diag.source_location.file).map(|t| t.content.as_ref()).unwrap_or_default();
+            let content: &str = inputs
+                .get(&diag.source_location.file)
+                .map(|t| t.content.as_ref())
+                .unwrap_or_default();
             LineIndex::new(content)
         });
         let start = text_position(&li, TextSize::new(diag.source_location.start));
         let end = text_position(&li, TextSize::new(diag.source_location.end));
-        res.entry(diag.source_location.file.clone()).or_default()
-            .push(Diagnostic::new_simple(Range::new(start, end), std::mem::take(&mut diag.message)));
+        res.entry(diag.source_location.file.clone()).or_default().push(Diagnostic::new_simple(
+            Range::new(start, end),
+            std::mem::take(&mut diag.message),
+        ));
     }
 
     res

@@ -10,10 +10,8 @@ use syntax::ast::nodes::{Expr, Stmt};
 pub struct ItemSourceMap<'db> {
     #[tracked]
     #[no_eq]
-    pub data: (
-        IndexMapUpdate<AstPtr<Expr>, ExprId<'db>>, 
-        IndexMapUpdate<AstPtr<Stmt>, StatementId<'db>>
-    )
+    pub data:
+        (IndexMapUpdate<AstPtr<Expr>, ExprId<'db>>, IndexMapUpdate<AstPtr<Stmt>, StatementId<'db>>),
 }
 
 #[salsa::tracked]

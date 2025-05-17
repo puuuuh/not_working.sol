@@ -1,16 +1,23 @@
+use core::error;
+
 use base_db::{BaseDb, File};
 
-use hir_def::hir::{
-    ContractId, ElementaryTypeRef, EnumerationId, ErrorId, EventId, FunctionId, Ident, Item,
-    ModifierId, SourceUnit, StructureId,
+use hir_def::{
+    hir::{
+        ContractId, ElementaryTypeRef, EnumerationId, ErrorId, EventId, FunctionId, Ident, Item,
+        ModifierId, SourceUnit, StructureId,
+    },
+    DataLocation,
 };
 
 use hir_nameres::{container::Container, scope::body::Definition};
 
+use std::fmt::Write;
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, salsa::Update)]
 pub enum TyKind<'db> {
     Unknown,
-    Function(Ty<'db>, Ty<'db>),
+    Function(TyKindInterned<'db>, TyKindInterned<'db>),
     Modifier(ModifierId<'db>),
     Struct(StructureId<'db>),
     Event(EventId<'db>),
@@ -18,97 +25,222 @@ pub enum TyKind<'db> {
     Enum(EnumerationId<'db>),
     Contract(ContractId<'db>),
     Elementary(ElementaryTypeRef),
-    Array(Ty<'db>, usize),
-    Mapping(Ty<'db>, Ty<'db>),
+    Array(TyKindInterned<'db>, usize),
+    Mapping(TyKindInterned<'db>, TyKindInterned<'db>),
     Tuple(Vec<Ty<'db>>),
     // Reference to an item without value (ContractName.Struct, for example)
     ItemRef(Item<'db>),
 }
 
 #[salsa::interned(debug)]
-pub struct Ty<'db> {
-    pub kind: TyKind<'db>,
+pub struct TyKindInterned<'db> {
+    pub data: TyKind<'db>,
 }
 
-impl<'db> Ty<'db> {
-    pub fn component_count(self, db: &'db dyn BaseDb) -> u32 {
-        match self.kind(db) {
-            TyKind::Tuple(items) => return items.len() as _,
-            _ => 1
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, salsa::Update)]
+pub struct Ty<'db> {
+    pub ty_kind: TyKindInterned<'db>,
+    pub location: Option<DataLocation>,
+}
+
+impl<'db> TyKind<'db> {
+    pub fn can_coerce(self, db: &'db dyn BaseDb, dst: TyKind<'db>) -> bool {
+        match (self, dst) {
+            (TyKind::Elementary(src), TyKind::Elementary(dst)) => match src {
+                hir_def::ElementaryTypeRef::Address { payable: false } => {
+                    return matches!(dst, hir_def::ElementaryTypeRef::Address { .. })
+                }
+                hir_def::ElementaryTypeRef::Address { payable: true } => {
+                    return matches!(dst, hir_def::ElementaryTypeRef::Address { payable: true })
+                }
+                hir_def::ElementaryTypeRef::String => {
+                    return matches!(
+                        dst,
+                        hir_def::ElementaryTypeRef::Bytes
+                            | hir_def::ElementaryTypeRef::FixedBytes { .. }
+                    )
+                }
+                hir_def::ElementaryTypeRef::Bytes => {
+                    return matches!(
+                        dst,
+                        hir_def::ElementaryTypeRef::String
+                            | hir_def::ElementaryTypeRef::FixedBytes { .. }
+                    )
+                }
+                hir_def::ElementaryTypeRef::Integer { signed, size } => {
+                    let hir_def::ElementaryTypeRef::Integer { signed: signed1, size: size1 } = dst
+                    else {
+                        return false;
+                    };
+
+                    return signed1 == signed && size1 >= size;
+                }
+                hir_def::ElementaryTypeRef::FixedBytes { size } => {
+                    let hir_def::ElementaryTypeRef::FixedBytes { size: size1 } = dst else {
+                        return false;
+                    };
+
+                    return size1 >= size;
+                }
+                hir_def::ElementaryTypeRef::Fixed { signed, size, decimal_points } => {
+                    return false;
+                }
+                hir_def::ElementaryTypeRef::Bool => {
+                    return false;
+                }
+                hir_def::ElementaryTypeRef::Unknown => {
+                    return false;
+                }
+            },
+            (TyKind::Tuple(src_tuple), TyKind::Tuple(dst_tuple)) => {
+                (src_tuple.len() == dst_tuple.len())
+                    && src_tuple.iter().zip(dst_tuple).all(|(src, dst)| src.can_coerce(db, dst))
+            }
+            _ => false,
         }
     }
-    pub fn pretty_print(self, db: &'db dyn BaseDb) -> String {
-        match self.kind(db) {
-            TyKind::Unknown => "{unknown}".to_string(),
-            TyKind::Function(ty, ty1) => {
-                format!("function({}) -> ({})", ty.pretty_print(db), ty1.pretty_print(db))
-            },
+
+    pub fn human_readable(self, db: &'db dyn BaseDb) -> String {
+        let mut res = String::new();
+        self.human_readable_to(db, &mut res);
+
+        res
+    }
+
+    pub fn human_readable_to(self, db: &'db dyn BaseDb, res: &mut String) {
+        match self {
+            TyKind::Unknown => {
+                *res += "{unknown}";
+            }
+            TyKind::Function(args, returns) => {
+                let mut need_comma = false;
+                *res += "function";
+                args.data(db).human_readable_to(db, res);
+
+                *res += " returns";
+                returns.data(db).human_readable_to(db, res);
+            }
             TyKind::Struct(structure_id) => {
-                format!("{}", structure_id.name(db).data(db))
-            },
+                *res += structure_id.name(db).data(db);
+            }
             TyKind::Enum(enumeration_id) => {
-                format!("{}", enumeration_id.name(db).data(db))
-            },
+                *res += enumeration_id.name(db).data(db);
+            }
             TyKind::Contract(contract_id) => {
-                format!("{}", contract_id.name(db).data(db))
-            },
+                *res += contract_id.name(db).data(db);
+            }
             TyKind::Error(error_id) => {
-                format!("{}", error_id.name(db).data(db))
-            },
+                *res += error_id.name(db).data(db);
+            }
             TyKind::Modifier(modifier_id) => {
-                format!("{}", modifier_id.name(db).data(db))
-            },
+                *res += modifier_id.name(db).data(db);
+            }
             TyKind::Event(event_id) => {
-                format!("{}", event_id.name(db).data(db))
-            },
-            TyKind::Elementary(elementary_type_ref) => {
-                match elementary_type_ref {
-                    ElementaryTypeRef::Address { payable } => {
-                        format!("address")
-                    },
-                    ElementaryTypeRef::Bool => {
-                        format!("bool")
-                    },
-                    ElementaryTypeRef::String => {
-                        format!("string")
-                    },
-                    ElementaryTypeRef::Bytes => {
-                        format!("bytes")
-                    },
-                    ElementaryTypeRef::Integer { signed, size } => {
-                        format!("{}int{}", if signed { "" } else { "u" }, size)
-                    },
-                    ElementaryTypeRef::FixedBytes { size } => {
-                        format!("bytes{}", size)
-                    },
-                    ElementaryTypeRef::Fixed { signed, size, decimal_points } => {
-                        format!("{}fixed{}x{}", if signed { "" } else { "u" }, size, decimal_points)
-                    },
-                    ElementaryTypeRef::Unknown => {
-                        format!("unknown")
-                    },
+                *res += event_id.name(db).data(db);
+            }
+            TyKind::Elementary(elementary_type_ref) => match elementary_type_ref {
+                ElementaryTypeRef::Address { payable } => {
+                    *res += "address";
+                    if payable {
+                        *res += " payable"
+                    }
+                }
+                ElementaryTypeRef::Bool => {
+                    *res += "bool";
+                }
+                ElementaryTypeRef::String => {
+                    *res += "string";
+                }
+                ElementaryTypeRef::Bytes => {
+                    *res += "bytes";
+                }
+                ElementaryTypeRef::Integer { signed, size } => {
+                    write!(res, "{}int{}", if signed { "" } else { "u" }, size);
+                }
+                ElementaryTypeRef::FixedBytes { size } => {
+                    write!(res, "bytes{}", size);
+                }
+                ElementaryTypeRef::Fixed { signed, size, decimal_points } => {
+                    write!(
+                        res,
+                        "{}fixed{}x{}",
+                        if signed { "" } else { "u" },
+                        size,
+                        decimal_points
+                    );
+                }
+                ElementaryTypeRef::Unknown => {
+                    *res += "unknown";
                 }
             },
             TyKind::Array(ty, _) => {
-                format!("{}[]", ty.pretty_print(db))
-            },
+                ty.data(db).human_readable_to(db, res);
+                *res += "[]";
+            }
             TyKind::Mapping(ty, ty1) => {
-                format!("mapping({} => {})", ty.pretty_print(db), ty1.pretty_print(db))
-            },
+                *res += "mapping(";
+                ty.data(db).human_readable_to(db, res);
+                *res += " => ";
+                ty1.data(db).human_readable_to(db, res);
+                *res += ")";
+            }
             TyKind::Tuple(items) => {
-                format!("({})", items.iter().flat_map(|t| [t.pretty_print(db), ",".to_string()]).collect::<String>())
-            },
+                *res += "(";
+                for i in items {
+                    i.human_readable_to(db, res);
+                    *res += ",";
+                }
+                *res += ")";
+            }
             TyKind::ItemRef(item) => {
-                let t = "";
-                format!("ItemRef({})", item.name(db).map(|item| item.data(db).as_str()).unwrap_or(t))
-            },
+                *res += "ItemRef(";
+                *res += item.name(db).map(|item| item.data(db).as_str()).unwrap_or("{unnamed}");
+                *res += ")";
+            }
         }
+    }
+}
 
+impl<'db> Ty<'db> {
+    pub fn new(db: &'db dyn BaseDb, kind: TyKind<'db>, location: Option<DataLocation>) -> Self {
+        Self { ty_kind: TyKindInterned::new(db, kind), location }
     }
 
+    pub fn new_interned(
+        db: &'db dyn BaseDb,
+        kind: TyKindInterned<'db>,
+        location: Option<DataLocation>,
+    ) -> Self {
+        Self { ty_kind: kind, location }
+    }
+
+    pub fn kind(self, db: &'db dyn BaseDb) -> TyKind<'db> {
+        self.ty_kind.data(db)
+    }
+
+    pub fn component_count(self, db: &'db dyn BaseDb) -> u32 {
+        match self.kind(db) {
+            TyKind::Tuple(items) => return items.len() as _,
+            _ => 1,
+        }
+    }
+
+    pub fn human_readable(self, db: &'db dyn BaseDb) -> String {
+        let mut res = String::new();
+        self.human_readable_to(db, &mut res);
+        res
+    }
+
+    pub fn human_readable_to(self, db: &'db dyn BaseDb, res: &mut String) {
+        self.kind(db).human_readable_to(db, res);
+
+        if let Some(location) = self.location {
+            write!(res, " {}", location);
+        }
+    }
 
     pub fn is_unknown(self, db: &'db dyn BaseDb) -> bool {
-        self == unknown(db)
+        self.ty_kind == unknown(db)
     }
 
     pub fn container(self, db: &'db dyn BaseDb) -> Option<Container<'db>> {
@@ -122,74 +254,35 @@ impl<'db> Ty<'db> {
         })
     }
 
-    pub fn can_coerce(self, db: &'db dyn BaseDb, dst: Ty<'db>) -> bool {
+    pub fn can_coerce(mut self, db: &'db dyn BaseDb, mut dst: Ty<'db>) -> bool {
+        // Tuple unwrapping
+        // TODO: Add limit or just convert any tuples with len == 1 to inner type somewhere else
+        while let TyKind::Tuple(t) = self.kind(db) {
+            if t.len() == 1 {
+                self = t[0]
+            } else {
+                break;
+            }
+        }
+        while let TyKind::Tuple(t) = dst.kind(db) {
+            if t.len() == 1 {
+                self = t[0]
+            } else {
+                break;
+            }
+        }
+
         if self == dst {
             return true;
         }
-        let src_kind = self.kind(db);
-        let dst_kind = dst.kind(db);
-        if let TyKind::Tuple(src) = &src_kind {
-            if src.len() == 1 && src[0].can_coerce(db, dst) {
-                return true;
-            }
-            if let TyKind::Tuple(dst) = &dst_kind {
-                return dst.len() == src.len() && src.iter().zip(dst.iter()).all(|(src, dst)| src.can_coerce(db, *dst));
-            }
-        }
-        if let TyKind::Tuple(dst) = &dst_kind {
-            if dst.len() == 1 && self.can_coerce(db, dst[0]) {
-                return true;
-            }
-        }
-        if let TyKind::Elementary(src) = src_kind {
-            if let TyKind::Elementary(dst) = dst_kind {
-                match src {
-                    hir_def::ElementaryTypeRef::Address { payable: false } => {
-                        return matches!(dst, hir_def::ElementaryTypeRef::Address { .. })
-                    },
-                    hir_def::ElementaryTypeRef::Address { payable: true } => {
-                        return matches!(dst, hir_def::ElementaryTypeRef::Address { payable: true })
-                    },
-                    hir_def::ElementaryTypeRef::String => {
-                        return matches!(dst, hir_def::ElementaryTypeRef::Bytes | hir_def::ElementaryTypeRef::FixedBytes { .. })
-                    },
-                    hir_def::ElementaryTypeRef::Bytes => {
-                        return matches!(dst, hir_def::ElementaryTypeRef::String | hir_def::ElementaryTypeRef::FixedBytes { .. })
-                    },
-                    hir_def::ElementaryTypeRef::Integer { signed, size } => {
-                        let hir_def::ElementaryTypeRef::Integer { signed: signed1, size: size1 } = dst else {
-                            return false
-                        };
 
-                        return signed1 == signed && size1 >= size;
-                    },
-                    hir_def::ElementaryTypeRef::FixedBytes { size } => {
-                        let hir_def::ElementaryTypeRef::FixedBytes { size: size1 } = dst else {
-                            return false;
-                        };
-
-                        return size1 >= size;
-                    },
-                    hir_def::ElementaryTypeRef::Fixed { signed, size, decimal_points } => {
-                        return false;
-                    },
-                    hir_def::ElementaryTypeRef::Bool => {
-                        return false;
-                    },
-                    hir_def::ElementaryTypeRef::Unknown => {
-                        return false;
-                    },
-                }
-            }
-        }
-
-        false
+        self.kind(db).can_coerce(db, dst.kind(db))
     }
 }
 
 #[salsa::tracked]
-pub fn unknown<'db>(db: &'db dyn BaseDb) -> Ty<'db> {
-    Ty::new(db, TyKind::Unknown)
+pub fn unknown<'db>(db: &'db dyn BaseDb) -> TyKindInterned<'db> {
+    TyKindInterned::new(db, TyKind::Unknown)
 }
 
 #[derive(Debug, PartialEq, Eq, salsa::Update, Clone, Copy)]
@@ -216,24 +309,80 @@ pub struct ElementaryTypes<'db> {
 
 #[salsa::tracked]
 pub fn common_types<'db>(db: &'db dyn BaseDb) -> ElementaryTypes<'db> {
-    ElementaryTypes { 
-        address: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Address { payable: false })), 
-        payable_address: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Address { payable: true })), 
-        bool: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Bool)), 
-        string: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::String)), 
-        bytes: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Bytes)), 
-        int8: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: true, size: 8 })), 
-        int16: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: true, size: 16 })), 
-        int32: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: true, size: 32 })), 
-        int64: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: true, size: 64 })), 
-        int128: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: true, size: 128 })), 
-        int256: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: true, size: 256 })), 
-        uint8: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 8 })), 
-        uint16: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 16 })), 
-        uint32: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 32 })), 
-        uint64: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 64 })), 
-        uint128: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 128 })), 
-        uint256: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 256 })), 
-        unknown: Ty::new(db, TyKind::Unknown)
+    ElementaryTypes {
+        address: Ty::new(
+            db,
+            TyKind::Elementary(ElementaryTypeRef::Address { payable: false }),
+            None,
+        ),
+        payable_address: Ty::new(
+            db,
+            TyKind::Elementary(ElementaryTypeRef::Address { payable: true }),
+            None,
+        ),
+        bool: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Bool), None),
+        string: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::String), None),
+        bytes: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Bytes), None),
+        int8: Ty::new(
+            db,
+            TyKind::Elementary(ElementaryTypeRef::Integer { signed: true, size: 8 }),
+            None,
+        ),
+        int16: Ty::new(
+            db,
+            TyKind::Elementary(ElementaryTypeRef::Integer { signed: true, size: 16 }),
+            None,
+        ),
+        int32: Ty::new(
+            db,
+            TyKind::Elementary(ElementaryTypeRef::Integer { signed: true, size: 32 }),
+            None,
+        ),
+        int64: Ty::new(
+            db,
+            TyKind::Elementary(ElementaryTypeRef::Integer { signed: true, size: 64 }),
+            None,
+        ),
+        int128: Ty::new(
+            db,
+            TyKind::Elementary(ElementaryTypeRef::Integer { signed: true, size: 128 }),
+            None,
+        ),
+        int256: Ty::new(
+            db,
+            TyKind::Elementary(ElementaryTypeRef::Integer { signed: true, size: 256 }),
+            None,
+        ),
+        uint8: Ty::new(
+            db,
+            TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 8 }),
+            None,
+        ),
+        uint16: Ty::new(
+            db,
+            TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 16 }),
+            None,
+        ),
+        uint32: Ty::new(
+            db,
+            TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 32 }),
+            None,
+        ),
+        uint64: Ty::new(
+            db,
+            TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 64 }),
+            None,
+        ),
+        uint128: Ty::new(
+            db,
+            TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 128 }),
+            None,
+        ),
+        uint256: Ty::new(
+            db,
+            TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 256 }),
+            None,
+        ),
+        unknown: Ty::new(db, TyKind::Unknown, None),
     }
 }

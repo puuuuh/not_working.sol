@@ -7,9 +7,9 @@ use async_lsp::tracing::TracingLayer;
 use tower::ServiceBuilder;
 use tracing::Level;
 
+mod flycheck;
 pub mod from_proto;
 mod server;
-mod flycheck;
 pub mod tasks;
 pub mod to_proto;
 

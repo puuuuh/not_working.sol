@@ -25,10 +25,13 @@ impl TestFixture {
     pub fn parse(data: &str) -> Self {
         let pos = data.find("$0").map(|pos| TextSize::new(pos as _));
         let data = data.replacen("$0", "", 1);
-        let files = data.split("/// ENDFILE").map(|d| {
-            let (name, data) = d.trim_start().split_once("\n").unwrap();
-            (name.to_string(), Arc::from(data.to_string()))
-        }).collect();
+        let files = data
+            .split("/// ENDFILE")
+            .map(|d| {
+                let (name, data) = d.trim_start().split_once("\n").unwrap();
+                (name.to_string(), Arc::from(data.to_string()))
+            })
+            .collect();
 
         Self { files, position: pos }
     }
@@ -86,5 +89,4 @@ impl BaseDb for TestDatabase {
 }
 
 #[salsa::db]
-impl salsa::Database for TestDatabase {
-}
+impl salsa::Database for TestDatabase {}

@@ -48,10 +48,7 @@ pub fn goto_definition(
                             .and_then(|a| match a.1 {
                                 Definition::Item(item) => NavigationTarget::from_item(db, item),
                                 Definition::Local(variable_declaration) => {
-                                    NavigationTarget::from_local(
-                                        db,
-                                        variable_declaration,
-                                    )
+                                    NavigationTarget::from_local(db, variable_declaration)
                                 }
                                 Definition::Field(structure_field_id) => {
                                     NavigationTarget::from_field(db, structure_field_id)
@@ -69,10 +66,7 @@ pub fn goto_definition(
                         .flat_map(|defsite| match defsite {
                             Definition::Item(item) => NavigationTarget::from_item(db, item),
                             Definition::Local(variable_declaration) => {
-                                NavigationTarget::from_local(
-                                    db,
-                                    variable_declaration,
-                                )
+                                NavigationTarget::from_local(db, variable_declaration)
                             }
                             _ => None,
                         })
@@ -95,10 +89,9 @@ pub fn goto_definition(
             .into_iter()
             .flat_map(|defsite| match defsite {
                 Definition::Item(item) => NavigationTarget::from_item(db, item),
-                Definition::Local(variable_declaration) => NavigationTarget::from_local(
-                    db,
-                    variable_declaration,
-                ),
+                Definition::Local(variable_declaration) => {
+                    NavigationTarget::from_local(db, variable_declaration)
+                }
                 _ => None,
             })
             .collect(),
@@ -156,7 +149,7 @@ mod tests {
             goto_definition(
                 db,
                 Project::new(db, vfs::VfsPath::from_virtual("".to_owned())),
-                FilePosition { offset: pos, file }
+                FilePosition { offset: pos, file },
             );
         })
     }

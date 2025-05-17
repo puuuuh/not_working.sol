@@ -1,4 +1,7 @@
-use std::{collections::{btree_map, BTreeMap}, sync::Arc};
+use std::{
+    collections::{BTreeMap, btree_map},
+    sync::Arc,
+};
 
 use base_db::BaseDb;
 use hir_def::{Ident, Item};
@@ -15,13 +18,16 @@ pub struct ItemScope<'db> {
     pub parent: Option<ItemScope<'db>>,
     // Keep this sorted, pls:)
     #[returns(ref)]
-    pub items: BTreeMap<Ident<'db>, SmallVec<[Definition<'db>; 1]>>
+    pub items: BTreeMap<Ident<'db>, SmallVec<[Definition<'db>; 1]>>,
 }
 
 #[salsa::tracked]
 impl<'db> ItemScope<'db> {
     #[salsa::tracked]
-    pub fn all_definitions(self, db: &'db dyn BaseDb) -> BTreeMap<Ident<'db>, SmallVec<[Definition<'db>; 1]>> {
+    pub fn all_definitions(
+        self,
+        db: &'db dyn BaseDb,
+    ) -> BTreeMap<Ident<'db>, SmallVec<[Definition<'db>; 1]>> {
         let mut res: BTreeMap<Ident<'_>, SmallVec<[Definition<'_>; 1]>> = Default::default();
 
         let mut t = Some(self);
@@ -57,7 +63,7 @@ impl<'db> ItemScope<'db> {
         let mut t = Some(self);
         while let Some(scope) = t {
             if let Some(t) = scope.items(db).get(&name) {
-                return t.first().copied()
+                return t.first().copied();
             }
 
             t = scope.parent(db);

@@ -1,10 +1,11 @@
-use std::collections::btree_map;
 use std::collections::BTreeMap;
+use std::collections::btree_map;
 use std::ops::Range;
 use std::sync::Arc;
 use std::thread::current;
 
 use base_db::{BaseDb, Project};
+use either::Either;
 use hir_def::IndexMapUpdate;
 use hir_def::hir::EnumerationVariantId;
 use hir_def::hir::ExprId;
@@ -19,6 +20,7 @@ use hir_def::walk::Visitor;
 use hir_def::walk::walk_stmt;
 use indexmap::IndexMap;
 use salsa::Database;
+use salsa::plumbing::AsId;
 use smallvec::SmallVec;
 use smallvec::smallvec;
 use vfs::File;
@@ -41,17 +43,23 @@ pub struct ExprScope {
     pub range: Range<usize>,
 }
 
+#[derive(Debug, Clone, Eq, PartialEq, Hash, salsa::Update)]
+pub struct ScopeData<'db> {
+    definitions: Vec<(Ident<'db>, Definition<'db>)>,
+    scopes: SmallVec<[ExprScope; 1]>,
+}
+
 #[salsa::tracked(debug)]
 pub struct BodyScope<'db> {
     pub parent: ItemScope<'db>,
+
     #[returns(ref)]
-    pub definitions: Vec<(Ident<'db>, Definition<'db>)>,
+    #[tracked]
+    data: ScopeData<'db>,
+
     #[returns(ref)]
-    pub expr_scopes: SmallVec<[ExprScope; 1]>,
-    #[returns(ref)]
-    pub scope_by_expr: BTreeMap<ExprId<'db>, usize>,
-    #[returns(ref)]
-    pub scope_by_stmt: BTreeMap<StatementId<'db>, usize>,
+    #[tracked]
+    pub scope_by_salsa_id: BTreeMap<salsa::Id, usize>,
 }
 
 #[salsa::tracked]
@@ -68,20 +76,23 @@ impl<'db> BodyScope<'db> {
     }
 
     #[salsa::tracked]
-    pub fn all_definitions(self, db: &'db dyn BaseDb, scope: usize) -> BTreeMap<Ident<'db>, SmallVec<[Definition<'db>; 1]>> {
+    pub fn all_definitions(
+        self,
+        db: &'db dyn BaseDb,
+        scope: usize,
+    ) -> BTreeMap<Ident<'db>, SmallVec<[Definition<'db>; 1]>> {
         let mut res = BTreeMap::new();
-        let scopes = self.expr_scopes(db);
-        let defintions = self.definitions(db);
-        let mut s = scopes.get(scope).cloned();
+        let scope_data = self.data(db);
+        let mut s = scope_data.scopes.get(scope).cloned();
         while let Some(scope) = s {
-            let items = &defintions[scope.range];
+            let items = &scope_data.definitions[scope.range];
             for (name, items) in items {
                 if let btree_map::Entry::Vacant(v) = res.entry(*name) {
                     v.insert(smallvec![items.clone()]);
                 }
             }
 
-            s = scope.parent.map(|scope| scopes[scope].clone());
+            s = scope.parent.map(|scope| scope_data.scopes[scope].clone());
         }
 
         for (name, items) in self.parent(db).all_definitions(db) {
@@ -100,7 +111,7 @@ impl<'db> BodyScope<'db> {
         expr: ExprId<'db>,
         name: Ident<'db>,
     ) -> Option<Definition<'db>> {
-        let scope = self.scope_by_expr(db).get(&expr).copied().unwrap_or_default();
+        let scope = self.scope_by_salsa_id(db).get(&expr.as_id()).copied().unwrap_or_default();
         self.find(db, scope, name)
     }
 
@@ -111,16 +122,15 @@ impl<'db> BodyScope<'db> {
         scope: usize,
         name: Ident<'db>,
     ) -> Option<Definition<'db>> {
-        let scopes = self.expr_scopes(db);
-        let defintions = self.definitions(db);
-        let mut s = scopes.get(scope).cloned();
+        let scope_data = self.data(db);
+        let mut s = scope_data.scopes.get(scope).cloned();
         while let Some(scope) = s {
-            let items = &defintions[scope.range];
+            let items = &scope_data.definitions[scope.range];
             if let Some(def) = items.iter().find_map(|(n, item)| (*n == name).then_some(item)) {
                 return Some(*def);
             }
 
-            s = scope.parent.map(|scope| scopes[scope].clone());
+            s = scope.parent.map(|scope| scope_data.scopes[scope].clone());
         }
 
         return self.parent(db).find(db, name);
@@ -134,16 +144,15 @@ impl<'db> BodyScope<'db> {
         name: Ident<'db>,
     ) -> SmallVec<[Definition<'db>; 1]> {
         let mut res = SmallVec::new();
-        let scopes = self.expr_scopes(db);
-        let defintions = self.definitions(db);
-        let mut s = scopes.get(scope).cloned();
+        let data = self.data(db);
+        let mut s = data.scopes.get(scope).cloned();
         while let Some(scope) = s {
-            let items = &defintions[scope.range];
+            let items = &data.definitions[scope.range];
             for i in items.iter().filter_map(|(n, item)| (*n == name).then_some(item)) {
                 res.push(*i);
             }
 
-            s = scope.parent.map(|scope| scopes[scope].clone());
+            s = scope.parent.map(|scope| data.scopes[scope].clone());
         }
 
         res.extend(self.parent(db).find_all(db, name));
@@ -157,8 +166,7 @@ pub struct ScopeResolver<'db> {
     scopes: SmallVec<[ExprScope; 1]>,
     definitions: Vec<(Ident<'db>, Definition<'db>)>,
     scope_item_cnt: Vec<usize>,
-    scope_by_expr: BTreeMap<ExprId<'db>, usize>,
-    scope_by_stmt: BTreeMap<StatementId<'db>, usize>,
+    scope_by_salsa_id: BTreeMap<salsa::Id, usize>,
 }
 
 #[salsa::tracked]
@@ -172,9 +180,7 @@ fn resolve_body<'db>(
 ) -> BodyScope<'db> {
     let root_items: Vec<_> = args
         .into_iter()
-        .filter_map(|a| {
-            a.name(db).map(move |n| (n, Definition::Local(a)))
-        })
+        .filter_map(|a| a.name(db).map(move |n| (n, Definition::Local(a))))
         .collect();
 
     let root_items_len = root_items.len();
@@ -184,8 +190,7 @@ fn resolve_body<'db>(
         definitions: root_items,
         scopes: smallvec![ExprScope { parent: None, range: 0..root_items_len }],
         scope_item_cnt: vec![0],
-        scope_by_expr: Default::default(),
-        scope_by_stmt: Default::default(),
+        scope_by_salsa_id: Default::default(),
     };
 
     if let Some(body) = body {
@@ -200,10 +205,8 @@ fn resolve_body<'db>(
     BodyScope::new(
         db,
         parent,
-        resolver.definitions,
-        resolver.scopes,
-        resolver.scope_by_expr,
-        resolver.scope_by_stmt,
+        ScopeData { definitions: resolver.definitions, scopes: resolver.scopes },
+        resolver.scope_by_salsa_id,
     )
 }
 
@@ -238,7 +241,7 @@ impl<'db> Visitor<'db> for &mut ScopeResolver<'db> {
     fn stmt_start(&mut self, db: &'db dyn BaseDb, s: StatementId<'db>) -> (bool, Self::Ctx) {
         let current_scope = self.scopes.len() - 1;
 
-        self.scope_by_stmt.insert(s, current_scope);
+        self.scope_by_salsa_id.insert(s.as_id(), current_scope);
         self.scope_item_cnt[current_scope] += 1;
 
         match s.kind(self.db) {
@@ -247,9 +250,11 @@ impl<'db> Visitor<'db> for &mut ScopeResolver<'db> {
             }
             Statement::Try { expr, returns, body, catch } => {
                 self.new_scope(Some(current_scope));
-                for item in returns.iter().flatten().filter_map(|a| {
-                    a.name(self.db).map(|name| (name, Definition::Local(*a)))
-                }) {
+                for item in returns
+                    .iter()
+                    .flatten()
+                    .filter_map(|a| a.name(self.db).map(|name| (name, Definition::Local(*a))))
+                {
                     self.add_item(item);
                 }
             }
@@ -263,9 +268,11 @@ impl<'db> Visitor<'db> for &mut ScopeResolver<'db> {
         match s.kind(self.db) {
             Statement::VarDecl { items, init_expr } => {
                 self.new_scope(Some(ctx));
-                for item in items.iter().flatten().filter_map(|a| {
-                    a.name(self.db).map(|name| (name, Definition::Local(*a)))
-                }) {
+                for item in items
+                    .iter()
+                    .flatten()
+                    .filter_map(|a| a.name(self.db).map(|name| (name, Definition::Local(*a))))
+                {
                     self.add_item(item);
                 }
             }
@@ -278,7 +285,7 @@ impl<'db> Visitor<'db> for &mut ScopeResolver<'db> {
 
     fn expr_start(&mut self, db: &'db dyn BaseDb, expr: ExprId<'db>) -> (bool, Self::ExprCtx) {
         let current_scope = self.scopes.len() - 1;
-        self.scope_by_expr.insert(expr, current_scope);
+        self.scope_by_salsa_id.insert(expr.as_id(), current_scope);
         self.scope_item_cnt[current_scope] += 1;
         return (true, ());
     }

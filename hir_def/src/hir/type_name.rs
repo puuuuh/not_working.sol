@@ -1,12 +1,12 @@
-use crate::{hir::expr::ExprId, FileAstPtr};
 use crate::hir::ident::Ident;
 use crate::hir::variable_declaration::VariableDeclaration;
 use crate::items::HirPrint;
 use crate::lazy_field;
+use crate::{hir::expr::ExprId, FileAstPtr};
 use rowan::ast::AstPtr;
 use salsa::Database;
-use syntax::ast::nodes;
 use std::fmt::{Debug, Display, Formatter, Write};
+use syntax::ast::nodes;
 
 use super::{state_mutability::StateMutability, visibility::Visibility};
 
@@ -64,7 +64,6 @@ impl HirPrint for ElementaryTypeRef {
         write!(w, "{self}")
     }
 }
-
 
 #[salsa::tracked(debug)]
 pub struct TypeRefId<'db> {

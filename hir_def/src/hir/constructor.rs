@@ -55,10 +55,7 @@ impl<'db> ConstructorId<'db> {
             res,
             ItemSourceMap::new(
                 db,
-                (
-                    crate::IndexMapUpdate(lowerer.exprs),
-                    crate::IndexMapUpdate(lowerer.stmts),
-                )
+                (crate::IndexMapUpdate(lowerer.exprs), crate::IndexMapUpdate(lowerer.stmts)),
             ),
         ));
     }

@@ -26,7 +26,7 @@ use salsa::Database;
 use smallvec::SmallVec;
 
 use super::statement::StatementId;
-use super::{user_defined_value_type};
+use super::user_defined_value_type;
 
 #[salsa::tracked(debug)]
 pub struct SourceUnit<'db> {
@@ -192,6 +192,7 @@ pub enum Item<'db> {
     Module(SourceUnit<'db>),
 }
 
+#[salsa::tracked]
 impl<'db> Item<'db> {
     pub fn file(self, db: &'db dyn BaseDb) -> File {
         match self {
@@ -233,6 +234,10 @@ impl<'db> Item<'db> {
             Item::Modifier(modifier_id) => Some(modifier_id.name(db)),
             Item::Module(source_unit) => None,
         }
+    }
+
+    pub fn source_map(self, db: &'db dyn BaseDb) -> Option<ItemSourceMap<'db>> {
+        self.body(db).map(|(_, source_map)| source_map)
     }
 
     pub fn body(self, db: &'db dyn BaseDb) -> Option<(StatementId<'db>, ItemSourceMap<'db>)> {

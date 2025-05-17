@@ -78,9 +78,7 @@ impl<'db> LowerCtx<'db> {
                 nodes::Expr::ElementaryType(ty) => Expr::ElementaryTypeName {
                     data: self.lower_elementary_name(ty.clone()).unwrap(),
                 },
-                nodes::Expr::NewExpr(new) => Expr::New {
-                    ty: self.lower_type_ref2(new.ty()),
-                },
+                nodes::Expr::NewExpr(new) => Expr::New { ty: self.lower_type_ref2(new.ty()) },
             },
             Some(crate::FileAstPtr::new(self.file, &expr)),
         );

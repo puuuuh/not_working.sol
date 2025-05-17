@@ -2,7 +2,9 @@ use std::sync::Arc;
 
 use base_db::{BaseDb, Project};
 use hir_def::source_map::item_source_map::ItemSourceMap;
-use hir_def::{lower_file, ExprId, FileExt, FilePosition, Ident, IdentPath, Item, StatementId};
+use hir_def::{
+    lower_file, Expr, ExprId, FileExt, FilePosition, Ident, IdentPath, Item, StatementId,
+};
 use hir_nameres::container::Container;
 use hir_nameres::scope::{HasScope, Scope};
 use hir_ty::tys::Ty;
@@ -93,7 +95,25 @@ impl<'db> CompletionCtx<'db> {
                     .collect()
             }
             CompletionKind::Name => {
-                let s = self.item.scope(self.db, self.project);
+                let mut s = self.item.scope(self.db, self.project);
+                if let Some((_, source_map)) = self.item.body(self.db) {
+                    for ancestor in self.token.parent_ancestors() {
+                        if nodes::Expr::can_cast(ancestor.kind()) {
+                            if let Some(expr) = source_map
+                                .expr(self.db, AstPtr::new(&nodes::Expr::cast(ancestor).unwrap()))
+                            {
+                                s = s.for_expr(self.db, expr);
+                            }
+                            break;
+                        } else if let Some(stmt) = nodes::Stmt::cast(ancestor) {
+                            if let Some(stmt) = source_map.stmt(self.db, AstPtr::new(&stmt)) {
+                                s = s.for_stmt(self.db, stmt);
+                            }
+                            break;
+                        }
+                    }
+                }
+
                 s.all_definitions(self.db)
                     .into_iter()
                     .map(|a| Completion {
@@ -109,7 +129,7 @@ impl<'db> CompletionCtx<'db> {
     }
 
     fn kind(&'db self) -> Option<CompletionKind<'db>> {
-        if let Some(expr) = self.parent_expr() {
+        if let Some(expr) = self.receiver_expr() {
             let type_inference = hir_ty::resolver::resolve_item(self.db, self.project, self.item);
             let ty = type_inference.expr(self.db, expr);
             if !ty.is_unknown(self.db) {
@@ -161,7 +181,7 @@ impl<'db> CompletionCtx<'db> {
         Some(res)
     }
 
-    fn parent_expr(&self) -> Option<ExprId<'db>> {
+    fn receiver_expr(&self) -> Option<ExprId<'db>> {
         let mut token = self.token.clone();
         if token.kind() != SyntaxKind::DOT {
             token = prev_token(&token)?;
@@ -174,6 +194,6 @@ impl<'db> CompletionCtx<'db> {
         let e = token.parent_ancestors().find_map(|t| nodes::Expr::cast(t))?;
         let (stmt, map) = self.item.body(self.db)?;
 
-        return map.expr(self.db, AstPtr::new(&e))
+        return map.expr(self.db, AstPtr::new(&e));
     }
 }

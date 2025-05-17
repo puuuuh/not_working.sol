@@ -1,7 +1,7 @@
+use crate::hir::ElementaryTypeRef;
 use crate::hir::Ident;
 use crate::hir::StateMutability;
 use crate::hir::Visibility;
-use crate::hir::ElementaryTypeRef;
 use crate::lower::LowerCtx;
 use crate::TypeRefId;
 use crate::TypeRefKind;
@@ -19,19 +19,25 @@ impl<'db> LowerCtx<'db> {
 
     pub fn lower_type_ref(&mut self, ty: nodes::Type) -> TypeRefId<'db> {
         let node = crate::FileAstPtr::new(self.file, &ty);
-        TypeRefId::new(self.db, match ty {
-            nodes::Type::ElementaryType(t) => {
-                if let Some(e) = self.lower_elementary_name(t).map(|t| TypeRefKind::Elementary(t)) {
-                    e
-                } else {
-                    return self.missing_typeref;
+        TypeRefId::new(
+            self.db,
+            match ty {
+                nodes::Type::ElementaryType(t) => {
+                    if let Some(e) =
+                        self.lower_elementary_name(t).map(|t| TypeRefKind::Elementary(t))
+                    {
+                        e
+                    } else {
+                        return self.missing_typeref;
+                    }
                 }
-            }
-            nodes::Type::FunctionType(t) => self.lower_function_name(t),
-            nodes::Type::MappingType(t) => self.lower_mapping_name(t),
-            nodes::Type::IdentPathType(t) => self.lower_ident_type_name(t),
-            nodes::Type::ArrayType(t) => self.lower_array_name(t),
-        }, Some(node))
+                nodes::Type::FunctionType(t) => self.lower_function_name(t),
+                nodes::Type::MappingType(t) => self.lower_mapping_name(t),
+                nodes::Type::IdentPathType(t) => self.lower_ident_type_name(t),
+                nodes::Type::ArrayType(t) => self.lower_array_name(t),
+            },
+            Some(node),
+        )
     }
 
     fn lower_array_name(&mut self, p: nodes::ArrayType) -> TypeRefKind<'db> {

@@ -24,11 +24,10 @@ impl<'db> TryFrom<Item<'db>> for Container<'db> {
             Item::Contract(contract_id) => Self::Contract(contract_id),
             Item::Enum(enumeration_id) => Self::Enum(enumeration_id),
             Item::Struct(structure_id) => Self::Structure(structure_id),
-            item => Self::Item(value)
+            item => Self::Item(value),
         })
     }
 }
-
 
 #[salsa::tracked]
 impl<'db> Container<'db> {

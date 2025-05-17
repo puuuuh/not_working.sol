@@ -1,5 +1,5 @@
-use async_lsp::{lsp_types::*, LanguageClient};
 use async_lsp::router::Router;
+use async_lsp::{lsp_types::*, LanguageClient};
 use async_lsp::{ClientSocket, LanguageServer, ResponseError};
 use base_db::File;
 use camino::Utf8PathBuf;
@@ -34,7 +34,7 @@ impl Server {
             opened_files: Default::default(),
             snap: AnalysisHost::new(),
             flycheck: Flycheck::new(Utf8PathBuf::new()),
-            root: Utf8PathBuf::new()
+            root: Utf8PathBuf::new(),
         });
         router.event(Self::on_tick);
         router
@@ -53,14 +53,13 @@ impl LanguageServer for Server {
         &mut self,
         params: InitializeParams,
     ) -> BoxFuture<'static, Result<InitializeResult, Self::Error>> {
-        let root = Utf8PathBuf::from_path_buf(params.root_uri.unwrap().to_file_path().unwrap()).unwrap();
+        let root =
+            Utf8PathBuf::from_path_buf(params.root_uri.unwrap().to_file_path().unwrap()).unwrap();
         let fly = Flycheck::new(root.clone());
 
         self.flycheck = fly;
         self.root = root.clone();
-        self.snap.reload_project(
-            root,
-        );
+        self.snap.reload_project(root);
 
         Box::pin(async move {
             Ok(InitializeResult {
@@ -236,7 +235,9 @@ impl LanguageServer for Server {
             match diagnostics.await {
                 Ok(d) => {
                     for (fname, diags) in to_proto::flycheck_diagnostic(d) {
-                        if let Ok(uri) = Url::from_file_path(root.join(fname).as_std_path().to_owned()) {
+                        if let Ok(uri) =
+                            Url::from_file_path(root.join(fname).as_std_path().to_owned())
+                        {
                             let _ = client.publish_diagnostics(PublishDiagnosticsParams {
                                 uri,
                                 diagnostics: diags,
@@ -244,8 +245,8 @@ impl LanguageServer for Server {
                             });
                         }
                     }
-                },
-                Err(e) =>  {}
+                }
+                Err(e) => {}
             }
         });
         ControlFlow::Continue(())
@@ -257,22 +258,25 @@ impl LanguageServer for Server {
     ) -> ControlFlow<async_lsp::Result<()>> {
         ControlFlow::Continue(())
     }
-    
-    fn hover(&mut self, params: HoverParams) -> BoxFuture<'static, Result<Option<Hover>, ResponseError>> {
+
+    fn hover(
+        &mut self,
+        params: HoverParams,
+    ) -> BoxFuture<'static, Result<Option<Hover>, ResponseError>> {
         let snap = self.snap.clone();
 
         Box::pin(async move {
-            let (f, pos) = from_proto::file_position(&snap, params.text_document_position_params).unwrap();
+            let (f, pos) =
+                from_proto::file_position(&snap, params.text_document_position_params).unwrap();
 
-            let Some(result) =
-                snap.hover(f, FilePosition { file: f, offset: pos }) else {
+            let Some(result) = snap.hover(f, FilePosition { file: f, offset: pos }) else {
                 return Ok(None);
             };
             let line_index = snap.line_index(f);
             Ok(Some(Hover {
-                contents: HoverContents::Scalar(MarkedString::LanguageString(LanguageString { 
-                    language: "solidity".to_owned(), 
-                    value: result.1 
+                contents: HoverContents::Scalar(MarkedString::LanguageString(LanguageString {
+                    language: "solidity".to_owned(),
+                    value: result.1,
                 })),
                 range: Some(to_proto::text_range(&line_index, result.0)),
             }))

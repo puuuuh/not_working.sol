@@ -20,18 +20,17 @@ impl Server {
                         uri: Url::from_file_path(snap.path(f).as_std_path()).unwrap(),
                         diagnostics: diag
                             .into_iter()
-                            .map(|d| {
-                                Diagnostic {
-                                    range: to_proto::text_range(&line_index, d.range()),
-                                    severity: Some(DiagnosticSeverity::ERROR),
-                                    code: None,
-                                    code_description: None,
-                                    source: None,
-                                    message: d.text(),
-                                    related_information: None,
-                                    tags: None,
-                                    data: None,
-                                }})
+                            .map(|d| Diagnostic {
+                                range: to_proto::text_range(&line_index, d.range()),
+                                severity: Some(DiagnosticSeverity::ERROR),
+                                code: None,
+                                code_description: None,
+                                source: None,
+                                message: d.text(),
+                                related_information: None,
+                                tags: None,
+                                data: None,
+                            })
                             .collect(),
                         version: None,
                     })
