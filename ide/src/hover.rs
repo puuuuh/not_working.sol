@@ -20,6 +20,6 @@ pub fn hover(db: &dyn BaseDb, project: Project, pos: FilePosition) -> Option<(Te
 
     Some((
         expr.node(db)?.ptr.syntax_node_ptr().text_range(),
-        type_resolution.expr(db, expr).human_readable(db),
+        type_resolution.expr(db, expr).human_readable(db, project),
     ))
 }

@@ -1,30 +1,37 @@
 use core::error;
 
-use base_db::{BaseDb, File};
+use base_db::{BaseDb, File, Project};
 
 use hir_def::{
     hir::{
         ContractId, ElementaryTypeRef, EnumerationId, ErrorId, EventId, FunctionId, Ident, Item,
         ModifierId, SourceUnit, StructureId,
     },
-    DataLocation,
+    DataLocation, UserDefinedValueTypeId,
 };
 
 use hir_nameres::{container::Container, scope::body::Definition};
 
-use std::{fmt::{Display, Write}};
+use std::fmt::{Display, Write};
+
+use crate::callable::Callable;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, salsa::Update)]
 pub enum TyKind<'db> {
     Unknown,
-    Function(TyKindInterned<'db>, TyKindInterned<'db>),
+    // Callable
+    Function(FunctionId<'db>),
     Modifier(ModifierId<'db>),
+    Error(ErrorId<'db>),
     Struct(StructureId<'db>),
     Event(EventId<'db>),
-    Error(ErrorId<'db>),
-    Enum(EnumerationId<'db>),
     Contract(ContractId<'db>),
     Elementary(ElementaryTypeRef),
+    UserDefinedValueType(UserDefinedValueTypeId<'db>),
+
+    Callable(Callable<'db>),
+
+    Enum(EnumerationId<'db>),
     Array(TyKindInterned<'db>, usize),
     Mapping(TyKindInterned<'db>, TyKindInterned<'db>),
     Tuple(Vec<Ty<'db>>),
@@ -42,7 +49,7 @@ pub enum TypeModifier {
     Memory,
     StorageRef,
     StoragePointer,
-    Calldata
+    Calldata,
 }
 
 impl Display for TypeModifier {
@@ -84,23 +91,17 @@ pub struct Ty<'db> {
 impl<'db> TyKind<'db> {
     pub fn is_complex(self) -> bool {
         match self {
-            TyKind::Elementary(ElementaryTypeRef::String | ElementaryTypeRef::Bytes) => {
-                true
-            },
-            TyKind::Unknown 
+            TyKind::Elementary(ElementaryTypeRef::String | ElementaryTypeRef::Bytes) => true,
+            TyKind::Unknown
             | TyKind::Elementary(_)
-            | TyKind::Function(_, _)
+            | TyKind::Function(_)
             | TyKind::Modifier(_)
-                // TyKind::Mapping(ty_kind_interned, ty_kind_interned1) => todo!(),
             | TyKind::Tuple(_)
-            | TyKind::ItemRef(_) => {
-                false
-            },
-            _ => true
+            | TyKind::ItemRef(_) => false,
+            _ => true,
         }
-
     }
-    pub fn can_coerce(self, db: &'db dyn BaseDb, dst: TyKind<'db>) -> bool {
+    pub fn can_coerce(&self, db: &'db dyn BaseDb, dst: TyKind<'db>) -> bool {
         match (self, dst) {
             (TyKind::Elementary(src), TyKind::Elementary(dst)) => match src {
                 hir_def::ElementaryTypeRef::Address { payable: false } => {
@@ -129,14 +130,14 @@ impl<'db> TyKind<'db> {
                         return false;
                     };
 
-                    return signed1 == signed && size1 >= size;
+                    return signed1 == *signed && size1 >= *size;
                 }
                 hir_def::ElementaryTypeRef::FixedBytes { size } => {
                     let hir_def::ElementaryTypeRef::FixedBytes { size: size1 } = dst else {
                         return false;
                     };
 
-                    return size1 >= size;
+                    return size1 >= *size;
                 }
                 hir_def::ElementaryTypeRef::Fixed { signed, size, decimal_points } => {
                     return false;
@@ -156,25 +157,26 @@ impl<'db> TyKind<'db> {
         }
     }
 
-    pub fn human_readable(self, db: &'db dyn BaseDb) -> String {
+    pub fn human_readable(self, db: &'db dyn BaseDb, project: Project) -> String {
         let mut res = String::new();
-        self.human_readable_to(db, &mut res);
+        self.human_readable_to(db, project, &mut res);
 
         res
     }
 
-    pub fn human_readable_to(self, db: &'db dyn BaseDb, res: &mut String) {
+    pub fn human_readable_to(self, db: &'db dyn BaseDb, project: Project, res: &mut String) {
         match self {
             TyKind::Unknown => {
                 *res += "{unknown}";
             }
-            TyKind::Function(args, returns) => {
+            TyKind::Function(f) => {
                 let mut need_comma = false;
                 *res += "function";
-                args.data(db).human_readable_to(db, res);
+                let callable = Callable::try_from_item(db, project, Item::Function(f)).unwrap();
+                callable.args.data(db).human_readable_to(db, project, res);
 
                 *res += " returns";
-                returns.data(db).human_readable_to(db, res);
+                callable.returns.data(db).human_readable_to(db, project, res);
             }
             TyKind::Struct(structure_id) => {
                 *res += structure_id.name(db).data(db);
@@ -230,20 +232,20 @@ impl<'db> TyKind<'db> {
                 }
             },
             TyKind::Array(ty, _) => {
-                ty.data(db).human_readable_to(db, res);
+                ty.data(db).human_readable_to(db, project, res);
                 *res += "[]";
             }
             TyKind::Mapping(ty, ty1) => {
                 *res += "mapping(";
-                ty.data(db).human_readable_to(db, res);
+                ty.data(db).human_readable_to(db, project, res);
                 *res += " => ";
-                ty1.data(db).human_readable_to(db, res);
+                ty1.data(db).human_readable_to(db, project, res);
                 *res += ")";
             }
             TyKind::Tuple(items) => {
                 *res += "(";
                 for i in items {
-                    i.human_readable_to(db, res);
+                    i.human_readable_to(db, project, res);
                     *res += ",";
                 }
                 *res += ")";
@@ -253,6 +255,12 @@ impl<'db> TyKind<'db> {
                 *res += item.name(db).map(|item| item.data(db).as_str()).unwrap_or("{unnamed}");
                 *res += ")";
             }
+            TyKind::UserDefinedValueType(user_defined_value_type_id) => {
+                *res += "UserType(";
+                *res += user_defined_value_type_id.name(db).data(db).as_str();
+                *res += ")";
+            }
+            TyKind::Callable(callable) => {}
         }
     }
 }
@@ -266,16 +274,11 @@ impl<'db> Ty<'db> {
         Self::new_in(TyKindInterned::new(db, kind), modifier)
     }
 
-    pub fn new(
-        kind: TyKindInterned<'db>,
-    ) -> Self {
+    pub fn new(kind: TyKindInterned<'db>) -> Self {
         Self::new_in(kind, TypeModifier::Memory)
     }
 
-    pub fn new_in(
-        kind: TyKindInterned<'db>,
-        modifier: TypeModifier,
-    ) -> Self {
+    pub fn new_in(kind: TyKindInterned<'db>, modifier: TypeModifier) -> Self {
         Self { ty_kind: kind, modifier: TypeModifier::Memory }
     }
 
@@ -290,15 +293,15 @@ impl<'db> Ty<'db> {
         }
     }
 
-    pub fn human_readable(self, db: &'db dyn BaseDb) -> String {
+    pub fn human_readable(self, db: &'db dyn BaseDb, project: Project) -> String {
         let mut res = String::new();
-        self.human_readable_to(db, &mut res);
+        self.human_readable_to(db, project, &mut res);
         res
     }
 
-    pub fn human_readable_to(self, db: &'db dyn BaseDb, res: &mut String) {
+    pub fn human_readable_to(self, db: &'db dyn BaseDb, project: Project, res: &mut String) {
         let kind = self.kind(db);
-        kind.human_readable_to(db, res);
+        kind.human_readable_to(db, project, res);
         if self.kind(db).is_complex() {
             write!(res, " {}", self.modifier);
         }

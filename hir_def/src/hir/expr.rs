@@ -242,7 +242,7 @@ impl HirPrint for Expr<'_> {
                 name_ref.write(db, w, ident)?;
             }
             Expr::Literal { data } => {
-                write!(w, "{data:?}")?;
+                write!(w, "{data}")?;
             }
             Expr::ElementaryTypeName { data } => {
                 data.write(db, w, ident)?;
