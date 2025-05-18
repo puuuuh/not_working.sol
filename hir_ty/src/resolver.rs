@@ -19,7 +19,7 @@ use syntax::ast::nodes;
 use crate::{
     error::TypeCheckError,
     type_check::{self, check_item},
-    tys::{unknown, Ty, TyKind, TyKindInterned},
+    tys::{unknown, Ty, TyKind, TyKindInterned, TypeModifier},
 };
 
 use hir_def::hir::HasSyntax;
@@ -42,7 +42,7 @@ impl<'db> TypeResolution<'db> {
         self.expr_map(db)
             .get(&expr)
             .cloned()
-            .unwrap_or_else(|| Ty { ty_kind: unknown(db), location: None })
+            .unwrap_or_else(|| Ty::new(unknown(db)))
     }
 
     #[salsa::tracked]
@@ -221,14 +221,14 @@ impl<'db> TypeResolutionCtx<'db> {
         }
     }
 
-    fn resolve_expr_with_args(
+    fn resolve_method(
         &mut self,
         db: &'db dyn BaseDb,
         expr: ExprId<'db>,
         args: TyKindInterned<'db>,
     ) -> Ty<'db> {
         self.expr_map.swap_remove(&expr);
-        let t = self.resolve_expr_with_args_inner(db, expr, args);
+        let t = self.resolve_method_inner(db, expr, args);
         self.expr_map.insert(expr, t);
 
         t
@@ -240,14 +240,14 @@ impl<'db> TypeResolutionCtx<'db> {
         }
         let t = self
             .resolve_expr_inner(db, expr)
-            .unwrap_or(Ty { ty_kind: self.unknown, location: None });
+            .unwrap_or(Ty::new(self::unknown(db)));
 
         self.expr_map.insert(expr, t);
 
         t
     }
 
-    fn resolve_expr_with_args_inner(
+    fn resolve_method_inner(
         &mut self,
         db: &'db dyn BaseDb,
         expr: ExprId<'db>,
@@ -257,15 +257,11 @@ impl<'db> TypeResolutionCtx<'db> {
             Expr::MemberAccess { owner, member_name } => {
                 let owner_ty = self.resolve_expr(db, *owner);
                 let Some(container) = owner_ty.container(db) else {
-                    return Ty { ty_kind: self.unknown, location: None };
+                    return Ty::new(self.unknown);
                 };
                 let defs = container.defs(db);
                 let mut defs = defs.iter().filter(|(name, _)| *name == *member_name);
-                loop {
-                    let Some((_, def)) = defs.next() else {
-                        return Ty { ty_kind: self.unknown, location: None };
-                    };
-
+                for (_, def) in defs {
                     let Definition::Item(item) = def else {
                         continue;
                     };
@@ -273,10 +269,11 @@ impl<'db> TypeResolutionCtx<'db> {
                     let ty = self.resolve_item_type(db, *item);
                     if let TyKind::Function(args, _) = ty.data(db) {
                         if args == args_type {
-                            return Ty { ty_kind: ty, location: None };
+                            return Ty::new(ty);
                         }
                     }
                 }
+                return Ty::new(self.unknown);
             }
             Expr::Ident { name_ref } => {
                 let defs = self.scope.for_expr(db, expr);
@@ -288,11 +285,11 @@ impl<'db> TypeResolutionCtx<'db> {
                     let ty = self.resolve_item_type(db, item);
                     if let TyKind::Function(fn_args, _) = ty.data(db) {
                         if args_type.data(db).can_coerce(db, fn_args.data(db)) {
-                            return Ty { ty_kind: ty, location: None };
+                            return Ty::new(ty);
                         }
                     }
                 }
-                return Ty { ty_kind: self.unknown, location: None };
+                return Ty::new(self.unknown);
             }
             _ => return self.resolve_expr(db, expr),
         };
@@ -302,9 +299,13 @@ impl<'db> TypeResolutionCtx<'db> {
         let kind = match expr.kind(db) {
             Expr::Index { target, .. } => {
                 let target_ty = self.resolve_expr(db, *target);
+                let modifier = match target_ty.modifier {
+                    TypeModifier::StoragePointer => TypeModifier::StorageRef,
+                    a => a
+                };
                 return match target_ty.kind(db) {
-                    TyKind::Array(ty, _) => Some(Ty { ty_kind: ty, location: target_ty.location }),
-                    TyKind::Mapping(_k, v) => Some(Ty { ty_kind: v, location: target_ty.location }),
+                    TyKind::Array(ty, _) => Some(Ty::new_in(ty, modifier)),
+                    TyKind::Mapping(_k, v) => Some(Ty::new_in(v, modifier)),
                     _ => None,
                 };
             }
@@ -316,13 +317,18 @@ impl<'db> TypeResolutionCtx<'db> {
                 let def =
                     container.defs(db).iter().copied().find(|(name, _)| *name == *member_name)?;
 
+                let modifier = match owner_ty.modifier {
+                    TypeModifier::StoragePointer => TypeModifier::StorageRef,
+                    a => a
+                };
+
                 match def.1 {
                     Definition::Item(item) => {
                         return Some(match owner_ty.kind(db) {
                             TyKind::ItemRef(item) => {
-                                Ty { ty_kind: self.resolve_item_ref(db, item), location: None }
+                                Ty::new(self.resolve_item_ref(db, item))
                             }
-                            _ => Ty { ty_kind: self.resolve_item_type(db, item), location: None },
+                            _ => Ty::new(self.resolve_item_type(db, item)),
                         })
                     }
                     Definition::EnumVariant(e) => {
@@ -330,14 +336,13 @@ impl<'db> TypeResolutionCtx<'db> {
                     }
                     Definition::Field(f) => {
                         if let TyKind::Struct(s) = owner_ty.kind(db) {
-                            return Some(Ty {
-                                ty_kind: self.resolve_type_ref(
+                            return Some(Ty::new_in(
+                                self.resolve_type_ref(
                                     db,
                                     Item::Struct(s).scope(db, self.project),
                                     f.ty(db),
                                 ),
-                                location: owner_ty.location,
-                            });
+                                modifier));
                         }
                         return None;
                     }
@@ -350,9 +355,9 @@ impl<'db> TypeResolutionCtx<'db> {
                     db,
                     TyKind::Tuple(args.iter().map(|(_, a)| self.resolve_expr(db, *a)).collect()),
                 );
-                let receiver_type = self.resolve_expr_with_args(db, *callee, args_type);
+                let receiver_type = self.resolve_method(db, *callee, args_type);
                 let result_type = match receiver_type.kind(db) {
-                    TyKind::Function(_, result_type) => Ty { ty_kind: result_type, location: None },
+                    TyKind::Function(_, result_type) => Ty::new(result_type),
                     TyKind::Error(_) | TyKind::Event(_) => receiver_type,
                     _ => return None,
                 };
@@ -368,7 +373,7 @@ impl<'db> TypeResolutionCtx<'db> {
                 let el_ty = content
                     .get(0)
                     .map(|expr| self.resolve_expr(db, *expr))
-                    .unwrap_or(Ty { ty_kind: self.unknown, location: None });
+                    .unwrap_or(Ty::new(self.unknown));
                 TyKind::Array(el_ty.ty_kind, 0)
             }
             Expr::BinaryOp { lhs, op, rhs } => {
@@ -377,7 +382,7 @@ impl<'db> TypeResolutionCtx<'db> {
                         BinaryOp::LogicOp(logic_op) => self.resolve_expr(db, *lhs),
                         BinaryOp::ArithOp(arith_op) => self.resolve_expr(db, *lhs),
                         BinaryOp::CmpOp(cmp_op) => {
-                            Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Bool), None)
+                            Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Bool))
                         }
                         BinaryOp::Assignment { op } => self.resolve_expr(db, *rhs),
                     });
@@ -387,14 +392,14 @@ impl<'db> TypeResolutionCtx<'db> {
             Expr::Ident { name_ref } => {
                 return Some(match self.scope.find_in_expr(db, expr, *name_ref)? {
                     Definition::Item(item @ Item::StateVariable(state_variable)) => {
-                        Ty { ty_kind: self.resolve_item_type(db, item), location: None }
+                        Ty::new_in(self.resolve_item_type(db, item), TypeModifier::StorageRef)
                     }
                     Definition::Item(item) => {
-                        Ty { ty_kind: self.resolve_item_ref(db, item), location: None }
+                        Ty::new(self.resolve_item_ref(db, item))
                     }
                     Definition::Local(item) => {
                         let ty_kind = self.resolve_type_ref(db, self.scope, item.ty(db));
-                        Ty { ty_kind, location: item.location(db) }
+                        Ty::new_in(ty_kind, item.location(db).into())
                     }
                     Definition::EnumVariant(_) | Definition::Field(_) => return None,
                 })
@@ -417,15 +422,14 @@ impl<'db> TypeResolutionCtx<'db> {
             },
             Expr::ElementaryTypeName { data } => TyKind::Elementary(*data),
             Expr::New { ty } => {
-                return Some(Ty {
-                    ty_kind: self.resolve_type_ref(db, self.scope, ty.clone()),
-                    location: None,
-                })
+                return Some(Ty::new(
+                    self.resolve_type_ref(db, self.scope, ty.clone()),
+                ))
             }
             Expr::Missing => return None,
         };
 
-        Some(Ty::new(db, kind, None))
+        Some(Ty::new_intern(db, kind))
     }
 
     fn resolve_type_ref(
@@ -456,18 +460,18 @@ impl<'db> TypeResolutionCtx<'db> {
             TypeRefKind::Function { arguments, visibility, mutability, returns } => {
                 let args = arguments
                     .iter()
-                    .map(|vardecl| Ty {
-                        ty_kind: self.resolve_type_ref(db, scope, vardecl.ty(db)),
-                        location: vardecl.location(db),
-                    })
+                    .map(|vardecl| Ty::new_in(
+                        self.resolve_type_ref(db, scope, vardecl.ty(db)),
+                        vardecl.location(db).into(),
+                    ))
                     .collect();
 
                 let returns = returns
                     .iter()
-                    .map(|vardecl| Ty {
-                        ty_kind: self.resolve_type_ref(db, scope, vardecl.ty(db)),
-                        location: vardecl.location(db),
-                    })
+                    .map(|vardecl| Ty::new_in(
+                        self.resolve_type_ref(db, scope, vardecl.ty(db)),
+                        vardecl.location(db).into(),
+                    ))
                     .collect();
                 let args = TyKindInterned::new(db, TyKind::Tuple(args));
                 let returns = TyKindInterned::new(db, TyKind::Tuple(returns));
@@ -555,10 +559,9 @@ impl<'db> TypeResolutionCtx<'db> {
                     .args
                     .iter()
                     .map(|vardecl| {
-                        Ty::new_interned(
-                            db,
+                        Ty::new_in(
                             self.resolve_type_ref(db, Scope::Item(scope), vardecl.ty(db)),
-                            vardecl.location(db),
+                            vardecl.location(db).into(),
                         )
                     })
                     .collect();
@@ -568,10 +571,9 @@ impl<'db> TypeResolutionCtx<'db> {
                     .iter()
                     .flatten()
                     .map(|vardecl| {
-                        Ty::new_interned(
-                            db,
+                        Ty::new_in(
                             self.resolve_type_ref(db, Scope::Item(scope), vardecl.ty(db)),
-                            vardecl.location(db),
+                            vardecl.location(db).into(),
                         )
                     })
                     .collect();
@@ -636,6 +638,7 @@ mod tests {
 
     use super::resolve_item;
 
+    #[track_caller]
     fn check_types(fixture: TestFixture, expected: &str) {
         let pos = fixture.position.unwrap();
         let (db, file) = TestDatabase::from_fixture(fixture);
@@ -688,8 +691,8 @@ mod tests {
         );
         check_types(
             fixture,
-            "String([[97, 97]]): string
-tmp: Helloworld
+            "String([[97, 97]]): string memory
+tmp: Helloworld memory
 tmp.unknown: {unknown}
 
 hw.Helloworld: Helloworld
@@ -770,7 +773,7 @@ uint256: uint256
             fixture,
             "Number(1): uint256
 test: TestStruct memory
-test.field: uint256 memory
+test.field: uint256
 
 TestStruct: TestStruct
 uint256: uint256

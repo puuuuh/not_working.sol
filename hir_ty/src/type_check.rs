@@ -31,7 +31,7 @@ impl<'db> Visitor<'db> for &mut TypeCheckWalker<'db> {
                     .map(|vardecl| {
                         let t = (vardecl)?.ty(db);
                         let expected = self.type_resolution.type_ref(db, t);
-                        Some((t, Ty { ty_kind: expected, location: vardecl?.location(db) }))
+                        Some((t, Ty::new_in(expected, vardecl?.location(db).into())))
                     })
                     .collect::<Vec<_>>();
 
@@ -88,7 +88,7 @@ impl<'db> Visitor<'db> for &mut TypeCheckWalker<'db> {
                 let target_ty = self.type_resolution.expr(db, *target);
                 let expected = match target_ty.kind(db) {
                     TyKind::Array(ty, _) => self.common_types.uint256,
-                    TyKind::Mapping(ty, ty1) => Ty { ty_kind: ty1, location: target_ty.location },
+                    TyKind::Mapping(ty, ty1) => Ty::new(ty1),
                     _ => {
                         emit_error(
                             db,

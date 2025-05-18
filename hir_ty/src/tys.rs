@@ -12,7 +12,7 @@ use hir_def::{
 
 use hir_nameres::{container::Container, scope::body::Definition};
 
-use std::fmt::Write;
+use std::{fmt::{Display, Write}};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, salsa::Update)]
 pub enum TyKind<'db> {
@@ -38,12 +38,68 @@ pub struct TyKindInterned<'db> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, salsa::Update)]
+pub enum TypeModifier {
+    Memory,
+    StorageRef,
+    StoragePointer,
+    Calldata
+}
+
+impl Display for TypeModifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            TypeModifier::Memory => "memory",
+            TypeModifier::StorageRef => "storage ref",
+            TypeModifier::StoragePointer => "storage ptr",
+            TypeModifier::Calldata => "calldata",
+        })
+    }
+}
+
+impl<T: Into<TypeModifier>> From<Option<T>> for TypeModifier {
+    fn from(value: Option<T>) -> Self {
+        let Some(value) = value else {
+            return TypeModifier::Memory;
+        };
+        value.into()
+    }
+}
+
+impl From<DataLocation> for TypeModifier {
+    fn from(value: DataLocation) -> Self {
+        match value {
+            DataLocation::Memory => Self::Memory,
+            DataLocation::Storage => Self::StoragePointer,
+            DataLocation::Calldata => Self::Calldata,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, salsa::Update)]
 pub struct Ty<'db> {
     pub ty_kind: TyKindInterned<'db>,
-    pub location: Option<DataLocation>,
+    pub modifier: TypeModifier,
 }
 
 impl<'db> TyKind<'db> {
+    pub fn is_complex(self) -> bool {
+        match self {
+            TyKind::Elementary(ElementaryTypeRef::String | ElementaryTypeRef::Bytes) => {
+                true
+            },
+            TyKind::Unknown 
+            | TyKind::Elementary(_)
+            | TyKind::Function(_, _)
+            | TyKind::Modifier(_)
+                // TyKind::Mapping(ty_kind_interned, ty_kind_interned1) => todo!(),
+            | TyKind::Tuple(_)
+            | TyKind::ItemRef(_) => {
+                false
+            },
+            _ => true
+        }
+
+    }
     pub fn can_coerce(self, db: &'db dyn BaseDb, dst: TyKind<'db>) -> bool {
         match (self, dst) {
             (TyKind::Elementary(src), TyKind::Elementary(dst)) => match src {
@@ -202,16 +258,25 @@ impl<'db> TyKind<'db> {
 }
 
 impl<'db> Ty<'db> {
-    pub fn new(db: &'db dyn BaseDb, kind: TyKind<'db>, location: Option<DataLocation>) -> Self {
-        Self { ty_kind: TyKindInterned::new(db, kind), location }
+    pub fn new_intern(db: &'db dyn BaseDb, kind: TyKind<'db>) -> Self {
+        Self::new_intern_in(db, kind, TypeModifier::Memory)
     }
 
-    pub fn new_interned(
-        db: &'db dyn BaseDb,
+    pub fn new_intern_in(db: &'db dyn BaseDb, kind: TyKind<'db>, modifier: TypeModifier) -> Self {
+        Self::new_in(TyKindInterned::new(db, kind), modifier)
+    }
+
+    pub fn new(
         kind: TyKindInterned<'db>,
-        location: Option<DataLocation>,
     ) -> Self {
-        Self { ty_kind: kind, location }
+        Self::new_in(kind, TypeModifier::Memory)
+    }
+
+    pub fn new_in(
+        kind: TyKindInterned<'db>,
+        modifier: TypeModifier,
+    ) -> Self {
+        Self { ty_kind: kind, modifier: TypeModifier::Memory }
     }
 
     pub fn kind(self, db: &'db dyn BaseDb) -> TyKind<'db> {
@@ -232,10 +297,10 @@ impl<'db> Ty<'db> {
     }
 
     pub fn human_readable_to(self, db: &'db dyn BaseDb, res: &mut String) {
-        self.kind(db).human_readable_to(db, res);
-
-        if let Some(location) = self.location {
-            write!(res, " {}", location);
+        let kind = self.kind(db);
+        kind.human_readable_to(db, res);
+        if self.kind(db).is_complex() {
+            write!(res, " {}", self.modifier);
         }
     }
 
@@ -276,7 +341,14 @@ impl<'db> Ty<'db> {
             return true;
         }
 
-        self.kind(db).can_coerce(db, dst.kind(db))
+        let locations_can_coerce = match (self.modifier, dst.modifier) {
+            (a, b) if a == b => true,
+            (_, TypeModifier::Memory) => true,
+            (_, TypeModifier::StorageRef) => true,
+            _ => false,
+        };
+
+        locations_can_coerce && self.kind(db).can_coerce(db, dst.kind(db))
     }
 }
 
@@ -310,79 +382,65 @@ pub struct ElementaryTypes<'db> {
 #[salsa::tracked]
 pub fn common_types<'db>(db: &'db dyn BaseDb) -> ElementaryTypes<'db> {
     ElementaryTypes {
-        address: Ty::new(
+        address: Ty::new_intern(
             db,
             TyKind::Elementary(ElementaryTypeRef::Address { payable: false }),
-            None,
         ),
-        payable_address: Ty::new(
+        payable_address: Ty::new_intern(
             db,
             TyKind::Elementary(ElementaryTypeRef::Address { payable: true }),
-            None,
         ),
-        bool: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Bool), None),
-        string: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::String), None),
-        bytes: Ty::new(db, TyKind::Elementary(ElementaryTypeRef::Bytes), None),
-        int8: Ty::new(
+        bool: Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Bool)),
+        string: Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::String)),
+        bytes: Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Bytes)),
+        int8: Ty::new_intern(
             db,
             TyKind::Elementary(ElementaryTypeRef::Integer { signed: true, size: 8 }),
-            None,
         ),
-        int16: Ty::new(
+        int16: Ty::new_intern(
             db,
             TyKind::Elementary(ElementaryTypeRef::Integer { signed: true, size: 16 }),
-            None,
         ),
-        int32: Ty::new(
+        int32: Ty::new_intern(
             db,
             TyKind::Elementary(ElementaryTypeRef::Integer { signed: true, size: 32 }),
-            None,
         ),
-        int64: Ty::new(
+        int64: Ty::new_intern(
             db,
             TyKind::Elementary(ElementaryTypeRef::Integer { signed: true, size: 64 }),
-            None,
         ),
-        int128: Ty::new(
+        int128: Ty::new_intern(
             db,
             TyKind::Elementary(ElementaryTypeRef::Integer { signed: true, size: 128 }),
-            None,
         ),
-        int256: Ty::new(
+        int256: Ty::new_intern(
             db,
             TyKind::Elementary(ElementaryTypeRef::Integer { signed: true, size: 256 }),
-            None,
         ),
-        uint8: Ty::new(
+        uint8: Ty::new_intern(
             db,
             TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 8 }),
-            None,
         ),
-        uint16: Ty::new(
+        uint16: Ty::new_intern(
             db,
             TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 16 }),
-            None,
         ),
-        uint32: Ty::new(
+        uint32: Ty::new_intern(
             db,
             TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 32 }),
-            None,
         ),
-        uint64: Ty::new(
+        uint64: Ty::new_intern(
             db,
             TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 64 }),
-            None,
         ),
-        uint128: Ty::new(
+        uint128: Ty::new_intern(
             db,
             TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 128 }),
-            None,
         ),
-        uint256: Ty::new(
+        uint256: Ty::new_intern(
             db,
             TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 256 }),
-            None,
         ),
-        unknown: Ty::new(db, TyKind::Unknown, None),
+        unknown: Ty::new_intern(db, TyKind::Unknown),
     }
 }
