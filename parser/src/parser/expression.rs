@@ -125,6 +125,16 @@ impl<'a> Parser<'a> {
                 self.bump(NEW_KW);
                 self.type_name();
             }
+            TYPE_KW => {
+                self.builder.start_node_at(start, TYPE_EXPR.into());
+                self.bump(TYPE_KW);
+
+                'parse: {
+                    eat!(L_PAREN, 'parse, self);
+                    self.type_name();
+                    eat!(R_PAREN, 'parse, self);
+                }
+            }
             op => {
                 if let Some(r) = prefix_bp(op) {
                     self.builder.start_node_at(start, PREFIX_EXPR.into());

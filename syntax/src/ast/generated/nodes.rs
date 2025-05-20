@@ -551,6 +551,17 @@ impl NewExpr {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TypeExpr {
+    pub(crate) syntax: SyntaxNode,
+}
+impl TypeExpr {
+    pub fn type_token(&self) -> Option<SyntaxToken> { support::token(&self.syntax, T![type]) }
+    pub fn l_paren_token(&self) -> Option<SyntaxToken> { support::token(&self.syntax, T!['(']) }
+    pub fn ty(&self) -> Option<Type> { support::child(&self.syntax) }
+    pub fn r_paren_token(&self) -> Option<SyntaxToken> { support::token(&self.syntax, T![')']) }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct InfixExpr {
     pub(crate) syntax: SyntaxNode,
 }
@@ -1145,6 +1156,7 @@ pub enum Expr {
     SliceExpr(SliceExpr),
     MemberAccessExpr(MemberAccessExpr),
     NewExpr(NewExpr),
+    TypeExpr(TypeExpr),
     InfixExpr(InfixExpr),
     PrefixExpr(PrefixExpr),
     PostfixExpr(PostfixExpr),
@@ -1770,6 +1782,18 @@ impl AstNode for MemberAccessExpr {
 impl AstNode for NewExpr {
     type Language = SolidityLang;
     fn can_cast(kind: SyntaxKind) -> bool { kind == NEW_EXPR }
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        if Self::can_cast(syntax.kind()) {
+            Some(Self { syntax })
+        } else {
+            None
+        }
+    }
+    fn syntax(&self) -> &SyntaxNode { &self.syntax }
+}
+impl AstNode for TypeExpr {
+    type Language = SolidityLang;
+    fn can_cast(kind: SyntaxKind) -> bool { kind == TYPE_EXPR }
     fn cast(syntax: SyntaxNode) -> Option<Self> {
         if Self::can_cast(syntax.kind()) {
             Some(Self { syntax })
@@ -2589,6 +2613,9 @@ impl From<MemberAccessExpr> for Expr {
 impl From<NewExpr> for Expr {
     fn from(node: NewExpr) -> Expr { Expr::NewExpr(node) }
 }
+impl From<TypeExpr> for Expr {
+    fn from(node: TypeExpr) -> Expr { Expr::TypeExpr(node) }
+}
 impl From<InfixExpr> for Expr {
     fn from(node: InfixExpr) -> Expr { Expr::InfixExpr(node) }
 }
@@ -2628,6 +2655,7 @@ impl AstNode for Expr {
                 | SLICE_EXPR
                 | MEMBER_ACCESS_EXPR
                 | NEW_EXPR
+                | TYPE_EXPR
                 | INFIX_EXPR
                 | PREFIX_EXPR
                 | POSTFIX_EXPR
@@ -2646,6 +2674,7 @@ impl AstNode for Expr {
             SLICE_EXPR => Expr::SliceExpr(SliceExpr { syntax }),
             MEMBER_ACCESS_EXPR => Expr::MemberAccessExpr(MemberAccessExpr { syntax }),
             NEW_EXPR => Expr::NewExpr(NewExpr { syntax }),
+            TYPE_EXPR => Expr::TypeExpr(TypeExpr { syntax }),
             INFIX_EXPR => Expr::InfixExpr(InfixExpr { syntax }),
             PREFIX_EXPR => Expr::PrefixExpr(PrefixExpr { syntax }),
             POSTFIX_EXPR => Expr::PostfixExpr(PostfixExpr { syntax }),
@@ -2666,6 +2695,7 @@ impl AstNode for Expr {
             Expr::SliceExpr(it) => &it.syntax,
             Expr::MemberAccessExpr(it) => &it.syntax,
             Expr::NewExpr(it) => &it.syntax,
+            Expr::TypeExpr(it) => &it.syntax,
             Expr::InfixExpr(it) => &it.syntax,
             Expr::PrefixExpr(it) => &it.syntax,
             Expr::PostfixExpr(it) => &it.syntax,
@@ -3326,6 +3356,11 @@ impl std::fmt::Display for MemberAccessExpr {
     }
 }
 impl std::fmt::Display for NewExpr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(self.syntax(), f)
+    }
+}
+impl std::fmt::Display for TypeExpr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         std::fmt::Display::fmt(self.syntax(), f)
     }

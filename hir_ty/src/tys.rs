@@ -10,33 +10,35 @@ use hir_def::{
     DataLocation, UserDefinedValueTypeId,
 };
 
-use hir_nameres::{container::Container, scope::body::Definition};
+use hir_nameres::{container::Container, inheritance::inheritance_chain, scope::body::{Definition, MagicDefinitionKind}};
+use smallvec::SmallVec;
 
-use std::fmt::{Display, Write};
+use std::{collections::{btree_map::Entry, BTreeMap}, fmt::{Display, Write}};
 
-use crate::callable::Callable;
+use crate::{callable::Callable, extensions::Extensions, member_kind::MemberKind, resolver::resolve_item};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, salsa::Update)]
 pub enum TyKind<'db> {
     Unknown,
     // Callable
-    Function(FunctionId<'db>),
-    Modifier(ModifierId<'db>),
-    Error(ErrorId<'db>),
+    Function(Callable<'db>),
+    Modifier(Callable<'db>),
+
+    Error,
     Struct(StructureId<'db>),
-    Event(EventId<'db>),
+    Event,
     Contract(ContractId<'db>),
     Elementary(ElementaryTypeRef),
     UserDefinedValueType(UserDefinedValueTypeId<'db>),
-
-    Callable(Callable<'db>),
 
     Enum(EnumerationId<'db>),
     Array(TyKindInterned<'db>, usize),
     Mapping(TyKindInterned<'db>, TyKindInterned<'db>),
     Tuple(Vec<Ty<'db>>),
-    // Reference to an item without value (ContractName.Struct, for example)
-    ItemRef(Item<'db>),
+    // Reference to an item, not an instance (ContractName.Struct, for example)
+    Type(Item<'db>),
+
+    Magic(MagicDefinitionKind),
 }
 
 #[salsa::interned(debug)]
@@ -82,12 +84,6 @@ impl From<DataLocation> for TypeModifier {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, salsa::Update)]
-pub struct Ty<'db> {
-    pub ty_kind: TyKindInterned<'db>,
-    pub modifier: TypeModifier,
-}
-
 impl<'db> TyKind<'db> {
     pub fn is_complex(self) -> bool {
         match self {
@@ -97,11 +93,11 @@ impl<'db> TyKind<'db> {
             | TyKind::Function(_)
             | TyKind::Modifier(_)
             | TyKind::Tuple(_)
-            | TyKind::ItemRef(_) => false,
+            | TyKind::Type(_) => false,
             _ => true,
         }
     }
-    pub fn can_coerce(&self, db: &'db dyn BaseDb, dst: TyKind<'db>) -> bool {
+    pub fn can_coerce(&self, db: &'db dyn BaseDb, project: Project, dst: TyKind<'db>) -> bool {
         match (self, dst) {
             (TyKind::Elementary(src), TyKind::Elementary(dst)) => match src {
                 hir_def::ElementaryTypeRef::Address { payable: false } => {
@@ -151,7 +147,10 @@ impl<'db> TyKind<'db> {
             },
             (TyKind::Tuple(src_tuple), TyKind::Tuple(dst_tuple)) => {
                 (src_tuple.len() == dst_tuple.len())
-                    && src_tuple.iter().zip(dst_tuple).all(|(src, dst)| src.can_coerce(db, dst))
+                    && src_tuple.iter().zip(dst_tuple).all(|(src, dst)| src.can_coerce(db, project, dst))
+            },
+            (TyKind::Contract(a), TyKind::Contract(b)) => {
+                inheritance_chain(db, project, *a).iter().any(|c| *c == b)
             }
             _ => false,
         }
@@ -169,14 +168,16 @@ impl<'db> TyKind<'db> {
             TyKind::Unknown => {
                 *res += "{unknown}";
             }
-            TyKind::Function(f) => {
-                let mut need_comma = false;
+            TyKind::Function(callable) => {
                 *res += "function";
-                let callable = Callable::try_from_item(db, project, Item::Function(f)).unwrap();
                 callable.args.data(db).human_readable_to(db, project, res);
-
-                *res += " returns";
-                callable.returns.data(db).human_readable_to(db, project, res);
+                *res += " returns(";
+                callable.returns.human_readable_to(db, project, res);
+                *res += ")";
+            }
+            TyKind::Modifier(callable) => {
+                *res += "modifier";
+                callable.args.data(db).human_readable_to(db, project, res);
             }
             TyKind::Struct(structure_id) => {
                 *res += structure_id.name(db).data(db);
@@ -187,14 +188,11 @@ impl<'db> TyKind<'db> {
             TyKind::Contract(contract_id) => {
                 *res += contract_id.name(db).data(db);
             }
-            TyKind::Error(error_id) => {
-                *res += error_id.name(db).data(db);
+            TyKind::Error => {
+                *res += "error";
             }
-            TyKind::Modifier(modifier_id) => {
-                *res += modifier_id.name(db).data(db);
-            }
-            TyKind::Event(event_id) => {
-                *res += event_id.name(db).data(db);
+            TyKind::Event => {
+                *res += "event";
             }
             TyKind::Elementary(elementary_type_ref) => match elementary_type_ref {
                 ElementaryTypeRef::Address { payable } => {
@@ -250,8 +248,8 @@ impl<'db> TyKind<'db> {
                 }
                 *res += ")";
             }
-            TyKind::ItemRef(item) => {
-                *res += "ItemRef(";
+            TyKind::Type(item) => {
+                *res += "type(";
                 *res += item.name(db).map(|item| item.data(db).as_str()).unwrap_or("{unnamed}");
                 *res += ")";
             }
@@ -260,9 +258,191 @@ impl<'db> TyKind<'db> {
                 *res += user_defined_value_type_id.name(db).data(db).as_str();
                 *res += ")";
             }
-            TyKind::Callable(callable) => {}
+            TyKind::Magic(kind) => {
+                *res += "magic"
+            }
         }
     }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, salsa::Update)]
+pub struct Ty<'db> {
+    pub ty_kind: TyKindInterned<'db>,
+    pub modifier: TypeModifier,
+}
+
+#[salsa::tracked(returns(ref))]
+pub fn members<'db>(db: &'db dyn BaseDb, project: Project, ty: Ty<'db>) -> BTreeMap<Ident<'db>, SmallVec<[MemberKind<'db>; 1]>> {
+    let mut res = BTreeMap::new();
+    let modifier = match ty.modifier {
+        TypeModifier::StoragePointer => TypeModifier::StorageRef,
+        a => a,
+    };
+    match ty.kind(db) {
+        TyKind::Type(Item::Error(_))
+        | TyKind::Type(Item::Event(_)) 
+        | TyKind::Function(_) => {
+            res.insert(
+                Ident::new(db, "selector".to_owned()), 
+                SmallVec::from_slice(&[MemberKind::SynteticItem(Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::FixedBytes { size: 32 })))])
+            );
+        },
+        TyKind::Struct(structure_id) => {
+            for f in structure_id.fields(db) {
+                res.insert(f.name(db), SmallVec::from_slice(&[MemberKind::Field(f)]));
+            }
+        },
+        TyKind::Contract(contract_id) => {
+            let chain = inheritance_chain(db, project, contract_id);
+            for contract_id in chain {
+                for (name, item) in contract_id
+                    .items(db)
+                    .iter()
+                    .filter(|i| {
+                        matches!(
+                            i,
+                            hir_def::ContractItem::Function(_)
+                                | hir_def::ContractItem::StateVariable(_)
+                        )
+                    })
+                    .flat_map(|item| {
+                        item.name(db).map(|name| (name, MemberKind::Item(Item::from(*item))))
+                    }) {
+                    match res.entry(name) {
+                        Entry::Vacant(vacant_entry) => {
+                            vacant_entry.insert([item].into_iter().collect());
+                        },
+                        Entry::Occupied(mut occupied_entry) => {
+                            occupied_entry.get_mut().push(item);
+                        },
+                    }
+                }
+            }
+        },
+        TyKind::Array(ty_kind_interned, _) => {
+            res.insert(
+                Ident::new(db, "length".to_owned()), 
+                SmallVec::from_slice(&[MemberKind::SynteticItem(Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 256 })))])
+            );
+        },
+        TyKind::Type(item) => {
+            match item {
+                Item::Module(source_unit) => {
+                    for (name, item) in source_unit
+                        .items(db)
+                        .iter()
+                        .filter(|i| {
+                            matches!(
+                                i,
+                                Item::Contract(_)
+                                    | Item::Enum(_)
+                                    | Item::UserDefinedValueType(_)
+                                    | Item::Error(_)
+                                    | Item::Event(_)
+                                    | Item::Function(_)
+                                    | Item::StateVariable(_)
+                                    | Item::Struct(_)
+                                    | Item::Constructor(_)
+                                    | Item::Modifier(_)
+                                    | Item::Module(_)
+                            )
+                        })
+                        .flat_map(|item| {
+                            item.name(db).map(|name| (name, MemberKind::Item(Item::from(*item))))
+                        }) {
+                        match res.entry(name) {
+                            Entry::Vacant(vacant_entry) => {
+                                vacant_entry.insert([item].into_iter().collect());
+                            },
+                            Entry::Occupied(mut occupied_entry) => {
+                                occupied_entry.get_mut().push(item);
+                            },
+                        }
+                    }
+                } 
+                Item::Contract(contract) => {
+                    for (name, item) in contract
+                        .items(db)
+                        .iter()
+                        .filter(|i| {
+                        matches!(
+                            i,
+                            hir_def::ContractItem::Constructor(_)
+                                | hir_def::ContractItem::Modifier(_)
+                                | hir_def::ContractItem::UserDefinedValueType(_)
+                                | hir_def::ContractItem::Struct(_)
+                                | hir_def::ContractItem::Enum(_)
+                                | hir_def::ContractItem::StateVariable(_)
+                        )
+                    })
+                    .flat_map(|item| {
+                        item.name(db).map(|name| (name, MemberKind::Item(Item::from(*item))))
+                    }) {
+                        match res.entry(name) {
+                            Entry::Vacant(vacant_entry) => {
+                                vacant_entry.insert([item].into_iter().collect());
+                            },
+                            Entry::Occupied(mut occupied_entry) => {
+                                occupied_entry.get_mut().push(item);
+                            },
+                        }
+                    }
+                }
+                Item::Enum(enumeration_id) => {
+                    for f in enumeration_id.fields(db) {
+                        res.insert(f.name(db), SmallVec::from_slice(&[MemberKind::EnumVariant(f)]));
+                    }
+                },
+                _ => {
+                    Default::default()
+                }
+            }
+        },
+        TyKind::Magic(kind) => {
+            let fields = match kind {
+                MagicDefinitionKind::Block => {
+                    let uint = Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 256 }));
+                    let address_payable = Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Address { payable: true }));
+                    &[
+                        ("basefee", uint),
+                        ("blobbasefee", uint),
+                        ("chainid", uint),
+                        ("coinbase", address_payable),
+                        ("difficulty", uint),
+                        ("gaslimit", uint),
+                        ("number", uint),
+                        ("prevrandao", uint),
+                        ("timestamp", uint),
+                    ][..]
+                },
+                MagicDefinitionKind::Msg => {
+                    let uint = Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 256 }));
+                    let address = Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Address { payable: false }));
+                    let bytes = Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Bytes));
+                    let bytes4 = Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::FixedBytes { size: 4 }));
+                    &[
+                        ("data", bytes),
+                        ("sender", address),
+                        ("sig", bytes4),
+                        ("value", uint),
+                    ][..]
+                },
+                MagicDefinitionKind::Tx => {
+                    let uint = Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 256 }));
+                    let address = Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Address { payable: false }));
+                    &[
+                        ("gasprice", uint),
+                        ("origin", address),
+                    ][..]
+                },
+            };
+            res.extend(fields.iter().map(|(name, ty)| (Ident::new(db, *name), SmallVec::from_elem(MemberKind::SynteticItem(*ty), 1))))
+        }
+        //TyKind::Elementary(elementary_type_ref) => {
+        //},
+        _ => {},
+    }
+
+    res
 }
 
 impl<'db> Ty<'db> {
@@ -311,18 +491,7 @@ impl<'db> Ty<'db> {
         self.ty_kind == unknown(db)
     }
 
-    pub fn container(self, db: &'db dyn BaseDb) -> Option<Container<'db>> {
-        Some(match self.kind(db) {
-            TyKind::Struct(structure_id) => Container::Structure(structure_id),
-            TyKind::Enum(enumeration_id) => Container::Enum(enumeration_id),
-            TyKind::Contract(contract_id) => Container::Contract(contract_id),
-            TyKind::ItemRef(item) => Container::Item(item),
-
-            _ => return None,
-        })
-    }
-
-    pub fn can_coerce(mut self, db: &'db dyn BaseDb, mut dst: Ty<'db>) -> bool {
+    pub fn can_coerce(mut self, db: &'db dyn BaseDb, project: Project, mut dst: Ty<'db>) -> bool {
         // Tuple unwrapping
         // TODO: Add limit or just convert any tuples with len == 1 to inner type somewhere else
         while let TyKind::Tuple(t) = self.kind(db) {
@@ -351,7 +520,11 @@ impl<'db> Ty<'db> {
             _ => false,
         };
 
-        locations_can_coerce && self.kind(db).can_coerce(db, dst.kind(db))
+        locations_can_coerce && self.kind(db).can_coerce(db, project, dst.kind(db))
+    }
+    
+    pub fn members(self, db: &'db dyn BaseDb, project: Project) -> &'db BTreeMap<Ident<'db>, SmallVec<[MemberKind<'db>; 1]>> {
+        members(db, project, self)
     }
 }
 

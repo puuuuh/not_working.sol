@@ -9,20 +9,19 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, salsa::Update)]
 pub struct Callable<'db> {
     pub args: TyKindInterned<'db>,
-    pub returns: TyKindInterned<'db>,
+    pub returns: Ty<'db>,
 }
 
 impl<'db> Callable<'db> {
     pub fn try_from_ty(db: &'db dyn BaseDb, project: Project, t: Ty<'db>) -> Option<Self> {
         match t.kind(db) {
-            TyKind::Callable(callable) => Some(callable),
-            TyKind::Function(function_id) => {
-                Self::try_from_item(db, project, Item::Function(function_id))
+            TyKind::Function(callable) => {
+                Some(callable)
             }
-            TyKind::Modifier(modifier_id) => {
-                Self::try_from_item(db, project, Item::Modifier(modifier_id))
+            TyKind::Modifier(callable) => {
+                Some(callable)
             }
-            TyKind::ItemRef(item) => Self::try_from_item(db, project, item),
+            TyKind::Type(item) => Self::try_from_item(db, project, item),
             _ => None,
         }
     }
@@ -33,7 +32,7 @@ impl<'db> Callable<'db> {
                     db,
                     TyKind::Elementary(hir_def::ElementaryTypeRef::Address { payable: false }),
                 ),
-                returns: TyKindInterned::new(db, TyKind::Contract(contract_id)),
+                returns: Ty::new_intern(db, TyKind::Contract(contract_id)),
             },
             Item::Enum(enumeration_id) => Self {
                 args: TyKindInterned::new(
@@ -43,14 +42,14 @@ impl<'db> Callable<'db> {
                         size: 256,
                     }),
                 ),
-                returns: TyKindInterned::new(db, TyKind::Enum(enumeration_id)),
+                returns: Ty::new_intern(db, TyKind::Enum(enumeration_id)),
             },
             Item::UserDefinedValueType(user_defined_value_type_id) => {
                 let type_res = resolve_item_signature(db, project, item);
                 let basic_ty = type_res.type_ref(db, user_defined_value_type_id.ty(db));
                 Self {
                     args: basic_ty,
-                    returns: TyKindInterned::new(
+                    returns: Ty::new_intern(
                         db,
                         TyKind::UserDefinedValueType(user_defined_value_type_id),
                     ),
@@ -65,7 +64,7 @@ impl<'db> Callable<'db> {
                     .collect();
                 Self {
                     args: TyKindInterned::new(db, TyKind::Tuple(params)),
-                    returns: TyKindInterned::new(db, TyKind::Error(error_id)),
+                    returns: Ty::new_intern(db, TyKind::Error),
                 }
             }
             Item::Event(event_id) => {
@@ -77,7 +76,7 @@ impl<'db> Callable<'db> {
                     .collect();
                 Self {
                     args: TyKindInterned::new(db, TyKind::Tuple(params)),
-                    returns: TyKindInterned::new(db, TyKind::Event(event_id)),
+                    returns: Ty::new_intern(db, TyKind::Event),
                 }
             }
             Item::Function(function_id) => {
@@ -88,15 +87,26 @@ impl<'db> Callable<'db> {
                     .into_iter()
                     .map(|p| Ty::new_in(type_res.type_ref(db, p.ty(db)), p.location(db).into()))
                     .collect();
+
+                let args = TyKindInterned::new(db, TyKind::Tuple(params));
+                if let Some(r) = &info.returns {
+                    if r.len() == 1 {
+                        return Some(Self {
+                            args,
+                            returns: Ty::new_in(type_res.type_ref(db, r[0].ty(db)), r[0].location(db).into()),
+                        })
+                    }
+                }
                 let returns = info
                     .returns
                     .into_iter()
                     .flatten()
                     .map(|p| Ty::new_in(type_res.type_ref(db, p.ty(db)), p.location(db).into()))
                     .collect();
+                
                 Self {
-                    args: TyKindInterned::new(db, TyKind::Tuple(params)),
-                    returns: TyKindInterned::new(db, TyKind::Tuple(returns)),
+                    args,
+                    returns: Ty::new_intern(db, TyKind::Tuple(returns)),
                 }
             }
             Item::Struct(structure_id) => {
@@ -108,7 +118,7 @@ impl<'db> Callable<'db> {
                     .collect();
                 Self {
                     args: TyKindInterned::new(db, TyKind::Tuple(params)),
-                    returns: TyKindInterned::new(db, TyKind::Struct(structure_id)),
+                    returns: Ty::new_intern(db, TyKind::Struct(structure_id)),
                 }
             }
             Item::Constructor(constructor_id) => {
@@ -126,7 +136,7 @@ impl<'db> Callable<'db> {
                 };
                 Self {
                     args: TyKindInterned::new(db, TyKind::Tuple(params)),
-                    returns: TyKindInterned::new(db, contract),
+                    returns: Ty::new_intern(db, contract),
                 }
             }
             Item::Modifier(modifier_id) => {
@@ -140,7 +150,7 @@ impl<'db> Callable<'db> {
 
                 Self {
                     args: TyKindInterned::new(db, TyKind::Tuple(params)),
-                    returns: TyKindInterned::new(db, TyKind::Unknown),
+                    returns: Ty::new_intern(db, TyKind::Unknown),
                 }
             }
             _ => return None,

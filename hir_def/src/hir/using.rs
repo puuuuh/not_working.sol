@@ -14,7 +14,7 @@ pub struct UsingId<'db> {
     #[id]
     pub file: File,
 
-    #[tracked]
+    #[id]
     pub data: UsingData<'db>,
 
     #[tracked]

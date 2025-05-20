@@ -48,6 +48,19 @@ pub struct ContractId<'db> {
 
 lazy_field!(ContractId<'db>, origin, set_origin, Option<ContractId<'db>>, None);
 
+#[salsa::tracked]
+impl<'db> ContractId<'db> {
+    #[salsa::tracked]
+    pub fn constructor(self, db: &'db dyn BaseDb) -> Option<ConstructorId<'db>> {
+        self.items(db).into_iter().find_map(|i| {
+            match i {
+                ContractItem::Constructor(c) => Some(*c),
+                _ => None
+            }
+        })
+    }
+}
+
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, salsa::Update)]
 pub enum ContractItem<'db> {
     Constructor(ConstructorId<'db>),

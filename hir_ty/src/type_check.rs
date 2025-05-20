@@ -1,7 +1,6 @@
 use base_db::{BaseDb, Project};
 use hir_def::{
-    walk::{walk_expr, walk_stmt, Visitor},
-    Expr, ExprId, FileAstPtr, Item, StatementId, TypeRefId,
+    walk::{walk_expr, walk_stmt, Visitor}, ElementaryTypeRef, Expr, ExprId, FileAstPtr, Item, StatementId, TypeRefId
 };
 use hir_nameres::scope::Scope;
 use salsa::{Accumulator, Backtrace};
@@ -14,7 +13,7 @@ use crate::{
 
 pub struct TypeCheckWalker<'db> {
     project: Project,
-    type_resolution: TypeResolution<'db>,
+    type_resolution: &'db TypeResolution<'db>,
     common_types: ElementaryTypes<'db>,
 }
 
@@ -50,7 +49,7 @@ impl<'db> Visitor<'db> for &mut TypeCheckWalker<'db> {
                     };
                     for (lhs, rhs) in lhs_ty.into_iter().zip(tys.iter()) {
                         if let Some((ty_ref, ty)) = lhs {
-                            if !rhs.can_coerce(db, ty) {
+                            if !rhs.can_coerce(db, self.project, ty) {
                                 emit_typeref_type_mismatch(db, self.project, ty_ref, ty, *rhs);
                             }
                         }
@@ -88,7 +87,9 @@ impl<'db> Visitor<'db> for &mut TypeCheckWalker<'db> {
             Expr::Index { target, index } => {
                 let target_ty = self.type_resolution.expr(db, *target);
                 let expected = match target_ty.kind(db) {
-                    TyKind::Array(ty, _) => self.common_types.uint256,
+                    TyKind::Array(_, _)
+                    | TyKind::Elementary(ElementaryTypeRef::FixedBytes { .. } | ElementaryTypeRef::Bytes) => self.common_types.uint256,
+
                     TyKind::Mapping(ty, ty1) => Ty::new(ty),
                     _ => {
                         emit_expr_error(
@@ -136,6 +137,7 @@ impl<'db> Visitor<'db> for &mut TypeCheckWalker<'db> {
             Expr::Literal { data } => {}
             Expr::ElementaryTypeName { data } => {}
             Expr::New { ty } => {}
+            Expr::Type { ty } => {}
             Expr::Missing => {}
         }
     }
@@ -158,7 +160,7 @@ impl<'db> TypeCheckWalker<'db> {
         expected: Ty<'db>,
     ) {
         let ty = self.type_resolution.expr(db, expr);
-        if !ty.can_coerce(db, expected) {
+        if !ty.can_coerce(db, project, expected) {
             emit_expr_type_mismatch(db, project, expr, expected, ty);
         }
     }

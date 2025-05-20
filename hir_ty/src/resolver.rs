@@ -2,12 +2,9 @@ use std::{cmp::Reverse, collections::BTreeMap};
 
 use base_db::{BaseDb, File, Project};
 use hir_def::{
-    hir::{BinaryOp, ElementaryTypeRef, Expr, ExprId, Ident, Item, Statement, StatementId},
-    lower_file,
-    walk::{walk_stmt, Visitor},
-    DataLocation, FileAstPtr, InFile, IndexMapUpdate, TypeRefId, TypeRefKind,
+    hir::{BinaryOp, ElementaryTypeRef, Expr, ExprId, Ident, Item, Statement, StatementId}, lower_file, walk::{walk_stmt, Visitor}, ContractId, ContractItem, ContractType, DataLocation, FileAstPtr, FunctionId, InFile, IndexMapUpdate, TypeRefId, TypeRefKind
 };
-use hir_nameres::scope::HasScope;
+use hir_nameres::{inheritance::inheritance_chain, scope::HasScope};
 use hir_nameres::{
     container::{self, Container},
     scope::{body::Definition, Scope},
@@ -17,10 +14,7 @@ use salsa::{Accumulator, Database};
 use syntax::ast::nodes;
 
 use crate::{
-    callable::Callable,
-    error::TypeCheckError,
-    type_check::{self, check_item},
-    tys::{unknown, Ty, TyKind, TyKindInterned, TypeModifier},
+    callable::Callable, error::TypeCheckError, extensions::Extensions, member_kind::MemberKind, type_check::{self, check_item}, tys::{unknown, Ty, TyKind, TyKindInterned, TypeModifier}
 };
 
 use hir_def::hir::HasSyntax;
@@ -49,14 +43,14 @@ impl<'db> TypeResolution<'db> {
     }
 }
 
-struct TypeResolutionCtx<'db> {
-    project: Project,
-    scope: Scope<'db>,
-    item: Item<'db>,
 
+pub(crate) struct TypeResolutionCtx<'db> {
+    project: Project,
     unknown: TyKindInterned<'db>,
 
-    extensions: BTreeMap<Option<Ty<'db>>, ()>,
+    item: Item<'db>,
+    extensions: Extensions<'db>,
+    scope: Scope<'db>,
 
     expr_map: IndexMap<ExprId<'db>, Ty<'db>>,
     typeref_map: IndexMap<TypeRefId<'db>, TyKindInterned<'db>>,
@@ -100,7 +94,7 @@ pub fn resolve_file<'db>(db: &'db dyn BaseDb, project: Project, file: File) {
 }
 
 // Function for limited type resolution, must not resolve any other items
-#[salsa::tracked]
+#[salsa::tracked(returns(ref))]
 pub fn resolve_item_signature<'db>(
     db: &'db dyn BaseDb,
     project: Project,
@@ -116,7 +110,7 @@ pub fn resolve_item_signature<'db>(
     );
 }
 
-#[salsa::tracked]
+#[salsa::tracked(returns(ref))]
 pub fn resolve_item<'db>(
     db: &'db dyn BaseDb,
     project: Project,
@@ -135,7 +129,7 @@ pub fn resolve_item<'db>(
 
 impl<'db> TypeResolutionCtx<'db> {
     pub fn new(db: &'db dyn BaseDb, project: Project, item: Item<'db>) -> Self {
-        TypeResolutionCtx {
+        let mut ctx = TypeResolutionCtx {
             project,
             scope: item.scope(db, project),
             item,
@@ -145,7 +139,24 @@ impl<'db> TypeResolutionCtx<'db> {
             extensions: Default::default(),
 
             unknown: unknown(db),
+        };
+
+        let t = item.file(db);
+
+        // Skip extensions for items without body
+        match item {
+            Item::Import(_)
+            | Item::Pragma(_)
+            | Item::Using(_)
+            | Item::Module(_) => {
+                return ctx;
+            },
+            _ => {}
         }
+
+        ctx.extensions = Extensions::for_item(db, project, item);
+
+        ctx
     }
 
     pub fn resolve_signature(&mut self, db: &'db dyn BaseDb) {
@@ -186,10 +197,6 @@ impl<'db> TypeResolutionCtx<'db> {
                     let ty = a.ty(db);
                     self.resolve_type_ref(db, scope, ty);
                 }
-
-                if let Some((body, map)) = function_id.body(db) {
-                    walk_stmt(db, body, self);
-                }
             }
             Item::Constructor(constructor_id) => {
                 let info = constructor_id.info(db);
@@ -202,6 +209,11 @@ impl<'db> TypeResolutionCtx<'db> {
                 let info = modifier_id.info(db);
                 for f in info.args {
                     let ty = f.ty(db);
+                    self.resolve_type_ref(db, scope, ty);
+                }
+            }
+            Item::Using(using) => {
+                if let Some(ty) = using.data(db).type_name {
                     self.resolve_type_ref(db, scope, ty);
                 }
             }
@@ -283,24 +295,38 @@ impl<'db> TypeResolutionCtx<'db> {
             Expr::MemberAccess { owner, member_name } => {
                 let args_type = args_type.data(db);
                 let owner_ty = self.resolve_expr(db, *owner);
-                let Some(container) = owner_ty.container(db) else {
-                    return Ty::new(self.unknown);
-                };
-                let defs = container.defs(db);
-                let mut defs = defs.iter().filter(|(name, _)| *name == *member_name);
-                for (_, def) in defs {
-                    let Definition::Item(item) = def else {
+                let members = owner_ty.members(db, self.project);
+                for def in members.get(member_name).into_iter().flatten() {
+                    let MemberKind::Item(item) = def else {
+                        continue;
+                    };
+                    
+                    let Some(c) = Callable::try_from_item(db, self.project, *item) else {
                         continue;
                     };
 
-                    let ty = self.resolve_item_type(db, *item);
+                    if args_type.can_coerce(db, self.project, c.args.data(db)) {
+                        return Ty::new_intern(db, TyKind::Function(c));
+                    }
+                }
+                if let TyKind::Contract(c) = owner_ty.kind(db) {
+                    for contract in inheritance_chain(db, self.project, c) {
+                        let contract = TyKindInterned::new(db, TyKind::Contract(*contract));
+                        for def in self.extensions.local.get(&contract)
+                            .and_then(|t| t.get(member_name)).iter().copied().flatten() {
+                            let Some(c) = Callable::try_from_item(db, self.project, Item::Function(*def)) else {
+                                continue;
+                            };
+                            if let TyKind::Tuple(mut data) = c.args.data(db) {
+                                if data[0].ty_kind == contract {
+                                    data.remove(0);
 
-                    let Some(callable) = Callable::try_from_item(db, self.project, *item) else {
-                        continue;
-                    };
-
-                    if args_type.can_coerce(db, callable.args.data(db)) {
-                        return Ty::new(ty);
+                                    if args_type.can_coerce(db, self.project, TyKind::Tuple(data)) {
+                                        return Ty::new_intern(db, TyKind::Function(c));
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 return Ty::new(self.unknown);
@@ -319,7 +345,7 @@ impl<'db> TypeResolutionCtx<'db> {
                         continue;
                     };
 
-                    if args_type.can_coerce(db, callable.args.data(db)) {
+                    if args_type.can_coerce(db, self.project, callable.args.data(db)) {
                         return Ty::new(ty);
                     }
                 }
@@ -340,6 +366,8 @@ impl<'db> TypeResolutionCtx<'db> {
                 return match target_ty.kind(db) {
                     TyKind::Array(ty, _) => Some(Ty::new_in(ty, modifier)),
                     TyKind::Mapping(_k, v) => Some(Ty::new_in(v, modifier)),
+                    TyKind::Elementary(ElementaryTypeRef::Bytes)
+                    | TyKind::Elementary(ElementaryTypeRef::FixedBytes { .. }) => Some(Ty::new_intern_in(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 8 }), modifier)),
                     _ => None,
                 };
             }
@@ -347,26 +375,25 @@ impl<'db> TypeResolutionCtx<'db> {
             Expr::Slice { base, start, end } => return Some(self.resolve_expr(db, *base)),
             Expr::MemberAccess { owner, member_name } => {
                 let owner_ty = self.resolve_expr(db, *owner);
-                let container = owner_ty.container(db)?;
-                let def =
-                    container.defs(db).iter().copied().find(|(name, _)| *name == *member_name)?;
+                let members = owner_ty.members(db, self.project);
+                let def = members.get(member_name)?.first()?;
 
                 let modifier = match owner_ty.modifier {
                     TypeModifier::StoragePointer => TypeModifier::StorageRef,
                     a => a,
                 };
 
-                match def.1 {
-                    Definition::Item(item) => {
+                match def {
+                    MemberKind::Item(item) => {
                         return Some(match owner_ty.kind(db) {
-                            TyKind::ItemRef(item) => Ty::new(self.resolve_item_ref(db, item)),
-                            _ => Ty::new(self.resolve_item_type(db, item)),
+                            TyKind::Type(item) => Ty::new(self.resolve_item_ref(db, item)),
+                            _ => Ty::new(self.resolve_item_type(db, *item)),
                         })
                     }
-                    Definition::EnumVariant(e) => {
-                        TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 256 })
+                    MemberKind::EnumVariant(e) => {
+                        TyKind::Enum(e.parent(db))
                     }
-                    Definition::Field(f) => {
+                    MemberKind::Field(f) => {
                         if let TyKind::Struct(s) = owner_ty.kind(db) {
                             return Some(Ty::new_in(
                                 self.resolve_type_ref(
@@ -379,7 +406,9 @@ impl<'db> TypeResolutionCtx<'db> {
                         }
                         return None;
                     }
-                    Definition::Local((item)) => return None,
+                    MemberKind::SynteticItem(t) => {
+                        return Some(*t)
+                    }
                 }
             }
             Expr::CallOptions { base, options } => return Some(self.resolve_expr(db, *base)),
@@ -390,7 +419,7 @@ impl<'db> TypeResolutionCtx<'db> {
                 );
                 let receiver_type = self.resolve_method(db, *callee, args_type);
                 let c = Callable::try_from_ty(db, self.project, receiver_type)?;
-                return Some(Ty::new(c.returns));
+                return Some(c.returns);
             }
             Expr::PrefixOp { expr, op } => return Some(self.resolve_expr(db, *expr)),
             Expr::PostfixOp { expr, op } => return Some(self.resolve_expr(db, *expr)),
@@ -427,8 +456,8 @@ impl<'db> TypeResolutionCtx<'db> {
                     Definition::Local(item) => {
                         let ty_kind = self.resolve_type_ref(db, self.scope, item.ty(db));
                         Ty::new_in(ty_kind, item.location(db).into())
-                    }
-                    Definition::EnumVariant(_) | Definition::Field(_) => return None,
+                    },
+                    Definition::Magic(magic) => Ty::new_intern(db,TyKind::Magic(magic))
                 })
             }
             Expr::Literal { data } => match data {
@@ -449,7 +478,37 @@ impl<'db> TypeResolutionCtx<'db> {
             },
             Expr::ElementaryTypeName { data } => TyKind::Elementary(*data),
             Expr::New { ty } => {
-                return Some(Ty::new(self.resolve_type_ref(db, self.scope, ty.clone())))
+                let res = self.resolve_type_ref(db, self.scope, ty.clone());
+                let callable = match res.data(db) {
+                    TyKind::Contract(contract_id) => {
+                        let c = contract_id.constructor(db);
+                        if let Some(c) = c {
+                            Callable::try_from_item(db, self.project, Item::Constructor(c))
+                        } else  {
+                            Some(Callable {
+                                args: TyKindInterned::new(db, TyKind::Tuple(vec![])),
+                                returns: Ty::new(res),
+                            })
+                        }
+                    },
+                    TyKind::Array(ty_kind_interned, _) => {
+                        Some(Callable { 
+                            args: TyKindInterned::new(db, TyKind::Tuple(vec![Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 256 }))])), 
+                            returns: Ty::new(res) 
+                        })
+                    },
+                    TyKind::Elementary(ElementaryTypeRef::Bytes) => {
+                        Some(Callable { 
+                            args: TyKindInterned::new(db, TyKind::Tuple(vec![Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 256 }))])), 
+                            returns: Ty::new(res) 
+                        })
+                    }
+                    _ => None
+                }?;
+                return Some(Ty::new_intern(db, TyKind::Function(callable)))
+            }
+            Expr::Type { ty } => {
+                return None;
             }
             Expr::Missing => return None,
         };
@@ -457,7 +516,7 @@ impl<'db> TypeResolutionCtx<'db> {
         Some(Ty::new_intern(db, kind))
     }
 
-    fn resolve_type_ref(
+    pub(crate) fn resolve_type_ref(
         &mut self,
         db: &'db dyn BaseDb,
         scope: Scope<'db>,
@@ -493,7 +552,7 @@ impl<'db> TypeResolutionCtx<'db> {
                     })
                     .collect();
 
-                let returns = returns
+                let returns: Vec<Ty<'db>> = returns
                     .iter()
                     .map(|vardecl| {
                         Ty::new_in(
@@ -502,9 +561,13 @@ impl<'db> TypeResolutionCtx<'db> {
                         )
                     })
                     .collect();
+                let returns = if returns.len() == 1 {
+                    returns[0]
+                } else {
+                    Ty::new_intern(db, TyKind::Tuple(returns))
+                };
                 let args = TyKindInterned::new(db, TyKind::Tuple(args));
-                let returns = TyKindInterned::new(db, TyKind::Tuple(returns));
-                return TyKindInterned::new(db, TyKind::Callable(Callable { args, returns }));
+                return TyKindInterned::new(db, TyKind::Function(Callable { args, returns }));
             }
             TypeRefKind::Mapping { key_type, value_type, .. } => TyKind::Mapping(
                 self.resolve_type_ref(db, scope, key_type),
@@ -525,8 +588,8 @@ impl<'db> TypeResolutionCtx<'db> {
                                 user_defined_value_type_id.ty(db),
                             );
                         }
-                        Item::Error(error_id) => TyKind::Error(error_id),
-                        Item::Event(event_id) => TyKind::Event(event_id),
+                        Item::Error(error_id) => TyKind::Type(item),
+                        Item::Event(event_id) => TyKind::Type(item),
                         Item::Struct(structure_id) => TyKind::Struct(structure_id),
                         _ => {
                             emit_typeref_error(
@@ -555,7 +618,7 @@ impl<'db> TypeResolutionCtx<'db> {
                 return self.resolve_item_type(db, item);
             }
             Item::Modifier(modifier_id) => return self.resolve_item_type(db, item),
-            _ => return TyKindInterned::new(db, TyKind::ItemRef(item)),
+            _ => return TyKindInterned::new(db, TyKind::Type(item)),
         }
     }
 
@@ -568,8 +631,16 @@ impl<'db> TypeResolutionCtx<'db> {
                     state_variable_id.ty(db),
                 );
             }
-            Item::Modifier(modifier_id) => TyKindInterned::new(db, TyKind::Modifier(modifier_id)),
-            Item::Function(function_id) => TyKindInterned::new(db, TyKind::Function(function_id)),
+            Item::Modifier(_) => {
+                let callable = Callable::try_from_item(db, self.project, item).unwrap();
+
+                TyKindInterned::new(db, TyKind::Modifier(callable))
+            },
+            Item::Function(_) =>  {
+                let callable = Callable::try_from_item(db, self.project, item).unwrap();
+
+                TyKindInterned::new(db, TyKind::Function(callable))
+            }
             Item::UserDefinedValueType(user_defined_value_type_id) => {
                 return self.resolve_type_ref(
                     db,
@@ -710,12 +781,12 @@ mapping(hw.Helloworld => uint256): mapping(Helloworld => uint256)
             "1: uint256
 arg: uint256
 arg: uint256
-test: function(uint256,uint256,) returns(uint256,)
-test(arg,arg): (uint256,)
+test: function(uint256,uint256,) returns(uint256)
+test(arg,arg): uint256
 true: bool
 arg: uint256
-test: function(uint256,bool,) returns(bool,)
-test(arg,true): (bool,)
+test: function(uint256,bool,) returns(bool)
+test(arg,true): bool
 
 uint256: uint256
 ",
@@ -811,5 +882,120 @@ uint256: uint256
             let item = lower_file(&db, file).data(&db).contract(&db, "Test");
             resolve_file(&db, project, file);
         }
+    }
+
+    #[test]
+    fn extension_trait() {
+        let fixture = TestFixture::parse(
+            r"
+            /main.sol
+
+            using Extension for BaseContract;
+
+            contract BaseContract {
+            }
+
+            library Extension {
+                function extension(BaseContract, bool test) returns(uint256) {
+                }
+            }
+
+            contract Test
+            {
+                BaseContract tmp;
+
+                function hel$0loWorld() {
+                    tmp.extension(true);
+                }
+            }
+        ",
+        );
+
+        check_types(
+            fixture,
+            "tmp: BaseContract memory
+true: bool
+tmp.extension: function(BaseContract memory,bool,) returns(uint256)
+tmp.extension(true): uint256
+
+",
+        );
+    }
+
+    #[test]
+    fn tuple_unwrapping_test() {
+        let fixture = TestFixture::parse(
+            r"
+            /main.sol
+
+            using GetterExt for First;
+
+            contract First {}
+
+            library GetterExt {
+                function getInterface(First) returns(ITestInterface) {
+                }
+            }
+
+            interface ITestInterface {
+                function interfaceMember(address id) external view returns (address);
+            }
+
+            contract Test
+            {
+                First tmp;
+
+                function hel$0loWorld(address help) {
+                    First tmp;
+                    tmp.getInterface().interfaceMember(help);
+                }
+            }
+        ",
+        );
+
+        check_types(
+            fixture,
+            "tmp: First memory
+tmp.getInterface: function(First memory,) returns(ITestInterface memory)
+tmp.getInterface(): ITestInterface memory
+help: address
+tmp.getInterface().interfaceMember: function(address,) returns(address)
+tmp.getInterface().interfaceMember(help): address
+
+address payable: address
+First: First
+",
+        );
+    }
+
+    #[test]
+    fn new_test() {
+        let fixture = TestFixture::parse(
+            r"
+            /main.sol
+
+            using GetterExt for First;
+
+            contract First {}
+
+            contract Test
+            {
+                function hel$0loWorld(address help) {
+                    First tmp = new First();
+                }
+            }
+        ",
+        );
+
+        check_types(
+            fixture,
+            "new First: function() returns(First memory)
+new First(): First memory
+
+address payable: address
+First: First
+First: First
+",
+        );
     }
 }

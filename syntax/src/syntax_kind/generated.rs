@@ -244,6 +244,7 @@ pub enum SyntaxKind {
     IDENT_EXPR,
     LITERAL_EXPR,
     NEW_EXPR,
+    TYPE_EXPR,
     TUPLE_EXPR,
     INLINE_ARRAY_EXPR,
     PREFIX_EXPR,

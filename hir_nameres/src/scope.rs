@@ -26,6 +26,7 @@ use crate::{
 
 use super::scope::body::Definition;
 use salsa::plumbing::AsId;
+mod prelude;
 
 #[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, PartialOrd, Ord, salsa::Update)]
 pub enum Scope<'db> {
@@ -215,12 +216,13 @@ impl<'db> HasScope<'db> for FunctionId<'db> {
     #[salsa::tracked]
     fn scope(self, db: &'db dyn BaseDb, project: Project) -> Scope<'db> {
         let map = lower_file(db, self.file(db));
+        let info = self.info(db);
         BodyScope::from_body(
             db,
             project,
             self.item_scope(db, project),
             Item::Function(self),
-            self.info(db).args.iter().copied().collect(),
+            info.args.iter().chain(info.returns.iter().flatten()).copied().collect(),
             self.body(db).map(|a| a.0),
         )
         .into()
@@ -273,7 +275,7 @@ impl<'db> HasScope<'db> for SourceUnit<'db> {
 
         ItemScope::new(
             db,
-            None,
+            Some(prelude::prelude(db)),
             imports
                 .iter()
                 .map(|(name, defs)| (*name, defs.iter().map(|t| Definition::Item(*t)).collect()))

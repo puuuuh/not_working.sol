@@ -1415,6 +1415,7 @@ dependencies = [
  "indexmap 2.9.0",
  "rowan",
  "salsa 0.21.1",
+ "smallvec",
  "syntax",
  "tracing-subscriber",
 ]

@@ -112,6 +112,7 @@ impl<'db> ExprId<'db> {
                 }
                 TypeRefKind::Error => {}
             },
+            Expr::Type { ty } => walk_type_ref(*ty, db, expr_fn),
             Expr::Missing => {}
         }
     }
@@ -134,6 +135,7 @@ pub enum Expr<'db> {
     Literal { data: Literal },
     ElementaryTypeName { data: ElementaryTypeRef },
     New { ty: TypeRefId<'db> },
+    Type { ty: TypeRefId<'db> },
     Missing,
 }
 
@@ -253,6 +255,11 @@ impl HirPrint for Expr<'_> {
             }
             Expr::Missing => {
                 w.write_str("<missing>")?;
+            }
+            Expr::Type { ty } => {
+                w.write_str("type(")?;
+                ty.write(db, w, ident);
+                w.write_str(")")?;
             }
         }
         Ok(())

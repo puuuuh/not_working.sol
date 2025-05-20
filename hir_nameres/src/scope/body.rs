@@ -29,12 +29,18 @@ use crate::scope::ItemScope;
 
 use super::Scope;
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, PartialOrd, Ord, salsa::Update)]
+pub enum MagicDefinitionKind {
+    Block,
+    Msg,
+    Tx
+}
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, salsa::Update)]
 pub enum Definition<'db> {
-    Item((Item<'db>)),
+    Item(Item<'db>),
     Local(VariableDeclaration<'db>),
-    Field(StructureFieldId<'db>),
-    EnumVariant(EnumerationVariantId<'db>),
+    Magic(MagicDefinitionKind),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, salsa::Update)]

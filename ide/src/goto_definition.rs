@@ -4,7 +4,7 @@ use hir_def::{
     lower_file, FileExt, InFile,
 };
 use hir_nameres::scope::{body::Definition, HasScope};
-use hir_ty::tys::TyKind;
+use hir_ty::{extensions::Extensions, member_kind::MemberKind, tys::TyKind};
 use rowan::ast::{AstNode, AstPtr};
 use syntax::{
     ast::nodes::{self},
@@ -40,24 +40,21 @@ pub fn goto_definition(
                     hir_def::hir::Expr::MemberAccess { owner, member_name } => {
                         let expr_map = type_inference.expr_map(db);
                         let owner_ty = expr_map.get(owner)?;
-                        let container = owner_ty.container(db)?;
+                        let members = owner_ty.members(db, project);
+                        let container = members.get(member_name)?;
                         container
-                            .defs(db)
-                            .iter()
-                            .find(|(name, _)| name == member_name)
-                            .and_then(|a| match a.1 {
-                                Definition::Item(item) => NavigationTarget::from_item(db, item),
-                                Definition::Local(variable_declaration) => {
-                                    NavigationTarget::from_local(db, variable_declaration)
-                                }
-                                Definition::Field(structure_field_id) => {
-                                    NavigationTarget::from_field(db, structure_field_id)
-                                }
-                                Definition::EnumVariant(enumeration_variant_id) => {
-                                    NavigationTarget::from_variant(db, enumeration_variant_id)
-                                }
-                            })
                             .into_iter()
+                            .copied()
+                            .flat_map(|a| match a {
+                                MemberKind::Item(item) => NavigationTarget::from_item(db, item),
+                                MemberKind::Field(structure_field_id) => {
+                                                                NavigationTarget::from_field(db, structure_field_id)
+                                                            }
+                                MemberKind::EnumVariant(enumeration_variant_id) => {
+                                                                NavigationTarget::from_variant(db, enumeration_variant_id)
+                                                            }
+                                MemberKind::SynteticItem(ty) => None,
+                            })
                             .collect()
                     }
                     hir_def::hir::Expr::Ident { name_ref } => scopes

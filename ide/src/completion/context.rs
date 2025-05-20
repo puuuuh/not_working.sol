@@ -7,6 +7,7 @@ use hir_def::{
 };
 use hir_nameres::container::Container;
 use hir_nameres::scope::{HasScope, Scope};
+use hir_ty::extensions::Extensions;
 use hir_ty::tys::Ty;
 use rowan::ast::{AstNode, AstPtr};
 use rowan::{TextRange, TextSize};
@@ -70,8 +71,8 @@ impl<'db> CompletionCtx<'db> {
     pub fn completions(&'db self) -> Option<Vec<Completion>> {
         Some(match self.kind()? {
             CompletionKind::DotAccess { receiver, receiver_ty } => {
-                let c = receiver_ty.container(self.db)?;
-                c.defs(self.db)
+                let c = receiver_ty.members(self.db, self.project);
+                c
                     .into_iter()
                     .map(|a| Completion {
                         label: a.0.data(self.db).clone(),

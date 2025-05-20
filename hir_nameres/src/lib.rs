@@ -1,3 +1,4 @@
+// Basic name and inheritance resolution 
 use base_db::BaseDb;
 use hir_def::hir::Ident;
 use import::ImportResolutionError;

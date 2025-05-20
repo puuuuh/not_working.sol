@@ -94,7 +94,7 @@ fn inheritance_chain_cycle<'db>(
     Ok(chain)
 }
 
-#[salsa::tracked]
+#[salsa::tracked(returns(ref))]
 pub fn inheritance_chain<'db>(
     db: &'db dyn BaseDb,
     project: Project,
@@ -147,7 +147,7 @@ mod tests {
         let c = *data.contracts(&db).last().unwrap();
         assert_eq!(
             inheritance_chain(&db, project, c),
-            vec![
+            &vec![
                 data.contract(&db, "Z"),
                 data.contract(&db, "K1"),
                 data.contract(&db, "C"),
@@ -243,7 +243,7 @@ mod tests {
         let source_unit = lower_file(&db, file);
         let data = source_unit.data(&db);
         let c = *data.contracts(&db).last().unwrap();
-        assert_eq!(inheritance_chain(&db, project, c), vec![c]);
+        assert_eq!(inheritance_chain(&db, project, c), &vec![c]);
     }
 
     #[test]
@@ -271,7 +271,7 @@ mod tests {
         let c = *data.contracts(&db).last().unwrap();
         assert_eq!(
             inheritance_chain(&db, Project::new(&db, vfs::VfsPath::from_virtual("".to_owned())), c),
-            vec![c]
+            &vec![c]
         );
     }
 }

@@ -94,6 +94,7 @@ impl<'db, VisitorImpl: Visitor<'db>> StmtVisitor<'db, VisitorImpl> {
             Expr::Literal { data } => {}
             Expr::ElementaryTypeName { data } => {}
             Expr::New { ty } => {}
+            Expr::Type { ty } => {}
             Expr::Missing => {}
         };
 

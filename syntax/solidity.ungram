@@ -193,6 +193,7 @@ Expr =
 | SliceExpr
 | MemberAccessExpr
 | NewExpr
+| TypeExpr
 | InfixExpr
 | PrefixExpr
 | PostfixExpr
@@ -227,6 +228,7 @@ InfixExpr =
   rhs:Expr
 
 NewExpr = 'new' ty:Type
+TypeExpr = 'type' '(' ty:Type ')'
 
 PrefixExpr =
   op: ('delete' | '++' | '--' | '!' | '~' | '-')

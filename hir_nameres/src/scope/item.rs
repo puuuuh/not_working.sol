@@ -16,7 +16,6 @@ use super::body::Definition;
 #[salsa::tracked(debug)]
 pub struct ItemScope<'db> {
     pub parent: Option<ItemScope<'db>>,
-    // Keep this sorted, pls:)
     #[returns(ref)]
     pub items: BTreeMap<Ident<'db>, SmallVec<[Definition<'db>; 1]>>,
 }
