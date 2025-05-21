@@ -1,4 +1,4 @@
-use base_db::{BaseDb, Project};
+use base_db::{BaseDb};
 use hir_def::{
     walk::{walk_expr, walk_stmt, Visitor}, ElementaryTypeRef, Expr, ExprId, FileAstPtr, Item, StatementId, TypeRefId
 };
@@ -12,7 +12,6 @@ use crate::{
 };
 
 pub struct TypeCheckWalker<'db> {
-    project: Project,
     type_resolution: &'db TypeResolution<'db>,
     common_types: ElementaryTypes<'db>,
 }
@@ -49,8 +48,8 @@ impl<'db> Visitor<'db> for &mut TypeCheckWalker<'db> {
                     };
                     for (lhs, rhs) in lhs_ty.into_iter().zip(tys.iter()) {
                         if let Some((ty_ref, ty)) = lhs {
-                            if !rhs.can_coerce(db, self.project, ty) {
-                                emit_typeref_type_mismatch(db, self.project, ty_ref, ty, *rhs);
+                            if !rhs.can_coerce(db, ty) {
+                                emit_typeref_type_mismatch(db, ty_ref, ty, *rhs);
                             }
                         }
                     }
@@ -59,18 +58,18 @@ impl<'db> Visitor<'db> for &mut TypeCheckWalker<'db> {
             hir_def::Statement::Expr { expr } => {}
             hir_def::Statement::Block { stmts, is_unchecked } => {}
             hir_def::Statement::If { cond, body, else_body } => {
-                self.check_expr_type(db, self.project, *cond, self.common_types.bool);
+                self.check_expr_type(db, *cond, self.common_types.bool);
             }
             hir_def::Statement::ForLoop { init, cond, finish_action, body } => {
                 if let Some(cond) = cond {
-                    self.check_expr_type(db, self.project, *cond, self.common_types.bool);
+                    self.check_expr_type(db, *cond, self.common_types.bool);
                 }
             }
             hir_def::Statement::WhileLoop { cond, body } => {
-                self.check_expr_type(db, self.project, *cond, self.common_types.bool);
+                self.check_expr_type(db, *cond, self.common_types.bool);
             }
             hir_def::Statement::DoWhileLoop { cond, body } => {
-                self.check_expr_type(db, self.project, *cond, self.common_types.bool);
+                self.check_expr_type(db, *cond, self.common_types.bool);
             }
             hir_def::Statement::Try { expr, returns, body, catch } => {}
             hir_def::Statement::Return { expr } => {}
@@ -97,13 +96,13 @@ impl<'db> Visitor<'db> for &mut TypeCheckWalker<'db> {
                             *target,
                             format!(
                                 "can't index into {}",
-                                target_ty.human_readable(db, self.project)
+                                target_ty.human_readable(db)
                             ),
                         );
                         return;
                     }
                 };
-                self.check_expr_type(db, self.project, *index, expected);
+                self.check_expr_type(db, *index, expected);
             }
             Expr::Slice { base, start, end } => {}
             Expr::MemberAccess { owner, member_name } => {}
@@ -119,7 +118,6 @@ impl<'db> Visitor<'db> for &mut TypeCheckWalker<'db> {
                     hir_def::BinaryOp::Assignment { op: None } => {
                         self.check_expr_type(
                             db,
-                            self.project,
                             *rhs,
                             self.type_resolution.expr(db, *lhs),
                         );
@@ -128,8 +126,8 @@ impl<'db> Visitor<'db> for &mut TypeCheckWalker<'db> {
                 }
             }
             Expr::Ternary { cond, lhs, rhs } => {
-                self.check_expr_type(db, self.project, *cond, self.common_types.bool);
-                self.check_expr_type(db, self.project, *rhs, self.type_resolution.expr(db, *lhs));
+                self.check_expr_type(db, *cond, self.common_types.bool);
+                self.check_expr_type(db, *rhs, self.type_resolution.expr(db, *lhs));
             }
             Expr::Tuple { content } => {}
             Expr::Array { content } => {}
@@ -155,23 +153,21 @@ impl<'db> TypeCheckWalker<'db> {
     fn check_expr_type(
         &self,
         db: &'db dyn BaseDb,
-        project: Project,
         expr: ExprId<'db>,
         expected: Ty<'db>,
     ) {
         let ty = self.type_resolution.expr(db, expr);
-        if !ty.can_coerce(db, project, expected) {
-            emit_expr_type_mismatch(db, project, expr, expected, ty);
+        if !ty.can_coerce(db, expected) {
+            emit_expr_type_mismatch(db, expr, expected, ty);
         }
     }
 }
 
-pub fn check_item<'db>(db: &'db dyn BaseDb, project: Project, item: Item<'db>) {
-    let types = resolve_item(db, project, item);
+pub fn check_item<'db>(db: &'db dyn BaseDb, item: Item<'db>) {
+    let types = resolve_item(db, item);
     let mut ctx = TypeCheckWalker {
         type_resolution: types,
         common_types: common_types(db),
-        project,
     };
 
     if let Some((body, _)) = item.body(db) {
@@ -205,7 +201,6 @@ fn emit_expr_error<'db>(db: &'db dyn BaseDb, expr: ExprId<'db>, msg: String) {
 
 fn emit_expr_type_mismatch<'db>(
     db: &'db dyn BaseDb,
-    project: Project,
     node: ExprId<'db>,
     expected: Ty<'db>,
     found: Ty<'db>,
@@ -215,15 +210,14 @@ fn emit_expr_type_mismatch<'db>(
         node,
         format!(
             "can't implicitly cast {} to {}",
-            found.human_readable(db, project),
-            expected.human_readable(db, project)
+            found.human_readable(db),
+            expected.human_readable(db)
         ),
     );
 }
 
 fn emit_typeref_type_mismatch<'db>(
     db: &'db dyn BaseDb,
-    project: Project,
     node: TypeRefId<'db>,
     expected: Ty<'db>,
     found: Ty<'db>,
@@ -233,8 +227,8 @@ fn emit_typeref_type_mismatch<'db>(
         node,
         format!(
             "can't implicitly cast {} to {}",
-            found.human_readable(db, project),
-            expected.human_readable(db, project)
+            found.human_readable(db),
+            expected.human_readable(db)
         ),
     );
 }

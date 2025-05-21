@@ -1,7 +1,7 @@
 pub mod body;
 pub mod item;
 
-use base_db::{BaseDb, Project};
+use base_db::{BaseDb};
 pub use body::BodyScope;
 use hir_def::{
     Constructor, ConstructorId, ContractId, EnumerationId, ErrorId, EventId, ExprId, FunctionId,
@@ -142,25 +142,24 @@ impl<'db> Scope<'db> {
 }
 
 pub trait HasScope<'db> {
-    fn scope(self, db: &'db dyn BaseDb, project: Project) -> Scope<'db>;
-    fn item_scope(self, db: &'db dyn BaseDb, project: Project) -> ItemScope<'db>;
+    fn scope(self, db: &'db dyn BaseDb) -> Scope<'db>;
+    fn item_scope(self, db: &'db dyn BaseDb) -> ItemScope<'db>;
 }
 
 #[salsa::tracked]
 impl<'db> HasScope<'db> for ConstructorId<'db> {
     #[salsa::tracked]
-    fn item_scope(self, db: &'db dyn BaseDb, project: Project) -> ItemScope<'db> {
+    fn item_scope(self, db: &'db dyn BaseDb) -> ItemScope<'db> {
         self.origin(db)
-            .map(|c| c.item_scope(db, project))
-            .unwrap_or_else(|| lower_file(db, self.file(db)).item_scope(db, project))
+            .map(|c| c.item_scope(db))
+            .unwrap_or_else(|| lower_file(db, self.file(db)).item_scope(db))
     }
 
     #[salsa::tracked]
-    fn scope(self, db: &'db dyn BaseDb, project: Project) -> Scope<'db> {
+    fn scope(self, db: &'db dyn BaseDb) -> Scope<'db> {
         BodyScope::from_body(
             db,
-            project,
-            self.item_scope(db, project),
+            self.item_scope(db),
             Item::Constructor(self),
             self.info(db).args.iter().copied().collect(),
             self.body(db).map(|a| a.0),
@@ -172,13 +171,13 @@ impl<'db> HasScope<'db> for ConstructorId<'db> {
 #[salsa::tracked]
 impl<'db> HasScope<'db> for ContractId<'db> {
     #[salsa::tracked]
-    fn scope(self, db: &'db dyn BaseDb, project: Project) -> Scope<'db> {
-        Scope::Item(self.item_scope(db, project))
+    fn scope(self, db: &'db dyn BaseDb) -> Scope<'db> {
+        Scope::Item(self.item_scope(db))
     }
 
     #[salsa::tracked]
-    fn item_scope(self, db: &'db dyn BaseDb, project: Project) -> ItemScope<'db> {
-        let chain = inheritance_chain(db, project, self);
+    fn item_scope(self, db: &'db dyn BaseDb) -> ItemScope<'db> {
+        let chain = inheritance_chain(db, self);
 
         let mut items: BTreeMap<Ident<'_>, smallvec::SmallVec<[Definition<'_>; 1]>> =
             BTreeMap::new();
@@ -203,8 +202,8 @@ impl<'db> HasScope<'db> for ContractId<'db> {
             db,
             Some(
                 self.origin(db)
-                    .map(|c| c.item_scope(db, project))
-                    .unwrap_or_else(|| lower_file(db, self.file(db)).item_scope(db, project)),
+                    .map(|c| c.item_scope(db))
+                    .unwrap_or_else(|| lower_file(db, self.file(db)).item_scope(db)),
             ),
             items,
         )
@@ -214,13 +213,12 @@ impl<'db> HasScope<'db> for ContractId<'db> {
 #[salsa::tracked]
 impl<'db> HasScope<'db> for FunctionId<'db> {
     #[salsa::tracked]
-    fn scope(self, db: &'db dyn BaseDb, project: Project) -> Scope<'db> {
+    fn scope(self, db: &'db dyn BaseDb) -> Scope<'db> {
         let map = lower_file(db, self.file(db));
         let info = self.info(db);
         BodyScope::from_body(
             db,
-            project,
-            self.item_scope(db, project),
+            self.item_scope(db),
             Item::Function(self),
             info.args.iter().chain(info.returns.iter().flatten()).copied().collect(),
             self.body(db).map(|a| a.0),
@@ -228,10 +226,10 @@ impl<'db> HasScope<'db> for FunctionId<'db> {
         .into()
     }
 
-    fn item_scope(self, db: &'db dyn BaseDb, project: Project) -> ItemScope<'db> {
+    fn item_scope(self, db: &'db dyn BaseDb) -> ItemScope<'db> {
         self.origin(db)
-            .map(|c| c.item_scope(db, project))
-            .unwrap_or_else(|| lower_file(db, self.file(db)).item_scope(db, project))
+            .map(|c| c.item_scope(db))
+            .unwrap_or_else(|| lower_file(db, self.file(db)).item_scope(db))
     }
 }
 
@@ -241,15 +239,15 @@ macro_rules! impl_has_scope {
             #[salsa::tracked]
             impl<'db> HasScope<'db> for $t {
                 #[salsa::tracked]
-                fn item_scope(self, db: &'db dyn BaseDb, project: Project) -> ItemScope<'db> {
+                fn item_scope(self, db: &'db dyn BaseDb) -> ItemScope<'db> {
                     self.origin(db)
-                        .map(|c| c.item_scope(db, project))
-                        .unwrap_or_else(|| lower_file(db, self.file(db)).item_scope(db, project))
+                        .map(|c| c.item_scope(db))
+                        .unwrap_or_else(|| lower_file(db, self.file(db)).item_scope(db))
                         .into()
                 }
 
-                fn scope(self, db: &'db dyn BaseDb, project: Project) -> Scope<'db> {
-                    Scope::Item(self.item_scope(db, project))
+                fn scope(self, db: &'db dyn BaseDb) -> Scope<'db> {
+                    Scope::Item(self.item_scope(db))
                 }
             }
         )+
@@ -270,8 +268,8 @@ impl_has_scope!(
 #[salsa::tracked]
 impl<'db> HasScope<'db> for SourceUnit<'db> {
     #[salsa::tracked]
-    fn item_scope(self, db: &'db dyn BaseDb, project: Project) -> ItemScope<'db> {
-        let imports = resolve_file_root(db, project, self.file(db));
+    fn item_scope(self, db: &'db dyn BaseDb) -> ItemScope<'db> {
+        let imports = resolve_file_root(db, self.file(db));
 
         ItemScope::new(
             db,
@@ -284,75 +282,75 @@ impl<'db> HasScope<'db> for SourceUnit<'db> {
     }
 
     #[salsa::tracked]
-    fn scope(self, db: &'db dyn BaseDb, project: Project) -> Scope<'db> {
-        Scope::Item(self.item_scope(db, project))
+    fn scope(self, db: &'db dyn BaseDb) -> Scope<'db> {
+        Scope::Item(self.item_scope(db))
     }
 }
 
 #[salsa::tracked]
 impl<'db> HasScope<'db> for ImportId<'db> {
-    fn item_scope(self, db: &'db dyn BaseDb, project: Project) -> ItemScope<'db> {
+    fn item_scope(self, db: &'db dyn BaseDb) -> ItemScope<'db> {
         let file = self.file(db);
-        lower_file(db, file).item_scope(db, project)
+        lower_file(db, file).item_scope(db)
     }
 
-    fn scope(self, db: &'db dyn BaseDb, project: Project) -> Scope<'db> {
-        Scope::Item(self.item_scope(db, project))
+    fn scope(self, db: &'db dyn BaseDb) -> Scope<'db> {
+        Scope::Item(self.item_scope(db))
     }
 }
 
 #[salsa::tracked]
 impl<'db> HasScope<'db> for PragmaId<'db> {
-    fn item_scope(self, db: &'db dyn BaseDb, project: Project) -> ItemScope<'db> {
+    fn item_scope(self, db: &'db dyn BaseDb) -> ItemScope<'db> {
         let file = self.file(db);
-        lower_file(db, file).item_scope(db, project)
+        lower_file(db, file).item_scope(db)
     }
 
-    fn scope(self, db: &'db dyn BaseDb, project: Project) -> Scope<'db> {
-        Scope::Item(self.item_scope(db, project))
+    fn scope(self, db: &'db dyn BaseDb) -> Scope<'db> {
+        Scope::Item(self.item_scope(db))
     }
 }
 
 impl<'db> HasScope<'db> for Item<'db> {
-    fn scope(self, db: &'db dyn BaseDb, project: Project) -> Scope<'db> {
+    fn scope(self, db: &'db dyn BaseDb) -> Scope<'db> {
         match self {
-            Item::Import(import_id) => import_id.scope(db, project),
-            Item::Pragma(pragma_id) => pragma_id.scope(db, project),
-            Item::Using(using_id) => using_id.scope(db, project),
-            Item::Contract(contract_id) => contract_id.scope(db, project),
-            Item::Enum(enumeration_id) => enumeration_id.scope(db, project),
+            Item::Import(import_id) => import_id.scope(db),
+            Item::Pragma(pragma_id) => pragma_id.scope(db),
+            Item::Using(using_id) => using_id.scope(db),
+            Item::Contract(contract_id) => contract_id.scope(db),
+            Item::Enum(enumeration_id) => enumeration_id.scope(db),
             Item::UserDefinedValueType(user_defined_value_type_id) => {
-                user_defined_value_type_id.scope(db, project)
+                user_defined_value_type_id.scope(db)
             }
-            Item::Error(error_id) => error_id.scope(db, project),
-            Item::Event(event_id) => event_id.scope(db, project),
-            Item::Function(function_id) => function_id.scope(db, project),
-            Item::StateVariable(state_variable_id) => state_variable_id.scope(db, project),
-            Item::Struct(structure_id) => structure_id.scope(db, project),
-            Item::Constructor(constructor_id) => constructor_id.scope(db, project),
-            Item::Modifier(modifier_id) => modifier_id.scope(db, project),
-            Item::Module(source_unit) => source_unit.scope(db, project),
+            Item::Error(error_id) => error_id.scope(db),
+            Item::Event(event_id) => event_id.scope(db),
+            Item::Function(function_id) => function_id.scope(db),
+            Item::StateVariable(state_variable_id) => state_variable_id.scope(db),
+            Item::Struct(structure_id) => structure_id.scope(db),
+            Item::Constructor(constructor_id) => constructor_id.scope(db),
+            Item::Modifier(modifier_id) => modifier_id.scope(db),
+            Item::Module(source_unit) => source_unit.scope(db),
         }
     }
 
-    fn item_scope(self, db: &'db dyn BaseDb, project: Project) -> ItemScope<'db> {
+    fn item_scope(self, db: &'db dyn BaseDb) -> ItemScope<'db> {
         match self {
-            Item::Import(import_id) => import_id.item_scope(db, project),
-            Item::Pragma(pragma_id) => pragma_id.item_scope(db, project),
-            Item::Using(using_id) => using_id.item_scope(db, project),
-            Item::Contract(contract_id) => contract_id.item_scope(db, project),
-            Item::Enum(enumeration_id) => enumeration_id.item_scope(db, project),
+            Item::Import(import_id) => import_id.item_scope(db),
+            Item::Pragma(pragma_id) => pragma_id.item_scope(db),
+            Item::Using(using_id) => using_id.item_scope(db),
+            Item::Contract(contract_id) => contract_id.item_scope(db),
+            Item::Enum(enumeration_id) => enumeration_id.item_scope(db),
             Item::UserDefinedValueType(user_defined_value_type_id) => {
-                user_defined_value_type_id.item_scope(db, project)
+                user_defined_value_type_id.item_scope(db)
             }
-            Item::Error(error_id) => error_id.item_scope(db, project),
-            Item::Event(event_id) => event_id.item_scope(db, project),
-            Item::Function(function_id) => function_id.item_scope(db, project),
-            Item::StateVariable(state_variable_id) => state_variable_id.item_scope(db, project),
-            Item::Struct(structure_id) => structure_id.item_scope(db, project),
-            Item::Constructor(constructor_id) => constructor_id.item_scope(db, project),
-            Item::Modifier(modifier_id) => modifier_id.item_scope(db, project),
-            Item::Module(source_unit) => source_unit.item_scope(db, project),
+            Item::Error(error_id) => error_id.item_scope(db),
+            Item::Event(event_id) => event_id.item_scope(db),
+            Item::Function(function_id) => function_id.item_scope(db),
+            Item::StateVariable(state_variable_id) => state_variable_id.item_scope(db),
+            Item::Struct(structure_id) => structure_id.item_scope(db),
+            Item::Constructor(constructor_id) => constructor_id.item_scope(db),
+            Item::Modifier(modifier_id) => modifier_id.item_scope(db),
+            Item::Module(source_unit) => source_unit.item_scope(db),
         }
     }
 }

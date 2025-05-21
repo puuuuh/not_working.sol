@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use base_db::{BaseDb, Project};
+use base_db::{BaseDb};
 use hir_def::source_map::item_source_map::ItemSourceMap;
 use hir_def::{
     lower_file, Expr, ExprId, FileExt, FilePosition, Ident, IdentPath, Item, StatementId,
@@ -29,7 +29,6 @@ pub struct CompletionCtx<'db> {
     pub item: Item<'db>,
     pub pos: TextRange,
     pub token: SyntaxToken,
-    project: Project,
 }
 
 fn find_expr<'db>(
@@ -53,7 +52,7 @@ fn prev_token(token: &SyntaxToken) -> Option<SyntaxToken> {
 }
 
 impl<'db> CompletionCtx<'db> {
-    pub fn new(db: &'db dyn BaseDb, project: Project, pos: FilePosition) -> Option<Self> {
+    pub fn new(db: &'db dyn BaseDb, pos: FilePosition) -> Option<Self> {
         let source_unit = lower_file(db, pos.file);
         let n = pos.file.node(db);
         let token = n.syntax().token_at_offset(pos.offset).next()?;
@@ -65,13 +64,13 @@ impl<'db> CompletionCtx<'db> {
             TextRange::at(pos.offset, 0.into())
         };
 
-        Some(Self { db, item, pos, token, project })
+        Some(Self { db, item, pos, token })
     }
 
     pub fn completions(&'db self) -> Option<Vec<Completion>> {
         Some(match self.kind()? {
             CompletionKind::DotAccess { receiver, receiver_ty } => {
-                let c = receiver_ty.members(self.db, self.project);
+                let c = receiver_ty.members(self.db);
                 c
                     .into_iter()
                     .map(|a| Completion {
@@ -83,7 +82,7 @@ impl<'db> CompletionCtx<'db> {
                     .collect()
             }
             CompletionKind::Path { receiver } => {
-                let s = self.item.scope(self.db, self.project).lookup_path(self.db, &receiver)?;
+                let s = self.item.scope(self.db).lookup_path(self.db, &receiver)?;
                 let c = Container::try_from(self.item).ok()?;
                 c.defs(self.db)
                     .into_iter()
@@ -96,7 +95,7 @@ impl<'db> CompletionCtx<'db> {
                     .collect()
             }
             CompletionKind::Name => {
-                let mut s = self.item.scope(self.db, self.project);
+                let mut s = self.item.scope(self.db);
                 if let Some((_, source_map)) = self.item.body(self.db) {
                     for ancestor in self.token.parent_ancestors() {
                         if nodes::Expr::can_cast(ancestor.kind()) {
@@ -131,7 +130,7 @@ impl<'db> CompletionCtx<'db> {
 
     fn kind(&'db self) -> Option<CompletionKind<'db>> {
         if let Some(expr) = self.receiver_expr() {
-            let type_inference = hir_ty::resolver::resolve_item(self.db, self.project, self.item);
+            let type_inference = hir_ty::resolver::resolve_item(self.db, self.item);
             let ty = type_inference.expr(self.db, expr);
             if !ty.is_unknown(self.db) {
                 return Some(CompletionKind::DotAccess { receiver: expr, receiver_ty: ty });

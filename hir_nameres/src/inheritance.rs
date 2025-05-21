@@ -1,4 +1,4 @@
-use base_db::{BaseDb, Project};
+use base_db::{BaseDb};
 use hir_def::{ContractId, ContractType, Item, lower_file};
 use salsa::tracked;
 use smallvec::SmallVec;
@@ -16,7 +16,6 @@ fn linearization_recovery<'db>(
     db: &'db dyn BaseDb,
     value: &Result<Vec<ContractId<'db>>, LinearizationError>,
     _count: u32,
-    project: Project,
     c: ContractId<'db>,
 ) -> salsa::CycleRecoveryAction<Result<Vec<ContractId<'db>>, LinearizationError>> {
     salsa::CycleRecoveryAction::Iterate
@@ -24,7 +23,6 @@ fn linearization_recovery<'db>(
 
 fn linearization_initial<'db>(
     _db: &dyn BaseDb,
-    project: Project,
     c: ContractId<'db>,
 ) -> Result<Vec<ContractId<'db>>, LinearizationError> {
     Err(LinearizationError::Cycle)
@@ -69,7 +67,6 @@ fn merge<'db>(
 #[salsa::tracked(cycle_initial = linearization_initial, cycle_fn = linearization_recovery)]
 fn inheritance_chain_cycle<'db>(
     db: &'db dyn BaseDb,
-    project: Project,
     c: ContractId<'db>,
 ) -> Result<Vec<ContractId<'db>>, LinearizationError> {
     cov_mark::hit!(hir_nameres_inheritance_chain);
@@ -81,11 +78,11 @@ fn inheritance_chain_cycle<'db>(
             let path = &p.path.0;
             let scope = c
                 .origin(db)
-                .map(|c| c.scope(db, project))
-                .unwrap_or_else(|| lower_file(db, c.file(db)).scope(db, project));
+                .map(|c| c.scope(db))
+                .unwrap_or_else(|| lower_file(db, c.file(db)).scope(db));
             if let Some(Definition::Item(Item::Contract(p))) = scope.lookup_path(db, path) {
                 data[0].push(p);
-                data.push(inheritance_chain_cycle(db, project, p)?);
+                data.push(inheritance_chain_cycle(db, p)?);
             }
         }
         chain = merge(db, data)?;
@@ -97,10 +94,9 @@ fn inheritance_chain_cycle<'db>(
 #[salsa::tracked(returns(ref))]
 pub fn inheritance_chain<'db>(
     db: &'db dyn BaseDb,
-    project: Project,
     c: ContractId<'db>,
 ) -> Vec<ContractId<'db>> {
-    match inheritance_chain_cycle(db, project, c) {
+    match inheritance_chain_cycle(db, c) {
         Ok(mut data) => {
             data.reverse();
             data
@@ -114,7 +110,7 @@ pub fn inheritance_chain<'db>(
 #[cfg(test)]
 mod tests {
     use crate::inheritance::{LinearizationError, inheritance_chain};
-    use base_db::{Project, TestDatabase, TestFixture};
+    use base_db::{TestDatabase, TestFixture};
     use hir_def::lower_file;
     use salsa::{Database, Setter};
     use tracing::{level_filters::LevelFilter, warn};
@@ -141,12 +137,11 @@ mod tests {
         );
         cov_mark::check_count!(hir_nameres_inheritance_chain, 10);
         let (mut db, file) = TestDatabase::from_fixture(fixture);
-        let project = Project::new(&db, vfs::VfsPath::from_virtual("".to_owned()));
         let source_unit = lower_file(&db, file);
         let data = source_unit.data(&db);
         let c = *data.contracts(&db).last().unwrap();
         assert_eq!(
-            inheritance_chain(&db, project, c),
+            inheritance_chain(&db, c),
             &vec![
                 data.contract(&db, "Z"),
                 data.contract(&db, "K1"),
@@ -184,13 +179,12 @@ mod tests {
         ",
         );
         let (mut db, file) = TestDatabase::from_fixture(fixture);
-        let project = Project::new(&db, vfs::VfsPath::from_virtual("".to_owned()));
         {
             cov_mark::check_count!(hir_nameres_inheritance_chain, 10);
             let source_unit = lower_file(&db, file);
             let data = source_unit.data(&db);
             let c = *data.contracts(&db).last().unwrap();
-            inheritance_chain(&db, project, c);
+            inheritance_chain(&db, c);
         }
         file.set_content(&mut db).to(r"
             contract O {}
@@ -213,7 +207,7 @@ mod tests {
             let source_unit = lower_file(&db, file);
             let data = source_unit.data(&db);
             for c in data.contracts(&db) {
-                inheritance_chain(&db, project, *c);
+                inheritance_chain(&db, *c);
             }
         }
     }
@@ -239,17 +233,17 @@ mod tests {
         ",
         );
         let (mut db, file) = TestDatabase::from_fixture(fixture);
-        let project = Project::new(&db, vfs::VfsPath::from_virtual("".to_owned()));
         let source_unit = lower_file(&db, file);
         let data = source_unit.data(&db);
         let c = *data.contracts(&db).last().unwrap();
-        assert_eq!(inheritance_chain(&db, project, c), &vec![c]);
+        assert_eq!(inheritance_chain(&db, c), &vec![c]);
     }
 
     #[test]
     fn cycle_test() {
         let fixture = TestFixture::parse(
             r"
+            /main.sol
             contract O {}
 
             contract A is O {}
@@ -270,7 +264,7 @@ mod tests {
         let data = source_unit.data(&db);
         let c = *data.contracts(&db).last().unwrap();
         assert_eq!(
-            inheritance_chain(&db, Project::new(&db, vfs::VfsPath::from_virtual("".to_owned())), c),
+            inheritance_chain(&db, c),
             &vec![c]
         );
     }

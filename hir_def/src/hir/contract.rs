@@ -13,7 +13,7 @@ use crate::hir::using::UsingId;
 use crate::hir::Item;
 use crate::items::HirPrint;
 use crate::{impl_major_item, lazy_field, AstPtr, IndexMapUpdate};
-use base_db::{BaseDb, Project};
+use base_db::BaseDb;
 use salsa::Database;
 use std::fmt::Write;
 use std::sync::Arc;

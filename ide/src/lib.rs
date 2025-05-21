@@ -27,18 +27,16 @@ mod navigation_target;
 #[derive(Clone)]
 pub struct AnalysisHost {
     db: TestDatabase,
-    project: Project,
 }
 
 impl AnalysisHost {
     pub fn new() -> Self {
-        let db = TestDatabase::default();
-        let project = Project::new(&db, VfsPath::from_virtual(String::new()));
-        Self { db, project }
+        Self { db: TestDatabase::default() }
     }
 
     pub fn reload_project(&mut self, root: Utf8PathBuf) {
-        self.project.set_root(&mut self.db).to(VfsPath::from_path(root));
+        Project::get(&self.db)
+            .set_root(&mut self.db).to(VfsPath::from_path(root));
     }
 
     pub fn file(&self, path: Utf8PathBuf) -> Option<File> {
@@ -68,7 +66,6 @@ impl AnalysisHost {
         self.db.attach(|db| {
             goto_definition::goto_definition(
                 &self.db,
-                self.project,
                 FilePosition { file, offset: pos },
             )
             .unwrap_or(vec![])
@@ -76,11 +73,11 @@ impl AnalysisHost {
     }
 
     pub fn completion(&self, file: File, pos: FilePosition) -> Option<Vec<Completion>> {
-        completion::completion(&self.db, self.project, pos)
+        completion::completion(&self.db, pos)
     }
 
     pub fn hover(&self, file: File, pos: FilePosition) -> Option<(TextRange, String)> {
-        hover::hover(&self.db, self.project, pos)
+        hover::hover(&self.db, pos)
     }
 
     pub fn apply_change(&mut self, file: File, change: FileChange) {
@@ -118,7 +115,7 @@ impl AnalysisHost {
         let syntax: Vec<&SyntaxError> = lower_file::accumulated::<SyntaxError>(&self.db, file);
         self.db.attach(|_| {
             let typeres: Vec<&TypeCheckError> =
-                resolve_file::accumulated::<TypeCheckError>(&self.db, self.project, file);
+                resolve_file::accumulated::<TypeCheckError>(&self.db, file);
             typeres.len();
             let typeres = typeres.into_iter().map(Diagnostic::TypeCheck);
             syntax.into_iter().map(Diagnostic::Syntax).chain(typeres).collect()

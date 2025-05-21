@@ -1,6 +1,6 @@
 use std::{cmp::Reverse, collections::BTreeMap};
 
-use base_db::{BaseDb, File, Project};
+use base_db::{BaseDb, File};
 use hir_def::{
     hir::{BinaryOp, ElementaryTypeRef, Expr, ExprId, Ident, Item, Statement, StatementId}, lower_file, walk::{walk_stmt, Visitor}, ContractId, ContractItem, ContractType, DataLocation, FileAstPtr, FunctionId, InFile, IndexMapUpdate, TypeRefId, TypeRefKind
 };
@@ -45,7 +45,6 @@ impl<'db> TypeResolution<'db> {
 
 
 pub(crate) struct TypeResolutionCtx<'db> {
-    project: Project,
     unknown: TyKindInterned<'db>,
 
     item: Item<'db>,
@@ -77,30 +76,29 @@ impl<'db> Visitor<'db> for &mut TypeResolutionCtx<'db> {
     }
 }
 
-fn resolve_all<'db>(db: &'db dyn BaseDb, project: Project, items: impl Iterator<Item = Item<'db>>) {
+fn resolve_all<'db>(db: &'db dyn BaseDb, items: impl Iterator<Item = Item<'db>>) {
     for i in items {
         if let Item::Contract(c) = i {
-            resolve_all(db, project, c.items(db).iter().copied().map(Item::from));
+            resolve_all(db, c.items(db).iter().copied().map(Item::from));
         }
-        resolve_item(db, project, i);
-        check_item(db, project, i);
+        resolve_item(db, i);
+        check_item(db, i);
     }
 }
 
 #[salsa::tracked]
-pub fn resolve_file<'db>(db: &'db dyn BaseDb, project: Project, file: File) {
+pub fn resolve_file<'db>(db: &'db dyn BaseDb, file: File) {
     let s = lower_file(db, file);
-    resolve_all(db, project, s.items(db).iter().copied());
+    resolve_all(db, s.items(db).iter().copied());
 }
 
 // Function for limited type resolution, must not resolve any other items
 #[salsa::tracked(returns(ref))]
 pub fn resolve_item_signature<'db>(
     db: &'db dyn BaseDb,
-    project: Project,
     item: Item<'db>,
 ) -> TypeResolution<'db> {
-    let mut resolver = TypeResolutionCtx::new(db, project, item);
+    let mut resolver = TypeResolutionCtx::new(db, item);
     resolver.resolve_signature(db);
 
     return TypeResolution::new(
@@ -113,10 +111,9 @@ pub fn resolve_item_signature<'db>(
 #[salsa::tracked(returns(ref))]
 pub fn resolve_item<'db>(
     db: &'db dyn BaseDb,
-    project: Project,
     item: Item<'db>,
 ) -> TypeResolution<'db> {
-    let mut resolver = TypeResolutionCtx::new(db, project, item);
+    let mut resolver = TypeResolutionCtx::new(db, item);
     resolver.resolve_signature(db);
     resolver.resolve_body(db);
 
@@ -128,10 +125,9 @@ pub fn resolve_item<'db>(
 }
 
 impl<'db> TypeResolutionCtx<'db> {
-    pub fn new(db: &'db dyn BaseDb, project: Project, item: Item<'db>) -> Self {
+    pub fn new(db: &'db dyn BaseDb, item: Item<'db>) -> Self {
         let mut ctx = TypeResolutionCtx {
-            project,
-            scope: item.scope(db, project),
+            scope: item.scope(db),
             item,
             expr_map: Default::default(),
             typeref_map: Default::default(),
@@ -154,7 +150,7 @@ impl<'db> TypeResolutionCtx<'db> {
             _ => {}
         }
 
-        ctx.extensions = Extensions::for_item(db, project, item);
+        ctx.extensions = Extensions::for_item(db, item);
 
         ctx
     }
@@ -295,33 +291,33 @@ impl<'db> TypeResolutionCtx<'db> {
             Expr::MemberAccess { owner, member_name } => {
                 let args_type = args_type.data(db);
                 let owner_ty = self.resolve_expr(db, *owner);
-                let members = owner_ty.members(db, self.project);
+                let members = owner_ty.members(db);
                 for def in members.get(member_name).into_iter().flatten() {
                     let MemberKind::Item(item) = def else {
                         continue;
                     };
                     
-                    let Some(c) = Callable::try_from_item(db, self.project, *item) else {
+                    let Some(c) = Callable::try_from_item(db, *item) else {
                         continue;
                     };
 
-                    if args_type.can_coerce(db, self.project, c.args.data(db)) {
+                    if args_type.can_coerce(db, c.args.data(db)) {
                         return Ty::new_intern(db, TyKind::Function(c));
                     }
                 }
                 if let TyKind::Contract(c) = owner_ty.kind(db) {
-                    for contract in inheritance_chain(db, self.project, c) {
+                    for contract in inheritance_chain(db, c) {
                         let contract = TyKindInterned::new(db, TyKind::Contract(*contract));
                         for def in self.extensions.local.get(&contract)
                             .and_then(|t| t.get(member_name)).iter().copied().flatten() {
-                            let Some(c) = Callable::try_from_item(db, self.project, Item::Function(*def)) else {
+                            let Some(c) = Callable::try_from_item(db, Item::Function(*def)) else {
                                 continue;
                             };
                             if let TyKind::Tuple(mut data) = c.args.data(db) {
                                 if data[0].ty_kind == contract {
                                     data.remove(0);
 
-                                    if args_type.can_coerce(db, self.project, TyKind::Tuple(data)) {
+                                    if args_type.can_coerce(db, TyKind::Tuple(data)) {
                                         return Ty::new_intern(db, TyKind::Function(c));
                                     }
                                 }
@@ -341,11 +337,11 @@ impl<'db> TypeResolutionCtx<'db> {
 
                     let ty = self.resolve_item_type(db, item);
 
-                    let Some(callable) = Callable::try_from_item(db, self.project, item) else {
+                    let Some(callable) = Callable::try_from_item(db, item) else {
                         continue;
                     };
 
-                    if args_type.can_coerce(db, self.project, callable.args.data(db)) {
+                    if args_type.can_coerce(db, callable.args.data(db)) {
                         return Ty::new(ty);
                     }
                 }
@@ -375,7 +371,7 @@ impl<'db> TypeResolutionCtx<'db> {
             Expr::Slice { base, start, end } => return Some(self.resolve_expr(db, *base)),
             Expr::MemberAccess { owner, member_name } => {
                 let owner_ty = self.resolve_expr(db, *owner);
-                let members = owner_ty.members(db, self.project);
+                let members = owner_ty.members(db);
                 let def = members.get(member_name)?.first()?;
 
                 let modifier = match owner_ty.modifier {
@@ -398,7 +394,7 @@ impl<'db> TypeResolutionCtx<'db> {
                             return Some(Ty::new_in(
                                 self.resolve_type_ref(
                                     db,
-                                    Item::Struct(s).scope(db, self.project),
+                                    Item::Struct(s).scope(db),
                                     f.ty(db),
                                 ),
                                 modifier,
@@ -418,7 +414,7 @@ impl<'db> TypeResolutionCtx<'db> {
                     TyKind::Tuple(args.iter().map(|(_, a)| self.resolve_expr(db, *a)).collect()),
                 );
                 let receiver_type = self.resolve_method(db, *callee, args_type);
-                let c = Callable::try_from_ty(db, self.project, receiver_type)?;
+                let c = Callable::try_from_ty(db, receiver_type)?;
                 return Some(c.returns);
             }
             Expr::PrefixOp { expr, op } => return Some(self.resolve_expr(db, *expr)),
@@ -483,7 +479,7 @@ impl<'db> TypeResolutionCtx<'db> {
                     TyKind::Contract(contract_id) => {
                         let c = contract_id.constructor(db);
                         if let Some(c) = c {
-                            Callable::try_from_item(db, self.project, Item::Constructor(c))
+                            Callable::try_from_item(db, Item::Constructor(c))
                         } else  {
                             Some(Callable {
                                 args: TyKindInterned::new(db, TyKind::Tuple(vec![])),
@@ -584,7 +580,7 @@ impl<'db> TypeResolutionCtx<'db> {
                         Item::UserDefinedValueType(user_defined_value_type_id) => {
                             return self.resolve_type_ref(
                                 db,
-                                user_defined_value_type_id.scope(db, self.project),
+                                user_defined_value_type_id.scope(db),
                                 user_defined_value_type_id.ty(db),
                             );
                         }
@@ -627,24 +623,24 @@ impl<'db> TypeResolutionCtx<'db> {
             Item::StateVariable(state_variable_id) => {
                 return self.resolve_type_ref_inner(
                     db,
-                    item.scope(db, self.project),
+                    item.scope(db),
                     state_variable_id.ty(db),
                 );
             }
             Item::Modifier(_) => {
-                let callable = Callable::try_from_item(db, self.project, item).unwrap();
+                let callable = Callable::try_from_item(db, item).unwrap();
 
                 TyKindInterned::new(db, TyKind::Modifier(callable))
             },
             Item::Function(_) =>  {
-                let callable = Callable::try_from_item(db, self.project, item).unwrap();
+                let callable = Callable::try_from_item(db, item).unwrap();
 
                 TyKindInterned::new(db, TyKind::Function(callable))
             }
             Item::UserDefinedValueType(user_defined_value_type_id) => {
                 return self.resolve_type_ref(
                     db,
-                    user_defined_value_type_id.scope(db, self.project),
+                    user_defined_value_type_id.scope(db),
                     user_defined_value_type_id.ty(db),
                 )
             }
@@ -683,7 +679,7 @@ fn emit_expr_error<'db>(db: &'db dyn BaseDb, expr: ExprId<'db>, desc: String) {
 mod tests {
     use std::hash::Hash;
 
-    use base_db::{BaseDb, Project, TestDatabase, TestFixture, VfsPath};
+    use base_db::{BaseDb, TestDatabase, TestFixture, VfsPath};
     use hir_def::{items::HirPrint, lower_file, FileExt, Item};
     use rowan::ast::AstNode;
     use salsa::{Database, Setter};
@@ -698,20 +694,19 @@ mod tests {
         let pos = fixture.position.unwrap();
         let (db, file) = TestDatabase::from_fixture(fixture);
         let item = lower_file(&db, file).source_map(&db).find_pos(pos);
-        let project = Project::new(&db, VfsPath::from_virtual("".to_owned()));
-        let types = resolve_item(&db, project, item.unwrap());
+        let types = resolve_item(&db, item.unwrap());
         let mut res = String::new();
         for (expr, ty) in types.expr_map(&db).0 {
             expr.write(&db, &mut res, 0).unwrap();
             res += ": ";
-            res += &ty.human_readable(&db, project);
+            res += &ty.human_readable(&db);
             res += "\n";
         }
         res += "\n";
         for (type_ref, ty) in types.typeref_map(&db).0 {
             type_ref.write(&db, &mut res, 0).unwrap();
             res += ": ";
-            res += &ty.data(&db).human_readable(&db, project);
+            res += &ty.data(&db).human_readable(&db);
             res += "\n";
         }
 
@@ -851,10 +846,9 @@ uint256: uint256
         );
 
         let (mut db, file) = TestDatabase::from_fixture(fixture);
-        let project = Project::new(&db, VfsPath::from_virtual("".to_owned()));
         {
             cov_mark::check_count!(hir_ty_resolve_item, 3);
-            resolve_file(&db, project, file);
+            resolve_file(&db, file);
         }
         file.set_content(&mut db).to("
     struct TestStruct {
@@ -880,7 +874,7 @@ uint256: uint256
         {
             cov_mark::check_count!(hir_ty_resolve_item, 0);
             let item = lower_file(&db, file).data(&db).contract(&db, "Test");
-            resolve_file(&db, project, file);
+            resolve_file(&db, file);
         }
     }
 
@@ -962,7 +956,7 @@ help: address
 tmp.getInterface().interfaceMember: function(address,) returns(address)
 tmp.getInterface().interfaceMember(help): address
 
-address payable: address
+address: address
 First: First
 ",
         );
@@ -992,7 +986,7 @@ First: First
             "new First: function() returns(First memory)
 new First(): First memory
 
-address payable: address
+address: address
 First: First
 First: First
 ",

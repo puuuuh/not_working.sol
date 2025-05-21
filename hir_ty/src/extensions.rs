@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use base_db::{BaseDb, File, Project};
+use base_db::{BaseDb, File};
 use hir_def::{lower_file, ContractItem, ContractType, FunctionId, Ident, Item, UsingId};
 use hir_nameres::scope::{body::Definition, HasScope, Scope};
 use smallvec::SmallVec;
@@ -14,14 +14,14 @@ pub struct Extensions<'db> {
 }
 
 impl<'db> Extensions<'db> {
-    pub fn for_item(db: &'db dyn BaseDb, project: Project, item: Item<'db>) -> Self {
-        for_item(db, project, item)
+    pub fn for_item(db: &'db dyn BaseDb, item: Item<'db>) -> Self {
+        for_item(db, item)
     }
 }
 
 #[salsa::tracked]
-fn for_item<'db>(db: &'db dyn BaseDb, project: Project, item: Item<'db>) -> Extensions<'db> {
-    let mut res = for_file(db, project, item.file(db));
+fn for_item<'db>(db: &'db dyn BaseDb, item: Item<'db>) -> Extensions<'db> {
+    let mut res = for_file(db, item.file(db));
     let parent = match item {
         Item::Contract(contract_id) => {
             Some(contract_id)
@@ -58,7 +58,7 @@ fn for_item<'db>(db: &'db dyn BaseDb, project: Project, item: Item<'db>) -> Exte
         }
     };
     if let Some(parent) = parent {
-        collect_usings_to(db, project, parent.scope(db, project), parent.items(db).into_iter().filter_map(|i| {
+        collect_usings_to(db, parent.scope(db), parent.items(db).into_iter().filter_map(|i| {
             if let ContractItem::Using(u) = i {
                 Some(*u)
             } else {
@@ -70,18 +70,18 @@ fn for_item<'db>(db: &'db dyn BaseDb, project: Project, item: Item<'db>) -> Exte
 }
 
 #[salsa::tracked]
-fn for_file<'db>(db: &'db dyn BaseDb, project: Project, f: File) -> Extensions<'db> {
+fn for_file<'db>(db: &'db dyn BaseDb, f: File) -> Extensions<'db> {
     let s = lower_file(db, f);
-    let scope = s.scope(db, project);
+    let scope = s.scope(db);
     let mut res: Extensions = Default::default();
-    collect_usings_to(db, project, scope, s.data(db).usings(db).iter().copied(), &mut res);
+    collect_usings_to(db, scope, s.data(db).usings(db).iter().copied(), &mut res);
 
     res
 }
 
-fn collect_usings_to<'db, 'a>(db: &'db dyn BaseDb, project: Project, scope: Scope<'db>, usings: impl Iterator<Item = UsingId<'db>>, res: &mut Extensions<'db>) {
+fn collect_usings_to<'db, 'a>(db: &'db dyn BaseDb, scope: Scope<'db>, usings: impl Iterator<Item = UsingId<'db>>, res: &mut Extensions<'db>) {
     for u in usings {
-        let type_resolution = resolve_item(db, project, Item::Using(u));
+        let type_resolution = resolve_item(db, Item::Using(u));
         let using_data = u.data(db);
 
         let ty = if let Some(t) = using_data.type_name {

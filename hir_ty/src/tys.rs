@@ -1,6 +1,6 @@
 use core::error;
 
-use base_db::{BaseDb, File, Project};
+use base_db::{BaseDb, File};
 
 use hir_def::{
     hir::{
@@ -97,7 +97,7 @@ impl<'db> TyKind<'db> {
             _ => true,
         }
     }
-    pub fn can_coerce(&self, db: &'db dyn BaseDb, project: Project, dst: TyKind<'db>) -> bool {
+    pub fn can_coerce(&self, db: &'db dyn BaseDb, dst: TyKind<'db>) -> bool {
         match (self, dst) {
             (TyKind::Elementary(src), TyKind::Elementary(dst)) => match src {
                 hir_def::ElementaryTypeRef::Address { payable: false } => {
@@ -147,37 +147,37 @@ impl<'db> TyKind<'db> {
             },
             (TyKind::Tuple(src_tuple), TyKind::Tuple(dst_tuple)) => {
                 (src_tuple.len() == dst_tuple.len())
-                    && src_tuple.iter().zip(dst_tuple).all(|(src, dst)| src.can_coerce(db, project, dst))
+                    && src_tuple.iter().zip(dst_tuple).all(|(src, dst)| src.can_coerce(db, dst))
             },
             (TyKind::Contract(a), TyKind::Contract(b)) => {
-                inheritance_chain(db, project, *a).iter().any(|c| *c == b)
+                inheritance_chain(db, *a).iter().any(|c| *c == b)
             }
             _ => false,
         }
     }
 
-    pub fn human_readable(self, db: &'db dyn BaseDb, project: Project) -> String {
+    pub fn human_readable(self, db: &'db dyn BaseDb) -> String {
         let mut res = String::new();
-        self.human_readable_to(db, project, &mut res);
+        self.human_readable_to(db, &mut res);
 
         res
     }
 
-    pub fn human_readable_to(self, db: &'db dyn BaseDb, project: Project, res: &mut String) {
+    pub fn human_readable_to(self, db: &'db dyn BaseDb, res: &mut String) {
         match self {
             TyKind::Unknown => {
                 *res += "{unknown}";
             }
             TyKind::Function(callable) => {
                 *res += "function";
-                callable.args.data(db).human_readable_to(db, project, res);
+                callable.args.data(db).human_readable_to(db, res);
                 *res += " returns(";
-                callable.returns.human_readable_to(db, project, res);
+                callable.returns.human_readable_to(db, res);
                 *res += ")";
             }
             TyKind::Modifier(callable) => {
                 *res += "modifier";
-                callable.args.data(db).human_readable_to(db, project, res);
+                callable.args.data(db).human_readable_to(db, res);
             }
             TyKind::Struct(structure_id) => {
                 *res += structure_id.name(db).data(db);
@@ -230,20 +230,20 @@ impl<'db> TyKind<'db> {
                 }
             },
             TyKind::Array(ty, _) => {
-                ty.data(db).human_readable_to(db, project, res);
+                ty.data(db).human_readable_to(db, res);
                 *res += "[]";
             }
             TyKind::Mapping(ty, ty1) => {
                 *res += "mapping(";
-                ty.data(db).human_readable_to(db, project, res);
+                ty.data(db).human_readable_to(db, res);
                 *res += " => ";
-                ty1.data(db).human_readable_to(db, project, res);
+                ty1.data(db).human_readable_to(db, res);
                 *res += ")";
             }
             TyKind::Tuple(items) => {
                 *res += "(";
                 for i in items {
-                    i.human_readable_to(db, project, res);
+                    i.human_readable_to(db, res);
                     *res += ",";
                 }
                 *res += ")";
@@ -271,13 +271,13 @@ pub struct Ty<'db> {
 }
 
 #[salsa::tracked(returns(ref))]
-pub fn members<'db>(db: &'db dyn BaseDb, project: Project, ty: Ty<'db>) -> BTreeMap<Ident<'db>, SmallVec<[MemberKind<'db>; 1]>> {
+pub fn members<'db>(db: &'db dyn BaseDb, ty: TyKindInterned<'db>, modifier: TypeModifier) -> BTreeMap<Ident<'db>, SmallVec<[MemberKind<'db>; 1]>> {
     let mut res = BTreeMap::new();
-    let modifier = match ty.modifier {
+    let modifier = match modifier {
         TypeModifier::StoragePointer => TypeModifier::StorageRef,
         a => a,
     };
-    match ty.kind(db) {
+    match ty.data(db) {
         TyKind::Type(Item::Error(_))
         | TyKind::Type(Item::Event(_)) 
         | TyKind::Function(_) => {
@@ -292,7 +292,7 @@ pub fn members<'db>(db: &'db dyn BaseDb, project: Project, ty: Ty<'db>) -> BTree
             }
         },
         TyKind::Contract(contract_id) => {
-            let chain = inheritance_chain(db, project, contract_id);
+            let chain = inheritance_chain(db, contract_id);
             for contract_id in chain {
                 for (name, item) in contract_id
                     .items(db)
@@ -473,15 +473,15 @@ impl<'db> Ty<'db> {
         }
     }
 
-    pub fn human_readable(self, db: &'db dyn BaseDb, project: Project) -> String {
+    pub fn human_readable(self, db: &'db dyn BaseDb) -> String {
         let mut res = String::new();
-        self.human_readable_to(db, project, &mut res);
+        self.human_readable_to(db, &mut res);
         res
     }
 
-    pub fn human_readable_to(self, db: &'db dyn BaseDb, project: Project, res: &mut String) {
+    pub fn human_readable_to(self, db: &'db dyn BaseDb, res: &mut String) {
         let kind = self.kind(db);
-        kind.human_readable_to(db, project, res);
+        kind.human_readable_to(db, res);
         if self.kind(db).is_complex() {
             write!(res, " {}", self.modifier);
         }
@@ -491,7 +491,7 @@ impl<'db> Ty<'db> {
         self.ty_kind == unknown(db)
     }
 
-    pub fn can_coerce(mut self, db: &'db dyn BaseDb, project: Project, mut dst: Ty<'db>) -> bool {
+    pub fn can_coerce(mut self, db: &'db dyn BaseDb, mut dst: Ty<'db>) -> bool {
         // Tuple unwrapping
         // TODO: Add limit or just convert any tuples with len == 1 to inner type somewhere else
         while let TyKind::Tuple(t) = self.kind(db) {
@@ -520,11 +520,11 @@ impl<'db> Ty<'db> {
             _ => false,
         };
 
-        locations_can_coerce && self.kind(db).can_coerce(db, project, dst.kind(db))
+        locations_can_coerce && self.kind(db).can_coerce(db, dst.kind(db))
     }
     
-    pub fn members(self, db: &'db dyn BaseDb, project: Project) -> &'db BTreeMap<Ident<'db>, SmallVec<[MemberKind<'db>; 1]>> {
-        members(db, project, self)
+    pub fn members(self, db: &'db dyn BaseDb) -> &'db BTreeMap<Ident<'db>, SmallVec<[MemberKind<'db>; 1]>> {
+        members(db, self.ty_kind, self.modifier)
     }
 }
 

@@ -1,4 +1,4 @@
-use base_db::{BaseDb, Project};
+use base_db::{BaseDb};
 use hir_def::Item;
 
 use crate::{
@@ -13,7 +13,7 @@ pub struct Callable<'db> {
 }
 
 impl<'db> Callable<'db> {
-    pub fn try_from_ty(db: &'db dyn BaseDb, project: Project, t: Ty<'db>) -> Option<Self> {
+    pub fn try_from_ty(db: &'db dyn BaseDb, t: Ty<'db>) -> Option<Self> {
         match t.kind(db) {
             TyKind::Function(callable) => {
                 Some(callable)
@@ -21,11 +21,11 @@ impl<'db> Callable<'db> {
             TyKind::Modifier(callable) => {
                 Some(callable)
             }
-            TyKind::Type(item) => Self::try_from_item(db, project, item),
+            TyKind::Type(item) => Self::try_from_item(db, item),
             _ => None,
         }
     }
-    pub fn try_from_item(db: &'db dyn BaseDb, project: Project, item: Item<'db>) -> Option<Self> {
+    pub fn try_from_item(db: &'db dyn BaseDb, item: Item<'db>) -> Option<Self> {
         Some(match item {
             Item::Contract(contract_id) => Self {
                 args: TyKindInterned::new(
@@ -45,7 +45,7 @@ impl<'db> Callable<'db> {
                 returns: Ty::new_intern(db, TyKind::Enum(enumeration_id)),
             },
             Item::UserDefinedValueType(user_defined_value_type_id) => {
-                let type_res = resolve_item_signature(db, project, item);
+                let type_res = resolve_item_signature(db, item);
                 let basic_ty = type_res.type_ref(db, user_defined_value_type_id.ty(db));
                 Self {
                     args: basic_ty,
@@ -56,7 +56,7 @@ impl<'db> Callable<'db> {
                 }
             }
             Item::Error(error_id) => {
-                let type_res = resolve_item_signature(db, project, item);
+                let type_res = resolve_item_signature(db, item);
                 let params = error_id
                     .parameters(db)
                     .into_iter()
@@ -68,7 +68,7 @@ impl<'db> Callable<'db> {
                 }
             }
             Item::Event(event_id) => {
-                let type_res = resolve_item_signature(db, project, item);
+                let type_res = resolve_item_signature(db, item);
                 let params = event_id
                     .parameters(db)
                     .into_iter()
@@ -80,7 +80,7 @@ impl<'db> Callable<'db> {
                 }
             }
             Item::Function(function_id) => {
-                let type_res = resolve_item_signature(db, project, item);
+                let type_res = resolve_item_signature(db, item);
                 let info = function_id.info(db);
                 let params = info
                     .args
@@ -110,7 +110,7 @@ impl<'db> Callable<'db> {
                 }
             }
             Item::Struct(structure_id) => {
-                let type_res = resolve_item_signature(db, project, item);
+                let type_res = resolve_item_signature(db, item);
                 let params = structure_id
                     .fields(db)
                     .into_iter()
@@ -122,7 +122,7 @@ impl<'db> Callable<'db> {
                 }
             }
             Item::Constructor(constructor_id) => {
-                let type_res = resolve_item_signature(db, project, item);
+                let type_res = resolve_item_signature(db, item);
                 let params = constructor_id
                     .info(db)
                     .args
@@ -140,7 +140,7 @@ impl<'db> Callable<'db> {
                 }
             }
             Item::Modifier(modifier_id) => {
-                let type_res = resolve_item_signature(db, project, item);
+                let type_res = resolve_item_signature(db, item);
                 let params = modifier_id
                     .info(db)
                     .args

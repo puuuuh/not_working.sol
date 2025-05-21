@@ -1,6 +1,6 @@
 use crate::hir::ident::Ident;
 use crate::{impl_major_item, lazy_field, FileAstPtr};
-use base_db::{AnchoredPath, BaseDb, File, Project};
+use base_db::{AnchoredPath, BaseDb, File};
 use rowan::ast::AstPtr;
 use salsa::tracked;
 use smallvec::SmallVec;

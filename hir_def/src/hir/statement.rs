@@ -4,7 +4,7 @@ use crate::hir::source_unit::{self, Item};
 use crate::hir::variable_declaration::VariableDeclaration;
 use crate::items::HirPrint;
 use crate::{impl_has_syntax, impl_major_item, lazy_field, FileAstPtr, FileExt};
-use base_db::{BaseDb, Project};
+use base_db::{BaseDb};
 use rowan::ast::AstNode;
 use rowan::ast::AstPtr;
 use salsa::Database;

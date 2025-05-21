@@ -22,7 +22,6 @@ fn resolve_file_root_cycle_recovery<'db>(
     db: &'db dyn BaseDb,
     value: &BTreeMap<Ident<'db>, SmallVec<[Item<'db>; 1]>>,
     _count: u32,
-    project: Project,
     c: File,
 ) -> salsa::CycleRecoveryAction<BTreeMap<Ident<'db>, SmallVec<[Item<'db>; 1]>>> {
     salsa::CycleRecoveryAction::Iterate
@@ -30,7 +29,6 @@ fn resolve_file_root_cycle_recovery<'db>(
 
 fn resolve_file_root_cycle_initial<'db>(
     _db: &dyn BaseDb,
-    project: Project,
     c: File,
 ) -> BTreeMap<Ident<'db>, SmallVec<[Item<'db>; 1]>> {
     BTreeMap::new()
@@ -71,12 +69,11 @@ fn add_items<'db>(
 #[salsa::tracked(cycle_initial = resolve_file_root_cycle_initial, cycle_fn = resolve_file_root_cycle_recovery, returns(ref))]
 pub fn resolve_file_root<'db>(
     db: &'db dyn BaseDb,
-    project: Project,
     file: File,
 ) -> BTreeMap<Ident<'db>, SmallVec<[Item<'db>; 1]>> {
     cov_mark::hit!(hir_nameres_resolve_file_root);
     let f = lower_file(db, file);
-    let remappings = project.remappings(db);
+    let remappings = Project::get(db).remappings(db);
     let mut items: BTreeMap<Ident<'_>, SmallVec<[Item<'_>; 1]>> = BTreeMap::new();
     for item in f.items(db) {
         if let Some(name) = item.name(db) {
@@ -100,7 +97,7 @@ pub fn resolve_file_root<'db>(
             }
         }
         let p = AnchoredPath::new(file, path);
-        let Some(path) = db.resolve_path(project, &p) else {
+        let Some(path) = db.resolve_path(&p) else {
             NameresError {
                 kind: NameresErrorKind::Import(ImportResolutionError::FileNotFound {
                     import_id: import.as_id(),
@@ -133,14 +130,14 @@ pub fn resolve_file_root<'db>(
                         db,
                         *import,
                         &mut items,
-                        resolve_file_root(db, project, file)
+                        resolve_file_root(db, file)
                             .iter()
                             .flat_map(|(name, i)| i.iter().map(|i| (*name, *i))),
                     );
                 }
             }
             ImportKind::Aliases { symbol_aliases, .. } => {
-                let root = resolve_file_root(db, project, file);
+                let root = resolve_file_root(db, file);
                 for s in symbol_aliases {
                     let name = s.name;
                     let as_name = s.as_name.unwrap_or(s.name);
@@ -158,7 +155,7 @@ pub fn resolve_file_root<'db>(
                 }
             }
             ImportKind::Glob { as_name, path } => {
-                let root = resolve_file_root(db, project, file);
+                let root = resolve_file_root(db, file);
                 add_items(db, *import, &mut items, [(as_name, Item::Module(lower_file(db, file)))]);
             }
             ImportKind::Error => {}
@@ -194,7 +191,6 @@ mod tests {
         );
         let (mut db, file) = TestDatabase::from_fixture(fixture);
         let db = &db;
-        let project = Project::new(db, vfs::VfsPath::from_virtual("".to_owned()));
         let main = lower_file(db, file);
         let sec = lower_file(db, db.file_unchecked(&vfs::VfsPath::from_virtual("/sec.sol".into())));
         let third =
@@ -211,7 +207,7 @@ mod tests {
                 smallvec![Item::Contract(main.data(db).contract(db, "A1"))].into(),
             ),
         ]);
-        assert_eq!(super::resolve_file_root(db, project, file), &expected);
+        assert_eq!(super::resolve_file_root(db, file), &expected);
     }
 
     #[test]
@@ -236,7 +232,6 @@ mod tests {
             "#,
         );
         let (mut db, file) = TestDatabase::from_fixture(fixture);
-        let project = Project::new(&db, vfs::VfsPath::from_virtual("".to_owned()));
         {
             let db = &db;
             let main = lower_file(db, file);
@@ -249,7 +244,7 @@ mod tests {
                 Ident::new(db, "A1"),
                 smallvec![Item::Contract(main.data(db).contract(db, "A1"))],
             )]);
-            assert_eq!(super::resolve_file_root(db, project, file), &expected);
+            assert_eq!(super::resolve_file_root(db, file), &expected);
         }
     }
 
@@ -277,7 +272,6 @@ mod tests {
             "#,
         );
         let (mut db, file) = TestDatabase::from_fixture(fixture);
-        let project = Project::new(&db, vfs::VfsPath::from_virtual("".to_owned()));
         {
             let db = &db;
             let main = lower_file(db, file);
@@ -300,7 +294,7 @@ mod tests {
                 (Ident::new(db, "B1"), smallvec![Item::Contract(sec.data(db).contract(db, "B1"))]),
                 (Ident::new(db, "B2"), smallvec![Item::Contract(sec.data(db).contract(db, "B2"))]),
             ]);
-            assert_eq!(super::resolve_file_root(db, project, file), &expected);
+            assert_eq!(super::resolve_file_root(db, file), &expected);
         }
     }
 
@@ -320,12 +314,11 @@ mod tests {
             "#,
         );
         let (mut db, file) = TestDatabase::from_fixture(fixture);
-        let project = Project::new(&db, vfs::VfsPath::from_virtual("".to_owned()));
         let s = lower_file(&db, file);
         {
             {
                 cov_mark::check_count!(hir_nameres_resolve_file_root, 2);
-                super::resolve_file_root(&db, project, file);
+                super::resolve_file_root(&db, file);
             }
             file.set_content(&mut db).to(r#"
 
@@ -344,7 +337,7 @@ mod tests {
             let s = lower_file(&db, file);
             {
                 cov_mark::check_count!(hir_nameres_resolve_file_root, 0);
-                super::resolve_file_root(&db, project, file);
+                super::resolve_file_root(&db, file);
             }
         }
     }

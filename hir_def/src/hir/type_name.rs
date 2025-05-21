@@ -27,9 +27,9 @@ impl Display for ElementaryTypeRef {
         match self {
             ElementaryTypeRef::Address { payable } => {
                 if *payable {
-                    write!(w, "address")
-                } else {
                     write!(w, "address payable")
+                } else {
+                    write!(w, "address")
                 }
             }
             ElementaryTypeRef::Bool => {

@@ -19,7 +19,7 @@ use crate::lower::LowerCtx;
 use crate::source_map::item_source_map::ItemSourceMap;
 use crate::source_map::span_map::SpanMap;
 use crate::{impl_major_item, lazy_field, parse_file, FileExt};
-use base_db::{BaseDb, File, Project};
+use base_db::{BaseDb, File};
 use indexmap::IndexMap;
 use rowan::TextRange;
 use salsa::Database;

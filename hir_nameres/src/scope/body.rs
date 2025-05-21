@@ -4,7 +4,7 @@ use std::ops::Range;
 use std::sync::Arc;
 use std::thread::current;
 
-use base_db::{BaseDb, Project};
+use base_db::{BaseDb};
 use either::Either;
 use hir_def::IndexMapUpdate;
 use hir_def::hir::EnumerationVariantId;
@@ -72,13 +72,12 @@ pub struct BodyScope<'db> {
 impl<'db> BodyScope<'db> {
     pub fn from_body(
         db: &'db dyn BaseDb,
-        project: Project,
         parent: ItemScope<'db>,
         item: Item<'db>,
         args: SmallVec<[VariableDeclaration<'db>; 8]>,
         body: Option<StatementId<'db>>,
     ) -> BodyScope<'db> {
-        resolve_body(db, project, parent, item, args, body)
+        resolve_body(db, parent, item, args, body)
     }
 
     #[salsa::tracked]
@@ -178,7 +177,6 @@ pub struct ScopeResolver<'db> {
 #[salsa::tracked]
 fn resolve_body<'db>(
     db: &'db dyn BaseDb,
-    project: Project,
     parent: ItemScope<'db>,
     item: Item<'db>,
     args: SmallVec<[VariableDeclaration<'db>; 8]>,

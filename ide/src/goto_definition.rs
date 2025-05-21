@@ -1,4 +1,4 @@
-use base_db::{BaseDb, Project};
+use base_db::{BaseDb};
 use hir_def::{
     hir::{FilePosition, Ident, Item},
     lower_file, FileExt, InFile,
@@ -15,7 +15,6 @@ use crate::navigation_target::NavigationTarget;
 
 pub fn goto_definition(
     db: &dyn BaseDb,
-    project: Project,
     pos: FilePosition,
 ) -> Option<Vec<NavigationTarget>> {
     let t = pos.file.node(db);
@@ -23,13 +22,13 @@ pub fn goto_definition(
     let token = t.syntax().token_at_offset(pos.offset).find(|t| t.kind() == SyntaxKind::IDENT)?;
     let expr = token.parent_ancestors().filter_map(|t| nodes::Expr::cast(t)).next();
     let item = parsed.source_map(db).find(token.text_range())?;
-    let type_inference = hir_ty::resolver::resolve_item(db, project, item);
+    let type_inference = hir_ty::resolver::resolve_item(db, item);
     let body = match item {
-        Item::Function(function_id) => Some((function_id.body(db), function_id.scope(db, project))),
+        Item::Function(function_id) => Some((function_id.body(db), function_id.scope(db))),
         Item::Constructor(constructor_id) => {
-            Some((constructor_id.body(db), constructor_id.scope(db, project)))
+            Some((constructor_id.body(db), constructor_id.scope(db)))
         }
-        Item::Modifier(modifier_id) => Some((modifier_id.body(db), modifier_id.scope(db, project))),
+        Item::Modifier(modifier_id) => Some((modifier_id.body(db), modifier_id.scope(db))),
         _ => None,
     };
 
@@ -40,7 +39,7 @@ pub fn goto_definition(
                     hir_def::hir::Expr::MemberAccess { owner, member_name } => {
                         let expr_map = type_inference.expr_map(db);
                         let owner_ty = expr_map.get(owner)?;
-                        let members = owner_ty.members(db, project);
+                        let members = owner_ty.members(db);
                         let container = members.get(member_name)?;
                         container
                             .into_iter()
@@ -78,7 +77,7 @@ pub fn goto_definition(
         }
     }
 
-    let scope = item.scope(db, project);
+    let scope = item.scope(db);
 
     return Some(
         scope
@@ -98,7 +97,7 @@ pub fn goto_definition(
 #[cfg(test)]
 mod tests {
     use crate::goto_definition::goto_definition;
-    use base_db::{Project, TestDatabase, TestFixture};
+    use base_db::{TestDatabase, TestFixture};
     use hir_def::{hir::FilePosition, FileExt};
     use salsa::Database;
 
@@ -145,7 +144,6 @@ mod tests {
         db.attach(|db| {
             goto_definition(
                 db,
-                Project::new(db, vfs::VfsPath::from_virtual("".to_owned())),
                 FilePosition { offset: pos, file },
             );
         })

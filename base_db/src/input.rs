@@ -2,7 +2,7 @@ use vfs::VfsPath;
 
 use crate::BaseDb;
 
-#[salsa::input(debug)]
+#[salsa::input(singleton)]
 pub struct Project {
     #[returns(ref)]
     pub root: VfsPath,

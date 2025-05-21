@@ -9,8 +9,8 @@ pub use vfs::{AnchoredPath, File, VfsPath};
 
 #[salsa::db]
 pub trait BaseDb: salsa::Database {
-    fn resolve_path(&self, project: Project, path: &AnchoredPath) -> Option<VfsPath>;
-    fn anchored_file(&self, project: Project, path: &AnchoredPath) -> Option<File>;
+    fn resolve_path(&self, path: &AnchoredPath) -> Option<VfsPath>;
+    fn anchored_file(&self, path: &AnchoredPath) -> Option<File>;
     fn file(&self, path: &VfsPath) -> Option<File>;
     fn file_unchecked(&self, path: &VfsPath) -> File;
     fn path(&self, file: File) -> VfsPath;
@@ -38,10 +38,18 @@ impl TestFixture {
 }
 
 #[salsa::db]
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct TestDatabase {
     storage: salsa::Storage<Self>,
     vfs: Arc<Vfs>,
+}
+
+impl Default for TestDatabase {
+    fn default() -> Self {
+        let db = Self { storage: Default::default(), vfs: Default::default() };
+        Project::new(&db, VfsPath::from_virtual("".to_owned()));
+        db
+    }
 }
 
 impl TestDatabase {
@@ -62,12 +70,12 @@ impl TestDatabase {
 
 #[salsa::db]
 impl BaseDb for TestDatabase {
-    fn resolve_path(&self, project: Project, path: &AnchoredPath) -> Option<VfsPath> {
-        self.vfs.resolve_path(self, &path, &*project.import_paths(self))
+    fn resolve_path(&self, path: &AnchoredPath) -> Option<VfsPath> {
+        self.vfs.resolve_path(self, &path, &*Project::get(self).import_paths(self))
     }
 
-    fn anchored_file(&self, project: Project, path: &AnchoredPath) -> Option<File> {
-        self.resolve_path(project, path).and_then(|p| self.file(&p))
+    fn anchored_file(&self, path: &AnchoredPath) -> Option<File> {
+        self.resolve_path(path).and_then(|p| self.file(&p))
     }
 
     fn file(&self, path: &VfsPath) -> Option<File> {
