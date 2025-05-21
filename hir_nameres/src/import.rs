@@ -77,7 +77,7 @@ pub fn resolve_file_root<'db>(
     let mut items: BTreeMap<Ident<'_>, SmallVec<[Item<'_>; 1]>> = BTreeMap::new();
     for item in f.items(db) {
         if let Some(name) = item.name(db) {
-            items.entry(name).or_insert(Default::default()).push(*item);
+            items.entry(name).or_default().push(*item);
         }
     }
 
@@ -198,14 +198,8 @@ mod tests {
 
         let expected: BTreeMap<_, smallvec::SmallVec<[_; 1]>> = BTreeMap::from_iter([
             (Ident::new(db, "B1"), smallvec![Item::Contract(sec.data(db).contract(db, "B1"))]),
-            (
-                Ident::new(db, "B2"),
-                smallvec![Item::Contract(sec.data(db).contract(db, "B2"))].into(),
-            ),
-            (
-                Ident::new(db, "A1"),
-                smallvec![Item::Contract(main.data(db).contract(db, "A1"))].into(),
-            ),
+            (Ident::new(db, "B2"), smallvec![Item::Contract(sec.data(db).contract(db, "B2"))]),
+            (Ident::new(db, "A1"), smallvec![Item::Contract(main.data(db).contract(db, "A1"))]),
         ]);
         assert_eq!(super::resolve_file_root(db, file), &expected);
     }

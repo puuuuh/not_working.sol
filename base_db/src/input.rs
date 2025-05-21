@@ -27,7 +27,7 @@ impl<'db> Project {
                 }
             }
         }
-        return remappings;
+        remappings
     }
 
     #[salsa::tracked(returns(ref))]

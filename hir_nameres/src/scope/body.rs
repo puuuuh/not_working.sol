@@ -4,7 +4,7 @@ use std::ops::Range;
 use std::sync::Arc;
 use std::thread::current;
 
-use base_db::{BaseDb};
+use base_db::BaseDb;
 use either::Either;
 use hir_def::IndexMapUpdate;
 use hir_def::hir::EnumerationVariantId;
@@ -33,7 +33,7 @@ use super::Scope;
 pub enum MagicDefinitionKind {
     Block,
     Msg,
-    Tx
+    Tx,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, salsa::Update)]
@@ -93,7 +93,7 @@ impl<'db> BodyScope<'db> {
             let items = &scope_data.definitions[scope.range];
             for (name, items) in items {
                 if let btree_map::Entry::Vacant(v) = res.entry(*name) {
-                    v.insert(smallvec![items.clone()]);
+                    v.insert(smallvec![*items]);
                 }
             }
 
@@ -138,7 +138,7 @@ impl<'db> BodyScope<'db> {
             s = scope.parent.map(|scope| scope_data.scopes[scope].clone());
         }
 
-        return self.parent(db).find(db, name);
+        self.parent(db).find(db, name)
     }
 
     #[salsa::tracked]
@@ -291,7 +291,7 @@ impl<'db> Visitor<'db> for &mut ScopeResolver<'db> {
         let current_scope = self.scopes.len() - 1;
         self.scope_by_salsa_id.insert(expr.as_id(), current_scope);
         self.scope_item_cnt[current_scope] += 1;
-        return (true, ());
+        (true, ())
     }
 
     fn expr_end(&mut self, db: &'db dyn BaseDb, ctx: Self::ExprCtx, expr: ExprId<'db>) {}

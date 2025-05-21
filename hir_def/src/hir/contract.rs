@@ -52,11 +52,9 @@ lazy_field!(ContractId<'db>, origin, set_origin, Option<ContractId<'db>>, None);
 impl<'db> ContractId<'db> {
     #[salsa::tracked]
     pub fn constructor(self, db: &'db dyn BaseDb) -> Option<ConstructorId<'db>> {
-        self.items(db).into_iter().find_map(|i| {
-            match i {
-                ContractItem::Constructor(c) => Some(*c),
-                _ => None
-            }
+        self.items(db).iter().find_map(|i| match i {
+            ContractItem::Constructor(c) => Some(*c),
+            _ => None,
         })
     }
 }

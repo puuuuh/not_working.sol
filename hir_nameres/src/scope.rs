@@ -1,7 +1,7 @@
 pub mod body;
 pub mod item;
 
-use base_db::{BaseDb};
+use base_db::BaseDb;
 pub use body::BodyScope;
 use hir_def::{
     Constructor, ConstructorId, ContractId, EnumerationId, ErrorId, EventId, ExprId, FunctionId,
@@ -90,7 +90,7 @@ impl<'db> Scope<'db> {
     }
 
     pub fn lookup_path(self, db: &'db dyn BaseDb, path: &[Ident<'db>]) -> Option<Definition<'db>> {
-        let mut path = path.into_iter();
+        let mut path = path.iter();
         let start = path.next()?;
         if let mut def @ Definition::Item(item) = self.find(db, *start)? {
             let mut file = item.file(db);
@@ -181,7 +181,7 @@ impl<'db> HasScope<'db> for ContractId<'db> {
 
         let mut items: BTreeMap<Ident<'_>, smallvec::SmallVec<[Definition<'_>; 1]>> =
             BTreeMap::new();
-        for c in chain.into_iter() {
+        for c in chain.iter() {
             let named_items = c
                 .items(db)
                 .iter()

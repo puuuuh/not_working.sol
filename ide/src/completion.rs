@@ -3,7 +3,7 @@ pub mod item;
 pub use context::*;
 pub use item::*;
 
-use base_db::{BaseDb};
+use base_db::BaseDb;
 use hir_def::{
     lower_file, source_map::item_source_map::ItemSourceMap, Expr, ExprId, FileExt, FilePosition,
     Item, StatementId,

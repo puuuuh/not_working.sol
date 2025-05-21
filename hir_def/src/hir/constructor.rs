@@ -45,19 +45,19 @@ impl<'db> ConstructorId<'db> {
         let root = file.node(db);
         let root = root.syntax();
 
-        let expr = node.to_node(&root);
+        let expr = node.to_node(root);
 
         let mut lowerer = LowerCtx::new(db, file);
 
         let res = lowerer.lower_stmt(nodes::Stmt::Block(expr));
 
-        return Some((
+        Some((
             res,
             ItemSourceMap::new(
                 db,
                 (crate::IndexMapUpdate(lowerer.exprs), crate::IndexMapUpdate(lowerer.stmts)),
             ),
-        ));
+        ))
     }
 }
 

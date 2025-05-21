@@ -1,8 +1,8 @@
-use std::{process::Stdio, sync::atomic::AtomicBool};
+use std::process::Stdio;
 mod output;
 
 use camino::Utf8PathBuf;
-pub use output::{Diagnostic, Output};
+pub use output::Output;
 use tokio::io::AsyncReadExt;
 use tokio::{
     select,

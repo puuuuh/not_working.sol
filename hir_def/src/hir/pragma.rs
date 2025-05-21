@@ -1,4 +1,4 @@
-use base_db::{BaseDb};
+use base_db::BaseDb;
 use rowan::ast::AstPtr;
 use syntax::ast::nodes;
 use vfs::File;

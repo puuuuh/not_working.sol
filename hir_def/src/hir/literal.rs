@@ -1,4 +1,4 @@
-use std::{fmt::Display};
+use std::fmt::Display;
 
 use num_bigint::BigInt;
 
@@ -18,28 +18,25 @@ impl Display for Literal {
             Literal::String(items) => {
                 for i in items {
                     write!(f, "\"{}\"", String::from_utf8_lossy(i))?;
-                };
-            } ,
+                }
+            }
             Literal::Number(big_int) => {
                 write!(f, "{}", big_int);
-            },
+            }
             Literal::Boolean(b) => {
-                f.write_str(if *b {
-                    "true"
-                } else {
-                    "false"
-                })?;
-            },
+                f.write_str(if *b { "true" } else { "false" })?;
+            }
             Literal::HexString(items) => {
                 for i in items {
                     write!(f, "\"{}\"", String::from_utf8_lossy(i))?;
-                };
-
-            },
+                }
+            }
             Literal::UnicodeStringLiteral() => {
                 f.write_str("Unicode string literal(unimplemented)")?;
-            },
-            Literal::Error => { f.write_str("{invalid literal}")?; },
+            }
+            Literal::Error => {
+                f.write_str("{invalid literal}")?;
+            }
         }
         Ok(())
     }

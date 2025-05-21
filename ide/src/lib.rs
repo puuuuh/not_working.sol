@@ -29,14 +29,19 @@ pub struct AnalysisHost {
     db: TestDatabase,
 }
 
+impl Default for AnalysisHost {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AnalysisHost {
     pub fn new() -> Self {
         Self { db: TestDatabase::default() }
     }
 
     pub fn reload_project(&mut self, root: Utf8PathBuf) {
-        Project::get(&self.db)
-            .set_root(&mut self.db).to(VfsPath::from_path(root));
+        Project::get(&self.db).set_root(&mut self.db).to(VfsPath::from_path(root));
     }
 
     pub fn file(&self, path: Utf8PathBuf) -> Option<File> {
@@ -64,11 +69,8 @@ impl AnalysisHost {
 
     pub fn goto_definition(&self, file: File, pos: TextSize) -> Vec<NavigationTarget> {
         self.db.attach(|db| {
-            goto_definition::goto_definition(
-                &self.db,
-                FilePosition { file, offset: pos },
-            )
-            .unwrap_or(vec![])
+            goto_definition::goto_definition(&self.db, FilePosition { file, offset: pos })
+                .unwrap_or_default()
         })
     }
 
@@ -97,10 +99,10 @@ impl AnalysisHost {
                 }
             }
             FileChange::Rename { new_file } => {
-                if new_file.exists(&mut self.db) {
+                if new_file.exists(&self.db) {
                     warn!("Destination file already exists");
                 }
-                if !file.exists(&mut self.db) {
+                if !file.exists(&self.db) {
                     warn!("Source file not exists");
                 }
                 file.set_exists(&mut self.db).to(false);

@@ -33,26 +33,14 @@ impl<'db> Container<'db> {
                     .items(db)
                     .iter()
                     .filter(|i| {
-                        matches!(
-                            i,
-                            Item::Contract(_)
-                                | Item::Modifier(_)
-                                | Item::Module(_)
-                        )
+                        matches!(i, Item::Contract(_) | Item::Modifier(_) | Item::Module(_))
                     })
-                    .flat_map(|item| {
-                        item.name(db).map(|name| (name, Definition::Item(Item::from(*item))))
-                    })
+                    .flat_map(|item| item.name(db).map(|name| (name, Definition::Item(*item))))
                     .collect(),
                 Item::Contract(contract) => contract
                     .items(db)
                     .iter()
-                    .filter(|i| {
-                        matches!(
-                            i,
-                            ContractItem::Modifier(_)
-                        )
-                    })
+                    .filter(|i| matches!(i, ContractItem::Modifier(_)))
                     .flat_map(|item| {
                         item.name(db).map(|name| (name, Definition::Item(Item::from(*item))))
                     })

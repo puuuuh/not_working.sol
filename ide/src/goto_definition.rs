@@ -1,4 +1,4 @@
-use base_db::{BaseDb};
+use base_db::BaseDb;
 use hir_def::{
     hir::{FilePosition, Ident, Item},
     lower_file, FileExt, InFile,
@@ -13,14 +13,11 @@ use syntax::{
 
 use crate::navigation_target::NavigationTarget;
 
-pub fn goto_definition(
-    db: &dyn BaseDb,
-    pos: FilePosition,
-) -> Option<Vec<NavigationTarget>> {
+pub fn goto_definition(db: &dyn BaseDb, pos: FilePosition) -> Option<Vec<NavigationTarget>> {
     let t = pos.file.node(db);
     let parsed = lower_file(db, pos.file);
     let token = t.syntax().token_at_offset(pos.offset).find(|t| t.kind() == SyntaxKind::IDENT)?;
-    let expr = token.parent_ancestors().filter_map(|t| nodes::Expr::cast(t)).next();
+    let expr = token.parent_ancestors().filter_map(nodes::Expr::cast).next();
     let item = parsed.source_map(db).find(token.text_range())?;
     let type_inference = hir_ty::resolver::resolve_item(db, item);
     let body = match item {
@@ -47,11 +44,11 @@ pub fn goto_definition(
                             .flat_map(|a| match a {
                                 MemberKind::Item(item) => NavigationTarget::from_item(db, item),
                                 MemberKind::Field(structure_field_id) => {
-                                                                NavigationTarget::from_field(db, structure_field_id)
-                                                            }
+                                    NavigationTarget::from_field(db, structure_field_id)
+                                }
                                 MemberKind::EnumVariant(enumeration_variant_id) => {
-                                                                NavigationTarget::from_variant(db, enumeration_variant_id)
-                                                            }
+                                    NavigationTarget::from_variant(db, enumeration_variant_id)
+                                }
                                 MemberKind::SynteticItem(ty) => None,
                             })
                             .collect()
@@ -79,7 +76,7 @@ pub fn goto_definition(
 
     let scope = item.scope(db);
 
-    return Some(
+    Some(
         scope
             .find(db, Ident::new(db, token.text()))
             .into_iter()
@@ -91,7 +88,7 @@ pub fn goto_definition(
                 _ => None,
             })
             .collect(),
-    );
+    )
 }
 
 #[cfg(test)]
@@ -142,10 +139,7 @@ mod tests {
         let pos = fixture.position.unwrap();
         let (db, file) = TestDatabase::from_fixture(fixture);
         db.attach(|db| {
-            goto_definition(
-                db,
-                FilePosition { offset: pos, file },
-            );
+            goto_definition(db, FilePosition { offset: pos, file });
         })
     }
 }

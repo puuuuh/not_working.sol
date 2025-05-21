@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use base_db::{BaseDb};
+use base_db::BaseDb;
 use hir_def::source_map::item_source_map::ItemSourceMap;
 use hir_def::{
     lower_file, Expr, ExprId, FileExt, FilePosition, Ident, IdentPath, Item, StatementId,
@@ -38,7 +38,7 @@ fn find_expr<'db>(
     source_map: ItemSourceMap<'db>,
     mut scope: Scope<'db>,
 ) -> Option<ExprId<'db>> {
-    let e = token.parent_ancestors().find_map(|p| nodes::Expr::cast(p))?;
+    let e = token.parent_ancestors().find_map(nodes::Expr::cast)?;
 
     source_map.expr(db, AstPtr::new(&e))
 }
@@ -71,8 +71,7 @@ impl<'db> CompletionCtx<'db> {
         Some(match self.kind()? {
             CompletionKind::DotAccess { receiver, receiver_ty } => {
                 let c = receiver_ty.members(self.db);
-                c
-                    .into_iter()
+                c.iter()
                     .map(|a| Completion {
                         label: a.0.data(self.db).clone(),
                         src_range: self.pos,
@@ -140,7 +139,7 @@ impl<'db> CompletionCtx<'db> {
             return Some(CompletionKind::Path { receiver: path });
         }
 
-        return Some(CompletionKind::Name);
+        Some(CompletionKind::Name)
     }
 
     fn parent_ident_path(&self) -> Option<Vec<Ident<'db>>> {
@@ -191,9 +190,9 @@ impl<'db> CompletionCtx<'db> {
         }
         token = prev_token(&token)?;
 
-        let e = token.parent_ancestors().find_map(|t| nodes::Expr::cast(t))?;
+        let e = token.parent_ancestors().find_map(nodes::Expr::cast)?;
         let (stmt, map) = self.item.body(self.db)?;
 
-        return map.expr(self.db, AstPtr::new(&e));
+        map.expr(self.db, AstPtr::new(&e))
     }
 }

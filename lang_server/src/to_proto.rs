@@ -1,4 +1,4 @@
-use std::{collections::HashMap, hash::Hash};
+use std::collections::HashMap;
 
 use async_lsp::lsp_types::{
     CompletionItem, CompletionTextEdit, Diagnostic, Position, Range, TextEdit,
@@ -18,7 +18,7 @@ pub fn text_range(line_index: &line_index::LineIndex, src: TextRange) -> Range {
 
 pub fn text_position(line_index: &line_index::LineIndex, src: TextSize) -> Position {
     line_index
-        .to_wide(WideEncoding::Utf16, line_index.line_col(src.into()))
+        .to_wide(WideEncoding::Utf16, line_index.line_col(src))
         .map(|w| Position::new(w.line, w.col))
         .unwrap()
 }
@@ -43,7 +43,7 @@ pub fn completion_item(line_index: &line_index::LineIndex, src: Completion) -> C
         insert_text: Some(src.text),
         insert_text_format: None,
         insert_text_mode: None,
-        text_edit: text_edit,
+        text_edit,
         additional_text_edits: None,
         command: None,
         commit_characters: None,
@@ -68,8 +68,8 @@ pub fn flycheck_diagnostic(mut d: flycheck::Output) -> HashMap<String, Vec<Diagn
                 .unwrap_or_default();
             LineIndex::new(content)
         });
-        let start = text_position(&li, TextSize::new(diag.source_location.start));
-        let end = text_position(&li, TextSize::new(diag.source_location.end));
+        let start = text_position(li, TextSize::new(diag.source_location.start));
+        let end = text_position(li, TextSize::new(diag.source_location.end));
         res.entry(diag.source_location.file.clone()).or_default().push(Diagnostic::new_simple(
             Range::new(start, end),
             std::mem::take(&mut diag.message),

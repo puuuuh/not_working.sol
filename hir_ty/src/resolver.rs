@@ -2,19 +2,28 @@ use std::{cmp::Reverse, collections::BTreeMap};
 
 use base_db::{BaseDb, File};
 use hir_def::{
-    hir::{BinaryOp, ElementaryTypeRef, Expr, ExprId, Ident, Item, Statement, StatementId}, lower_file, walk::{walk_stmt, Visitor}, ContractId, ContractItem, ContractType, DataLocation, FileAstPtr, FunctionId, InFile, IndexMapUpdate, TypeRefId, TypeRefKind
+    hir::{BinaryOp, ElementaryTypeRef, Expr, ExprId, Ident, Item, Statement, StatementId},
+    lower_file,
+    walk::{walk_stmt, Visitor},
+    ContractId, ContractItem, ContractType, DataLocation, FileAstPtr, FunctionId, InFile,
+    IndexMapUpdate, TypeRefId, TypeRefKind,
 };
-use hir_nameres::{inheritance::inheritance_chain, scope::HasScope};
 use hir_nameres::{
     container::{self, Container},
     scope::{body::Definition, Scope},
 };
+use hir_nameres::{inheritance::inheritance_chain, scope::HasScope};
 use indexmap::IndexMap;
 use salsa::{Accumulator, Database};
 use syntax::ast::nodes;
 
 use crate::{
-    callable::Callable, error::TypeCheckError, extensions::Extensions, member_kind::MemberKind, type_check::{self, check_item}, tys::{unknown, Ty, TyKind, TyKindInterned, TypeModifier}
+    callable::Callable,
+    error::TypeCheckError,
+    extensions::Extensions,
+    member_kind::MemberKind,
+    type_check::{self, check_item},
+    tys::{unknown, Ty, TyKind, TyKindInterned, TypeModifier},
 };
 
 use hir_def::hir::HasSyntax;
@@ -42,7 +51,6 @@ impl<'db> TypeResolution<'db> {
         self.typeref_map(db).get(&r).cloned().unwrap_or_else(|| unknown(db))
     }
 }
-
 
 pub(crate) struct TypeResolutionCtx<'db> {
     unknown: TyKindInterned<'db>,
@@ -94,34 +102,20 @@ pub fn resolve_file<'db>(db: &'db dyn BaseDb, file: File) {
 
 // Function for limited type resolution, must not resolve any other items
 #[salsa::tracked(returns(ref))]
-pub fn resolve_item_signature<'db>(
-    db: &'db dyn BaseDb,
-    item: Item<'db>,
-) -> TypeResolution<'db> {
+pub fn resolve_item_signature<'db>(db: &'db dyn BaseDb, item: Item<'db>) -> TypeResolution<'db> {
     let mut resolver = TypeResolutionCtx::new(db, item);
     resolver.resolve_signature(db);
 
-    return TypeResolution::new(
-        db,
-        IndexMapUpdate(resolver.expr_map),
-        IndexMapUpdate(resolver.typeref_map),
-    );
+    TypeResolution::new(db, IndexMapUpdate(resolver.expr_map), IndexMapUpdate(resolver.typeref_map))
 }
 
 #[salsa::tracked(returns(ref))]
-pub fn resolve_item<'db>(
-    db: &'db dyn BaseDb,
-    item: Item<'db>,
-) -> TypeResolution<'db> {
+pub fn resolve_item<'db>(db: &'db dyn BaseDb, item: Item<'db>) -> TypeResolution<'db> {
     let mut resolver = TypeResolutionCtx::new(db, item);
     resolver.resolve_signature(db);
     resolver.resolve_body(db);
 
-    return TypeResolution::new(
-        db,
-        IndexMapUpdate(resolver.expr_map),
-        IndexMapUpdate(resolver.typeref_map),
-    );
+    TypeResolution::new(db, IndexMapUpdate(resolver.expr_map), IndexMapUpdate(resolver.typeref_map))
 }
 
 impl<'db> TypeResolutionCtx<'db> {
@@ -141,12 +135,9 @@ impl<'db> TypeResolutionCtx<'db> {
 
         // Skip extensions for items without body
         match item {
-            Item::Import(_)
-            | Item::Pragma(_)
-            | Item::Using(_)
-            | Item::Module(_) => {
+            Item::Import(_) | Item::Pragma(_) | Item::Using(_) | Item::Module(_) => {
                 return ctx;
-            },
+            }
             _ => {}
         }
 
@@ -296,7 +287,7 @@ impl<'db> TypeResolutionCtx<'db> {
                     let MemberKind::Item(item) = def else {
                         continue;
                     };
-                    
+
                     let Some(c) = Callable::try_from_item(db, *item) else {
                         continue;
                     };
@@ -308,8 +299,15 @@ impl<'db> TypeResolutionCtx<'db> {
                 if let TyKind::Contract(c) = owner_ty.kind(db) {
                     for contract in inheritance_chain(db, c) {
                         let contract = TyKindInterned::new(db, TyKind::Contract(*contract));
-                        for def in self.extensions.local.get(&contract)
-                            .and_then(|t| t.get(member_name)).iter().copied().flatten() {
+                        for def in self
+                            .extensions
+                            .local
+                            .get(&contract)
+                            .and_then(|t| t.get(member_name))
+                            .iter()
+                            .copied()
+                            .flatten()
+                        {
                             let Some(c) = Callable::try_from_item(db, Item::Function(*def)) else {
                                 continue;
                             };
@@ -325,7 +323,7 @@ impl<'db> TypeResolutionCtx<'db> {
                         }
                     }
                 }
-                return Ty::new(self.unknown);
+                Ty::new(self.unknown)
             }
             Expr::Ident { name_ref } => {
                 let args_type = args_type.data(db);
@@ -345,10 +343,10 @@ impl<'db> TypeResolutionCtx<'db> {
                         return Ty::new(ty);
                     }
                 }
-                return Ty::new(self.unknown);
+                Ty::new(self.unknown)
             }
-            _ => return self.resolve_expr(db, expr),
-        };
+            _ => self.resolve_expr(db, expr),
+        }
     }
 
     fn resolve_expr_inner(&mut self, db: &'db dyn BaseDb, expr: ExprId<'db>) -> Option<Ty<'db>> {
@@ -363,7 +361,16 @@ impl<'db> TypeResolutionCtx<'db> {
                     TyKind::Array(ty, _) => Some(Ty::new_in(ty, modifier)),
                     TyKind::Mapping(_k, v) => Some(Ty::new_in(v, modifier)),
                     TyKind::Elementary(ElementaryTypeRef::Bytes)
-                    | TyKind::Elementary(ElementaryTypeRef::FixedBytes { .. }) => Some(Ty::new_intern_in(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 8 }), modifier)),
+                    | TyKind::Elementary(ElementaryTypeRef::FixedBytes { .. }) => {
+                        Some(Ty::new_intern_in(
+                            db,
+                            TyKind::Elementary(ElementaryTypeRef::Integer {
+                                signed: false,
+                                size: 8,
+                            }),
+                            modifier,
+                        ))
+                    }
                     _ => None,
                 };
             }
@@ -386,25 +393,17 @@ impl<'db> TypeResolutionCtx<'db> {
                             _ => Ty::new(self.resolve_item_type(db, *item)),
                         })
                     }
-                    MemberKind::EnumVariant(e) => {
-                        TyKind::Enum(e.parent(db))
-                    }
+                    MemberKind::EnumVariant(e) => TyKind::Enum(e.parent(db)),
                     MemberKind::Field(f) => {
                         if let TyKind::Struct(s) = owner_ty.kind(db) {
                             return Some(Ty::new_in(
-                                self.resolve_type_ref(
-                                    db,
-                                    Item::Struct(s).scope(db),
-                                    f.ty(db),
-                                ),
+                                self.resolve_type_ref(db, Item::Struct(s).scope(db), f.ty(db)),
                                 modifier,
                             ));
                         }
                         return None;
                     }
-                    MemberKind::SynteticItem(t) => {
-                        return Some(*t)
-                    }
+                    MemberKind::SynteticItem(t) => return Some(*t),
                 }
             }
             Expr::CallOptions { base, options } => return Some(self.resolve_expr(db, *base)),
@@ -425,7 +424,7 @@ impl<'db> TypeResolutionCtx<'db> {
             ),
             Expr::Array { content } => {
                 let el_ty = content
-                    .get(0)
+                    .first()
                     .map(|expr| self.resolve_expr(db, *expr))
                     .unwrap_or(Ty::new(self.unknown));
                 TyKind::Array(el_ty.ty_kind, 0)
@@ -452,8 +451,8 @@ impl<'db> TypeResolutionCtx<'db> {
                     Definition::Local(item) => {
                         let ty_kind = self.resolve_type_ref(db, self.scope, item.ty(db));
                         Ty::new_in(ty_kind, item.location(db).into())
-                    },
-                    Definition::Magic(magic) => Ty::new_intern(db,TyKind::Magic(magic))
+                    }
+                    Definition::Magic(magic) => Ty::new_intern(db, TyKind::Magic(magic)),
                 })
             }
             Expr::Literal { data } => match data {
@@ -474,34 +473,48 @@ impl<'db> TypeResolutionCtx<'db> {
             },
             Expr::ElementaryTypeName { data } => TyKind::Elementary(*data),
             Expr::New { ty } => {
-                let res = self.resolve_type_ref(db, self.scope, ty.clone());
+                let res = self.resolve_type_ref(db, self.scope, *ty);
                 let callable = match res.data(db) {
                     TyKind::Contract(contract_id) => {
                         let c = contract_id.constructor(db);
                         if let Some(c) = c {
                             Callable::try_from_item(db, Item::Constructor(c))
-                        } else  {
+                        } else {
                             Some(Callable {
                                 args: TyKindInterned::new(db, TyKind::Tuple(vec![])),
                                 returns: Ty::new(res),
                             })
                         }
-                    },
-                    TyKind::Array(ty_kind_interned, _) => {
-                        Some(Callable { 
-                            args: TyKindInterned::new(db, TyKind::Tuple(vec![Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 256 }))])), 
-                            returns: Ty::new(res) 
-                        })
-                    },
-                    TyKind::Elementary(ElementaryTypeRef::Bytes) => {
-                        Some(Callable { 
-                            args: TyKindInterned::new(db, TyKind::Tuple(vec![Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 256 }))])), 
-                            returns: Ty::new(res) 
-                        })
                     }
-                    _ => None
+                    TyKind::Array(ty_kind_interned, _) => Some(Callable {
+                        args: TyKindInterned::new(
+                            db,
+                            TyKind::Tuple(vec![Ty::new_intern(
+                                db,
+                                TyKind::Elementary(ElementaryTypeRef::Integer {
+                                    signed: false,
+                                    size: 256,
+                                }),
+                            )]),
+                        ),
+                        returns: Ty::new(res),
+                    }),
+                    TyKind::Elementary(ElementaryTypeRef::Bytes) => Some(Callable {
+                        args: TyKindInterned::new(
+                            db,
+                            TyKind::Tuple(vec![Ty::new_intern(
+                                db,
+                                TyKind::Elementary(ElementaryTypeRef::Integer {
+                                    signed: false,
+                                    size: 256,
+                                }),
+                            )]),
+                        ),
+                        returns: Ty::new(res),
+                    }),
+                    _ => None,
                 }?;
-                return Some(Ty::new_intern(db, TyKind::Function(callable)))
+                return Some(Ty::new_intern(db, TyKind::Function(callable)));
             }
             Expr::Type { ty } => {
                 return None;
@@ -573,7 +586,7 @@ impl<'db> TypeResolutionCtx<'db> {
                 TyKind::Array(self.resolve_type_ref(db, scope, ty), 0)
             }
             TypeRefKind::Path(ref idents) => {
-                if let Some(Definition::Item(item)) = scope.lookup_path(db, &idents) {
+                if let Some(Definition::Item(item)) = scope.lookup_path(db, idents) {
                     let kind = match item {
                         Item::Contract(contract_id) => TyKind::Contract(contract_id),
                         Item::Enum(enumeration_id) => TyKind::Enum(enumeration_id),
@@ -610,43 +623,33 @@ impl<'db> TypeResolutionCtx<'db> {
 
     fn resolve_item_ref(&mut self, db: &'db dyn BaseDb, item: Item<'db>) -> TyKindInterned<'db> {
         match item {
-            Item::Function(function_id) => {
-                return self.resolve_item_type(db, item);
-            }
-            Item::Modifier(modifier_id) => return self.resolve_item_type(db, item),
-            _ => return TyKindInterned::new(db, TyKind::Type(item)),
+            Item::Function(function_id) => self.resolve_item_type(db, item),
+            Item::Modifier(modifier_id) => self.resolve_item_type(db, item),
+            _ => TyKindInterned::new(db, TyKind::Type(item)),
         }
     }
 
     fn resolve_item_type(&mut self, db: &'db dyn BaseDb, item: Item<'db>) -> TyKindInterned<'db> {
         match item {
             Item::StateVariable(state_variable_id) => {
-                return self.resolve_type_ref_inner(
-                    db,
-                    item.scope(db),
-                    state_variable_id.ty(db),
-                );
+                self.resolve_type_ref_inner(db, item.scope(db), state_variable_id.ty(db))
             }
             Item::Modifier(_) => {
                 let callable = Callable::try_from_item(db, item).unwrap();
 
                 TyKindInterned::new(db, TyKind::Modifier(callable))
-            },
-            Item::Function(_) =>  {
+            }
+            Item::Function(_) => {
                 let callable = Callable::try_from_item(db, item).unwrap();
 
                 TyKindInterned::new(db, TyKind::Function(callable))
             }
-            Item::UserDefinedValueType(user_defined_value_type_id) => {
-                return self.resolve_type_ref(
-                    db,
-                    user_defined_value_type_id.scope(db),
-                    user_defined_value_type_id.ty(db),
-                )
-            }
-            _ => {
-                return self.unknown;
-            }
+            Item::UserDefinedValueType(user_defined_value_type_id) => self.resolve_type_ref(
+                db,
+                user_defined_value_type_id.scope(db),
+                user_defined_value_type_id.ty(db),
+            ),
+            _ => self.unknown,
         }
     }
 }

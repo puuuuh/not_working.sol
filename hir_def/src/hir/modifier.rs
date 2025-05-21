@@ -6,7 +6,7 @@ use crate::items::HirPrint;
 use crate::lower::LowerCtx;
 use crate::source_map::item_source_map::ItemSourceMap;
 use crate::{impl_major_item, lazy_field, FileAstPtr, FileExt};
-use base_db::{BaseDb};
+use base_db::BaseDb;
 use rowan::ast::AstNode;
 use rowan::ast::AstPtr;
 use salsa::{tracked, Database};
@@ -44,19 +44,19 @@ impl<'db> ModifierId<'db> {
         let root = tree.syntax();
         let node = self.body_node(db)?;
 
-        let expr = node.to_node(&root);
+        let expr = node.to_node(root);
 
         let mut lowerer = LowerCtx::new(db, file);
 
         let res = lowerer.lower_stmt(Stmt::Block(expr));
 
-        return Some((
+        Some((
             res,
             ItemSourceMap::new(
                 db,
                 (crate::IndexMapUpdate(lowerer.exprs), crate::IndexMapUpdate(lowerer.stmts)),
             ),
-        ));
+        ))
     }
 }
 

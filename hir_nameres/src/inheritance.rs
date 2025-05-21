@@ -1,4 +1,4 @@
-use base_db::{BaseDb};
+use base_db::BaseDb;
 use hir_def::{ContractId, ContractType, Item, lower_file};
 use salsa::tracked;
 use smallvec::SmallVec;
@@ -33,7 +33,7 @@ fn merge<'db>(
     mut data: Vec<Vec<ContractId<'db>>>,
 ) -> Result<Vec<ContractId<'db>>, LinearizationError> {
     let mut res = Vec::with_capacity(10);
-    while data.len() > 0 {
+    while !data.is_empty() {
         let mut next = None;
         for l in data.iter().rev() {
             next = l.last().copied();
@@ -74,7 +74,7 @@ fn inheritance_chain_cycle<'db>(
     let parents = c.inheritance_chain(db);
     if !parents.is_empty() {
         let mut data = vec![vec![]];
-        for p in parents.into_iter() {
+        for p in parents.iter() {
             let path = &p.path.0;
             let scope = c
                 .origin(db)
@@ -92,10 +92,7 @@ fn inheritance_chain_cycle<'db>(
 }
 
 #[salsa::tracked(returns(ref))]
-pub fn inheritance_chain<'db>(
-    db: &'db dyn BaseDb,
-    c: ContractId<'db>,
-) -> Vec<ContractId<'db>> {
+pub fn inheritance_chain<'db>(db: &'db dyn BaseDb, c: ContractId<'db>) -> Vec<ContractId<'db>> {
     match inheritance_chain_cycle(db, c) {
         Ok(mut data) => {
             data.reverse();
@@ -263,9 +260,6 @@ mod tests {
         let source_unit = lower_file(&db, file);
         let data = source_unit.data(&db);
         let c = *data.contracts(&db).last().unwrap();
-        assert_eq!(
-            inheritance_chain(&db, c),
-            &vec![c]
-        );
+        assert_eq!(inheritance_chain(&db, c), &vec![c]);
     }
 }

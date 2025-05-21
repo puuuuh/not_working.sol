@@ -71,7 +71,7 @@ impl TestDatabase {
 #[salsa::db]
 impl BaseDb for TestDatabase {
     fn resolve_path(&self, path: &AnchoredPath) -> Option<VfsPath> {
-        self.vfs.resolve_path(self, &path, &*Project::get(self).import_paths(self))
+        self.vfs.resolve_path(self, path, Project::get(self).import_paths(self))
     }
 
     fn anchored_file(&self, path: &AnchoredPath) -> Option<File> {

@@ -2,7 +2,7 @@ use crate::hir::ident::Ident;
 use crate::hir::ContractId;
 use crate::items::HirPrint;
 use crate::{impl_major_item, lazy_field, FileAstPtr};
-use base_db::{BaseDb};
+use base_db::BaseDb;
 use rowan::ast::AstPtr;
 use salsa::Database;
 use std::fmt::Write;

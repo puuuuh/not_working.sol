@@ -141,7 +141,7 @@ impl<'db> LowerCtx<'db> {
                 is_virtual: virt,
             },
             body,
-            AstPtr::new(&node.clone().into()),
+            AstPtr::new(&node.clone()),
         );
 
         self.save_span(range, Item::Function(f));

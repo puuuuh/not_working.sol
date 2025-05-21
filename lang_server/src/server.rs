@@ -138,7 +138,7 @@ impl LanguageServer for Server {
     }
     fn did_close(
         &mut self,
-        params: DidCloseTextDocumentParams,
+        _params: DidCloseTextDocumentParams,
     ) -> ControlFlow<async_lsp::Result<()>> {
         ControlFlow::Continue(())
     }
@@ -202,7 +202,7 @@ impl LanguageServer for Server {
         let mut li: LineIndex;
         for c in params.content_changes {
             if let Some(range) = c.range {
-                li = LineIndex::new(&*new_content);
+                li = LineIndex::new(&new_content);
                 let range = from_proto::text_range(&li, range);
                 let start = &new_content[..range.start().into()];
                 let mid = c.text;
@@ -224,7 +224,7 @@ impl LanguageServer for Server {
 
     fn did_save(
         &mut self,
-        params: DidSaveTextDocumentParams,
+        _params: DidSaveTextDocumentParams,
     ) -> ControlFlow<async_lsp::Result<()>> {
         let fly = self.flycheck.clone();
         let mut client = self.client.clone();
@@ -235,9 +235,7 @@ impl LanguageServer for Server {
             match diagnostics.await {
                 Ok(d) => {
                     for (fname, diags) in to_proto::flycheck_diagnostic(d) {
-                        if let Ok(uri) =
-                            Url::from_file_path(root.join(fname).as_std_path().to_owned())
-                        {
+                        if let Ok(uri) = Url::from_file_path(root.join(fname).as_std_path()) {
                             let _ = client.publish_diagnostics(PublishDiagnosticsParams {
                                 uri,
                                 diagnostics: diags,
@@ -246,7 +244,7 @@ impl LanguageServer for Server {
                         }
                     }
                 }
-                Err(e) => {}
+                Err(_e) => {}
             }
         });
         ControlFlow::Continue(())

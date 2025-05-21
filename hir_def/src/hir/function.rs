@@ -6,7 +6,7 @@ use crate::items::HirPrint;
 use crate::lower::LowerCtx;
 use crate::source_map::item_source_map::ItemSourceMap;
 use crate::{impl_major_item, lazy_field, lower, FileAstPtr, FileExt};
-use base_db::{BaseDb};
+use base_db::BaseDb;
 use rowan::ast::{AstNode, AstPtr};
 use salsa::Database;
 use std::fmt::Write;
@@ -48,19 +48,19 @@ impl<'db> FunctionId<'db> {
         let root = file.node(db);
         let root = root.syntax();
 
-        let expr = node.to_node(&root);
+        let expr = node.to_node(root);
 
         let mut lowerer = LowerCtx::new(db, file);
 
         let res = lowerer.lower_stmt(Stmt::Block(expr));
 
-        return Some((
+        Some((
             res,
             ItemSourceMap::new(
                 db,
                 (crate::IndexMapUpdate(lowerer.exprs), crate::IndexMapUpdate(lowerer.stmts)),
             ),
-        ));
+        ))
     }
 }
 

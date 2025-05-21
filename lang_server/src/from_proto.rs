@@ -27,7 +27,7 @@ pub fn file_position(
     let f = db.file(raw_path)?;
     let line_index = db.line_index(f);
 
-    return Some((f, text_position(&line_index, data.position)));
+    Some((f, text_position(&line_index, data.position)))
 }
 
 pub trait ToCaminoPathBuf {

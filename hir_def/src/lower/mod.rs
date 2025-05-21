@@ -80,9 +80,7 @@ impl<'a> LowerCtx<'a> {
             nodes::Item::Pragma(pragma) => Item::Pragma(self.lower_pragma(pragma)),
             nodes::Item::Import(import) => Item::Import(self.lower_import(import)),
             nodes::Item::Using(using) => Item::Using(self.lower_using(using)),
-            nodes::Item::Contract(contract) => match self.lower_contract(contract) {
-                (_, c) => Item::Contract(c),
-            },
+            nodes::Item::Contract(contract) => Item::Contract(self.lower_contract(contract).1),
             nodes::Item::NamedFunctionDefinition(f) => {
                 Item::Function(self.lower_named_function_definition(f))
             }

@@ -1,4 +1,4 @@
-use base_db::{BaseDb};
+use base_db::BaseDb;
 use hir_def::Item;
 
 use crate::{
@@ -15,12 +15,8 @@ pub struct Callable<'db> {
 impl<'db> Callable<'db> {
     pub fn try_from_ty(db: &'db dyn BaseDb, t: Ty<'db>) -> Option<Self> {
         match t.kind(db) {
-            TyKind::Function(callable) => {
-                Some(callable)
-            }
-            TyKind::Modifier(callable) => {
-                Some(callable)
-            }
+            TyKind::Function(callable) => Some(callable),
+            TyKind::Modifier(callable) => Some(callable),
             TyKind::Type(item) => Self::try_from_item(db, item),
             _ => None,
         }
@@ -93,8 +89,11 @@ impl<'db> Callable<'db> {
                     if r.len() == 1 {
                         return Some(Self {
                             args,
-                            returns: Ty::new_in(type_res.type_ref(db, r[0].ty(db)), r[0].location(db).into()),
-                        })
+                            returns: Ty::new_in(
+                                type_res.type_ref(db, r[0].ty(db)),
+                                r[0].location(db).into(),
+                            ),
+                        });
                     }
                 }
                 let returns = info
@@ -103,11 +102,8 @@ impl<'db> Callable<'db> {
                     .flatten()
                     .map(|p| Ty::new_in(type_res.type_ref(db, p.ty(db)), p.location(db).into()))
                     .collect();
-                
-                Self {
-                    args,
-                    returns: Ty::new_intern(db, TyKind::Tuple(returns)),
-                }
+
+                Self { args, returns: Ty::new_intern(db, TyKind::Tuple(returns)) }
             }
             Item::Struct(structure_id) => {
                 let type_res = resolve_item_signature(db, item);

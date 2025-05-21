@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use parser::parser::{common::format_node, lexer::Lexer, Parser};
+use parser::parser::{lexer::Lexer, Parser};
 
 fn enum_files(dir: impl AsRef<Path>, cb: &mut impl FnMut(PathBuf)) {
     let files = std::fs::read_dir(dir).unwrap();

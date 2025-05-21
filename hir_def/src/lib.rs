@@ -75,7 +75,7 @@ pub fn parse_file(db: &dyn BaseDb, file: File) -> Parse<UnitSource> {
         .collect::<Vec<_>>();
     let (parsed, errors) = Parser::parse(&tokens);
     for e in errors {
-        SyntaxError { file: file, text: e.0, range: e.1 }.accumulate(db);
+        SyntaxError { file, text: e.0, range: e.1 }.accumulate(db);
     }
     parsed
 }

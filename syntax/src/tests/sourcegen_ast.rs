@@ -774,7 +774,7 @@ fn lower_separated_list(
     if !matches!(
         repeat.as_slice(),
         [comma, Rule::Node(n)]
-            if trailing_sep.map_or(true, |it| comma == &**it) && n == node
+            if trailing_sep.is_none_or(|it| comma == &**it) && n == node
     ) {
         return false;
     }

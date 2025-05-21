@@ -85,7 +85,7 @@ pub trait HasSyntax<'db> {
 #[macro_export]
 macro_rules! impl_has_syntax {
     ($t:ty, $node_ty:ty) => {
-        impl<'db> crate::hir::HasSyntax<'db> for $t {
+        impl<'db> $crate::hir::HasSyntax<'db> for $t {
             type Node = $node_ty;
 
             fn syntax(self, db: &'db dyn base_db::BaseDb) -> Self::Node {

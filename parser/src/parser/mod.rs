@@ -98,7 +98,7 @@ impl<'a> Parser<'a> {
     fn new(data: &'a [(SyntaxKind, &'a str)]) -> Self {
         Self {
             pos: 0,
-            start: data.get(0).map(|s| s.1.as_ptr() as usize).unwrap_or_default(),
+            start: data.first().map(|s| s.1.as_ptr() as usize).unwrap_or_default(),
             tokens: data.to_vec(),
             builder: Default::default(),
             errors: Vec::new(),

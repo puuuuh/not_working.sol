@@ -10,12 +10,21 @@ use hir_def::{
     DataLocation, UserDefinedValueTypeId,
 };
 
-use hir_nameres::{container::Container, inheritance::inheritance_chain, scope::body::{Definition, MagicDefinitionKind}};
+use hir_nameres::{
+    container::Container,
+    inheritance::inheritance_chain,
+    scope::body::{Definition, MagicDefinitionKind},
+};
 use smallvec::SmallVec;
 
-use std::{collections::{btree_map::Entry, BTreeMap}, fmt::{Display, Write}};
+use std::{
+    collections::{btree_map::Entry, BTreeMap},
+    fmt::{Display, Write},
+};
 
-use crate::{callable::Callable, extensions::Extensions, member_kind::MemberKind, resolver::resolve_item};
+use crate::{
+    callable::Callable, extensions::Extensions, member_kind::MemberKind, resolver::resolve_item,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, salsa::Update)]
 pub enum TyKind<'db> {
@@ -101,20 +110,20 @@ impl<'db> TyKind<'db> {
         match (self, dst) {
             (TyKind::Elementary(src), TyKind::Elementary(dst)) => match src {
                 hir_def::ElementaryTypeRef::Address { payable: false } => {
-                    return matches!(dst, hir_def::ElementaryTypeRef::Address { .. })
+                    matches!(dst, hir_def::ElementaryTypeRef::Address { .. })
                 }
                 hir_def::ElementaryTypeRef::Address { payable: true } => {
-                    return matches!(dst, hir_def::ElementaryTypeRef::Address { payable: true })
+                    matches!(dst, hir_def::ElementaryTypeRef::Address { payable: true })
                 }
                 hir_def::ElementaryTypeRef::String => {
-                    return matches!(
+                    matches!(
                         dst,
                         hir_def::ElementaryTypeRef::Bytes
                             | hir_def::ElementaryTypeRef::FixedBytes { .. }
                     )
                 }
                 hir_def::ElementaryTypeRef::Bytes => {
-                    return matches!(
+                    matches!(
                         dst,
                         hir_def::ElementaryTypeRef::String
                             | hir_def::ElementaryTypeRef::FixedBytes { .. }
@@ -126,32 +135,24 @@ impl<'db> TyKind<'db> {
                         return false;
                     };
 
-                    return signed1 == *signed && size1 >= *size;
+                    signed1 == *signed && size1 >= *size
                 }
                 hir_def::ElementaryTypeRef::FixedBytes { size } => {
                     let hir_def::ElementaryTypeRef::FixedBytes { size: size1 } = dst else {
                         return false;
                     };
 
-                    return size1 >= *size;
+                    size1 >= *size
                 }
-                hir_def::ElementaryTypeRef::Fixed { signed, size, decimal_points } => {
-                    return false;
-                }
-                hir_def::ElementaryTypeRef::Bool => {
-                    return false;
-                }
-                hir_def::ElementaryTypeRef::Unknown => {
-                    return false;
-                }
+                hir_def::ElementaryTypeRef::Fixed { signed, size, decimal_points } => false,
+                hir_def::ElementaryTypeRef::Bool => false,
+                hir_def::ElementaryTypeRef::Unknown => false,
             },
             (TyKind::Tuple(src_tuple), TyKind::Tuple(dst_tuple)) => {
                 (src_tuple.len() == dst_tuple.len())
                     && src_tuple.iter().zip(dst_tuple).all(|(src, dst)| src.can_coerce(db, dst))
-            },
-            (TyKind::Contract(a), TyKind::Contract(b)) => {
-                inheritance_chain(db, *a).iter().any(|c| *c == b)
             }
+            (TyKind::Contract(a), TyKind::Contract(b)) => inheritance_chain(db, *a).contains(&b),
             _ => false,
         }
     }
@@ -258,9 +259,7 @@ impl<'db> TyKind<'db> {
                 *res += user_defined_value_type_id.name(db).data(db).as_str();
                 *res += ")";
             }
-            TyKind::Magic(kind) => {
-                *res += "magic"
-            }
+            TyKind::Magic(kind) => *res += "magic",
         }
     }
 }
@@ -271,26 +270,31 @@ pub struct Ty<'db> {
 }
 
 #[salsa::tracked(returns(ref))]
-pub fn members<'db>(db: &'db dyn BaseDb, ty: TyKindInterned<'db>, modifier: TypeModifier) -> BTreeMap<Ident<'db>, SmallVec<[MemberKind<'db>; 1]>> {
+pub fn members<'db>(
+    db: &'db dyn BaseDb,
+    ty: TyKindInterned<'db>,
+    modifier: TypeModifier,
+) -> BTreeMap<Ident<'db>, SmallVec<[MemberKind<'db>; 1]>> {
     let mut res = BTreeMap::new();
     let modifier = match modifier {
         TypeModifier::StoragePointer => TypeModifier::StorageRef,
         a => a,
     };
     match ty.data(db) {
-        TyKind::Type(Item::Error(_))
-        | TyKind::Type(Item::Event(_)) 
-        | TyKind::Function(_) => {
+        TyKind::Type(Item::Error(_)) | TyKind::Type(Item::Event(_)) | TyKind::Function(_) => {
             res.insert(
-                Ident::new(db, "selector".to_owned()), 
-                SmallVec::from_slice(&[MemberKind::SynteticItem(Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::FixedBytes { size: 32 })))])
+                Ident::new(db, "selector".to_owned()),
+                SmallVec::from_slice(&[MemberKind::SynteticItem(Ty::new_intern(
+                    db,
+                    TyKind::Elementary(ElementaryTypeRef::FixedBytes { size: 32 }),
+                ))]),
             );
-        },
+        }
         TyKind::Struct(structure_id) => {
             for f in structure_id.fields(db) {
                 res.insert(f.name(db), SmallVec::from_slice(&[MemberKind::Field(f)]));
             }
-        },
+        }
         TyKind::Contract(contract_id) => {
             let chain = inheritance_chain(db, contract_id);
             for contract_id in chain {
@@ -306,64 +310,66 @@ pub fn members<'db>(db: &'db dyn BaseDb, ty: TyKindInterned<'db>, modifier: Type
                     })
                     .flat_map(|item| {
                         item.name(db).map(|name| (name, MemberKind::Item(Item::from(*item))))
-                    }) {
+                    })
+                {
                     match res.entry(name) {
                         Entry::Vacant(vacant_entry) => {
                             vacant_entry.insert([item].into_iter().collect());
-                        },
+                        }
                         Entry::Occupied(mut occupied_entry) => {
                             occupied_entry.get_mut().push(item);
-                        },
+                        }
                     }
                 }
             }
-        },
+        }
         TyKind::Array(ty_kind_interned, _) => {
             res.insert(
-                Ident::new(db, "length".to_owned()), 
-                SmallVec::from_slice(&[MemberKind::SynteticItem(Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 256 })))])
+                Ident::new(db, "length".to_owned()),
+                SmallVec::from_slice(&[MemberKind::SynteticItem(Ty::new_intern(
+                    db,
+                    TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 256 }),
+                ))]),
             );
-        },
-        TyKind::Type(item) => {
-            match item {
-                Item::Module(source_unit) => {
-                    for (name, item) in source_unit
-                        .items(db)
-                        .iter()
-                        .filter(|i| {
-                            matches!(
-                                i,
-                                Item::Contract(_)
-                                    | Item::Enum(_)
-                                    | Item::UserDefinedValueType(_)
-                                    | Item::Error(_)
-                                    | Item::Event(_)
-                                    | Item::Function(_)
-                                    | Item::StateVariable(_)
-                                    | Item::Struct(_)
-                                    | Item::Constructor(_)
-                                    | Item::Modifier(_)
-                                    | Item::Module(_)
-                            )
-                        })
-                        .flat_map(|item| {
-                            item.name(db).map(|name| (name, MemberKind::Item(Item::from(*item))))
-                        }) {
-                        match res.entry(name) {
-                            Entry::Vacant(vacant_entry) => {
-                                vacant_entry.insert([item].into_iter().collect());
-                            },
-                            Entry::Occupied(mut occupied_entry) => {
-                                occupied_entry.get_mut().push(item);
-                            },
+        }
+        TyKind::Type(item) => match item {
+            Item::Module(source_unit) => {
+                for (name, item) in source_unit
+                    .items(db)
+                    .iter()
+                    .filter(|i| {
+                        matches!(
+                            i,
+                            Item::Contract(_)
+                                | Item::Enum(_)
+                                | Item::UserDefinedValueType(_)
+                                | Item::Error(_)
+                                | Item::Event(_)
+                                | Item::Function(_)
+                                | Item::StateVariable(_)
+                                | Item::Struct(_)
+                                | Item::Constructor(_)
+                                | Item::Modifier(_)
+                                | Item::Module(_)
+                        )
+                    })
+                    .flat_map(|item| item.name(db).map(|name| (name, MemberKind::Item(*item))))
+                {
+                    match res.entry(name) {
+                        Entry::Vacant(vacant_entry) => {
+                            vacant_entry.insert([item].into_iter().collect());
+                        }
+                        Entry::Occupied(mut occupied_entry) => {
+                            occupied_entry.get_mut().push(item);
                         }
                     }
-                } 
-                Item::Contract(contract) => {
-                    for (name, item) in contract
-                        .items(db)
-                        .iter()
-                        .filter(|i| {
+                }
+            }
+            Item::Contract(contract) => {
+                for (name, item) in contract
+                    .items(db)
+                    .iter()
+                    .filter(|i| {
                         matches!(
                             i,
                             hir_def::ContractItem::Constructor(_)
@@ -376,32 +382,36 @@ pub fn members<'db>(db: &'db dyn BaseDb, ty: TyKindInterned<'db>, modifier: Type
                     })
                     .flat_map(|item| {
                         item.name(db).map(|name| (name, MemberKind::Item(Item::from(*item))))
-                    }) {
-                        match res.entry(name) {
-                            Entry::Vacant(vacant_entry) => {
-                                vacant_entry.insert([item].into_iter().collect());
-                            },
-                            Entry::Occupied(mut occupied_entry) => {
-                                occupied_entry.get_mut().push(item);
-                            },
+                    })
+                {
+                    match res.entry(name) {
+                        Entry::Vacant(vacant_entry) => {
+                            vacant_entry.insert([item].into_iter().collect());
+                        }
+                        Entry::Occupied(mut occupied_entry) => {
+                            occupied_entry.get_mut().push(item);
                         }
                     }
                 }
-                Item::Enum(enumeration_id) => {
-                    for f in enumeration_id.fields(db) {
-                        res.insert(f.name(db), SmallVec::from_slice(&[MemberKind::EnumVariant(f)]));
-                    }
-                },
-                _ => {
-                    Default::default()
+            }
+            Item::Enum(enumeration_id) => {
+                for f in enumeration_id.fields(db) {
+                    res.insert(f.name(db), SmallVec::from_slice(&[MemberKind::EnumVariant(f)]));
                 }
             }
+            _ => Default::default(),
         },
         TyKind::Magic(kind) => {
             let fields = match kind {
                 MagicDefinitionKind::Block => {
-                    let uint = Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 256 }));
-                    let address_payable = Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Address { payable: true }));
+                    let uint = Ty::new_intern(
+                        db,
+                        TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 256 }),
+                    );
+                    let address_payable = Ty::new_intern(
+                        db,
+                        TyKind::Elementary(ElementaryTypeRef::Address { payable: true }),
+                    );
                     &[
                         ("basefee", uint),
                         ("blobbasefee", uint),
@@ -413,33 +423,42 @@ pub fn members<'db>(db: &'db dyn BaseDb, ty: TyKindInterned<'db>, modifier: Type
                         ("prevrandao", uint),
                         ("timestamp", uint),
                     ][..]
-                },
+                }
                 MagicDefinitionKind::Msg => {
-                    let uint = Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 256 }));
-                    let address = Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Address { payable: false }));
+                    let uint = Ty::new_intern(
+                        db,
+                        TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 256 }),
+                    );
+                    let address = Ty::new_intern(
+                        db,
+                        TyKind::Elementary(ElementaryTypeRef::Address { payable: false }),
+                    );
                     let bytes = Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Bytes));
-                    let bytes4 = Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::FixedBytes { size: 4 }));
-                    &[
-                        ("data", bytes),
-                        ("sender", address),
-                        ("sig", bytes4),
-                        ("value", uint),
-                    ][..]
-                },
+                    let bytes4 = Ty::new_intern(
+                        db,
+                        TyKind::Elementary(ElementaryTypeRef::FixedBytes { size: 4 }),
+                    );
+                    &[("data", bytes), ("sender", address), ("sig", bytes4), ("value", uint)][..]
+                }
                 MagicDefinitionKind::Tx => {
-                    let uint = Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 256 }));
-                    let address = Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Address { payable: false }));
-                    &[
-                        ("gasprice", uint),
-                        ("origin", address),
-                    ][..]
-                },
+                    let uint = Ty::new_intern(
+                        db,
+                        TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 256 }),
+                    );
+                    let address = Ty::new_intern(
+                        db,
+                        TyKind::Elementary(ElementaryTypeRef::Address { payable: false }),
+                    );
+                    &[("gasprice", uint), ("origin", address)][..]
+                }
             };
-            res.extend(fields.iter().map(|(name, ty)| (Ident::new(db, *name), SmallVec::from_elem(MemberKind::SynteticItem(*ty), 1))))
+            res.extend(fields.iter().map(|(name, ty)| {
+                (Ident::new(db, *name), SmallVec::from_elem(MemberKind::SynteticItem(*ty), 1))
+            }))
         }
         //TyKind::Elementary(elementary_type_ref) => {
         //},
-        _ => {},
+        _ => {}
     }
 
     res
@@ -468,7 +487,7 @@ impl<'db> Ty<'db> {
 
     pub fn component_count(self, db: &'db dyn BaseDb) -> u32 {
         match self.kind(db) {
-            TyKind::Tuple(items) => return items.len() as _,
+            TyKind::Tuple(items) => items.len() as _,
             _ => 1,
         }
     }
@@ -522,8 +541,11 @@ impl<'db> Ty<'db> {
 
         locations_can_coerce && self.kind(db).can_coerce(db, dst.kind(db))
     }
-    
-    pub fn members(self, db: &'db dyn BaseDb) -> &'db BTreeMap<Ident<'db>, SmallVec<[MemberKind<'db>; 1]>> {
+
+    pub fn members(
+        self,
+        db: &'db dyn BaseDb,
+    ) -> &'db BTreeMap<Ident<'db>, SmallVec<[MemberKind<'db>; 1]>> {
         members(db, self.ty_kind, self.modifier)
     }
 }

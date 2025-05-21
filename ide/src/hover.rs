@@ -1,4 +1,4 @@
-use base_db::{BaseDb};
+use base_db::BaseDb;
 use hir_def::{lower_file, FileExt, FilePosition};
 use hir_ty::resolver::resolve_item;
 use rowan::ast::{AstNode, AstPtr};
@@ -11,7 +11,7 @@ pub fn hover(db: &dyn BaseDb, pos: FilePosition) -> Option<(TextRange, String)> 
 
     let token = t.syntax().token_at_offset(pos.offset).next()?;
 
-    let e = token.parent_ancestors().find_map(|t| nodes::Expr::cast(t))?;
+    let e = token.parent_ancestors().find_map(nodes::Expr::cast)?;
     let item = parsed.source_map(db).find_pos(pos.offset)?;
     let (stmt, map) = item.body(db)?;
 

@@ -23,9 +23,7 @@ impl<'db> LowerCtx<'db> {
             self.db,
             match ty {
                 nodes::Type::ElementaryType(t) => {
-                    if let Some(e) =
-                        self.lower_elementary_name(t).map(|t| TypeRefKind::Elementary(t))
-                    {
+                    if let Some(e) = self.lower_elementary_name(t).map(TypeRefKind::Elementary) {
                         e
                     } else {
                         return self.missing_typeref;
@@ -43,7 +41,7 @@ impl<'db> LowerCtx<'db> {
     fn lower_array_name(&mut self, p: nodes::ArrayType) -> TypeRefKind<'db> {
         let ty = self.lower_type_ref2(p.ty());
         let expr = p.len().map(|e| self.lower_expr(e));
-        TypeRefKind::Array { ty: ty, len: expr }
+        TypeRefKind::Array { ty, len: expr }
     }
 
     fn lower_ident_type_name(&mut self, p: nodes::IdentPathType) -> TypeRefKind<'db> {

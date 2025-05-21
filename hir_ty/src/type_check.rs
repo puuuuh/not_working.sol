@@ -1,6 +1,7 @@
-use base_db::{BaseDb};
+use base_db::BaseDb;
 use hir_def::{
-    walk::{walk_expr, walk_stmt, Visitor}, ElementaryTypeRef, Expr, ExprId, FileAstPtr, Item, StatementId, TypeRefId
+    walk::{walk_expr, walk_stmt, Visitor},
+    ElementaryTypeRef, Expr, ExprId, FileAstPtr, Item, StatementId, TypeRefId,
 };
 use hir_nameres::scope::Scope;
 use salsa::{Accumulator, Backtrace};
@@ -87,17 +88,16 @@ impl<'db> Visitor<'db> for &mut TypeCheckWalker<'db> {
                 let target_ty = self.type_resolution.expr(db, *target);
                 let expected = match target_ty.kind(db) {
                     TyKind::Array(_, _)
-                    | TyKind::Elementary(ElementaryTypeRef::FixedBytes { .. } | ElementaryTypeRef::Bytes) => self.common_types.uint256,
+                    | TyKind::Elementary(
+                        ElementaryTypeRef::FixedBytes { .. } | ElementaryTypeRef::Bytes,
+                    ) => self.common_types.uint256,
 
                     TyKind::Mapping(ty, ty1) => Ty::new(ty),
                     _ => {
                         emit_expr_error(
                             db,
                             *target,
-                            format!(
-                                "can't index into {}",
-                                target_ty.human_readable(db)
-                            ),
+                            format!("can't index into {}", target_ty.human_readable(db)),
                         );
                         return;
                     }
@@ -114,15 +114,8 @@ impl<'db> Visitor<'db> for &mut TypeCheckWalker<'db> {
                 let Some(op) = op else {
                     return;
                 };
-                match op {
-                    hir_def::BinaryOp::Assignment { op: None } => {
-                        self.check_expr_type(
-                            db,
-                            *rhs,
-                            self.type_resolution.expr(db, *lhs),
-                        );
-                    }
-                    _ => {}
+                if let hir_def::BinaryOp::Assignment { op: None } = op {
+                    self.check_expr_type(db, *rhs, self.type_resolution.expr(db, *lhs));
                 }
             }
             Expr::Ternary { cond, lhs, rhs } => {
@@ -150,12 +143,7 @@ impl<'db> Visitor<'db> for &mut TypeCheckWalker<'db> {
 }
 
 impl<'db> TypeCheckWalker<'db> {
-    fn check_expr_type(
-        &self,
-        db: &'db dyn BaseDb,
-        expr: ExprId<'db>,
-        expected: Ty<'db>,
-    ) {
+    fn check_expr_type(&self, db: &'db dyn BaseDb, expr: ExprId<'db>, expected: Ty<'db>) {
         let ty = self.type_resolution.expr(db, expr);
         if !ty.can_coerce(db, expected) {
             emit_expr_type_mismatch(db, expr, expected, ty);
@@ -165,10 +153,7 @@ impl<'db> TypeCheckWalker<'db> {
 
 pub fn check_item<'db>(db: &'db dyn BaseDb, item: Item<'db>) {
     let types = resolve_item(db, item);
-    let mut ctx = TypeCheckWalker {
-        type_resolution: types,
-        common_types: common_types(db),
-    };
+    let mut ctx = TypeCheckWalker { type_resolution: types, common_types: common_types(db) };
 
     if let Some((body, _)) = item.body(db) {
         walk_stmt(db, body, &mut ctx);
