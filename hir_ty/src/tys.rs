@@ -522,7 +522,7 @@ impl<'db> Ty<'db> {
         }
         while let TyKind::Tuple(t) = dst.kind(db) {
             if t.len() == 1 {
-                self = t[0]
+                dst = t[0]
             } else {
                 break;
             }

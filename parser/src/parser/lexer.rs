@@ -148,6 +148,9 @@ impl Iterator for Lexer<'_> {
                             SyntaxKind::COMMENT
                         }
                         '*' => {
+                            len += 1;
+                            self.consume();
+
                             let mut prev = '_';
                             while let Some(c) = self.consume() {
                                 len += c.len_utf8();

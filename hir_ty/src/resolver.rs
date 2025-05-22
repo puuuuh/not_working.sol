@@ -971,8 +971,6 @@ First: First
             r"
             /main.sol
 
-            using GetterExt for First;
-
             contract First {}
 
             contract Test
