@@ -19,6 +19,7 @@ use super::visibility::Visibility;
 use super::{HasFile, SourceUnit};
 
 #[tracked(debug)]
+#[derive(PartialOrd, Ord)]
 pub struct ConstructorId<'db> {
     #[id]
     pub file: File,

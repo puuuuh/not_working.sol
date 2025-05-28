@@ -16,6 +16,7 @@ use super::type_name::walk_type_ref;
 use super::{TypeRefId, TypeRefKind};
 
 #[salsa::tracked(debug)]
+#[derive(PartialOrd, Ord)]
 pub struct ExprId<'db> {
     #[returns(ref)]
     #[id]

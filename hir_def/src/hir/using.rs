@@ -10,11 +10,12 @@ use syntax::ast::nodes;
 use vfs::File;
 
 #[tracked(debug)]
+#[derive(PartialOrd, Ord)]
 pub struct UsingId<'db> {
     #[id]
     pub file: File,
 
-    #[id]
+    #[tracked]
     pub data: UsingData<'db>,
 
     #[tracked]

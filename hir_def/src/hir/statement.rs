@@ -15,6 +15,7 @@ use vfs::File;
 use super::{DataLocation, HasFile, HasSyntax, TypeRefId};
 
 #[salsa::tracked(debug)]
+#[derive(PartialOrd, Ord)]
 pub struct StatementId<'db> {
     #[returns(ref)]
     #[tracked]

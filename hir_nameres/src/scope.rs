@@ -4,9 +4,7 @@ pub mod item;
 use base_db::BaseDb;
 pub use body::BodyScope;
 use hir_def::{
-    Constructor, ConstructorId, ContractId, EnumerationId, ErrorId, EventId, ExprId, FunctionId,
-    Ident, IdentPath, ImportId, Item, ModifierId, PragmaId, SourceUnit, StateVariableId,
-    StatementId, StructureId, UserDefinedValueTypeId, UsingId, lower_file,
+    lower_file, Constructor, ConstructorId, ContractId, EnumerationId, ErrorId, EventId, ExprId, FunctionId, Ident, IdentPath, ImportId, Item, ModifierId, PragmaId, SourceUnit, StateVariableId, StatementId, StructureId, UserDefinedValueTypeId, UsingId, Visibility
 };
 pub use item::ItemScope;
 
@@ -24,11 +22,11 @@ use crate::{
     HasDefs, container::Container, import::resolve_file_root, inheritance::inheritance_chain,
 };
 
-use super::scope::body::Definition;
+use super::scope::body::Declaration;
 use salsa::plumbing::AsId;
 mod prelude;
 
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, PartialOrd, Ord, salsa::Update)]
+#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq, salsa::Update)]
 pub enum Scope<'db> {
     Item(ItemScope<'db>),
     Body(BodyScope<'db>),
@@ -51,7 +49,7 @@ impl<'db> Scope<'db> {
     pub fn all_definitions(
         self,
         db: &'db dyn BaseDb,
-    ) -> BTreeMap<Ident<'db>, SmallVec<[Definition<'db>; 1]>> {
+    ) -> BTreeMap<Ident<'db>, SmallVec<[Declaration<'db>; 1]>> {
         match self {
             Scope::Item(item_scope) => item_scope.all_definitions(db),
             Scope::Body(body_scope) => body_scope.parent(db).all_definitions(db),
@@ -59,7 +57,7 @@ impl<'db> Scope<'db> {
         }
     }
 
-    pub fn find_all(self, db: &'db dyn BaseDb, name: Ident<'db>) -> SmallVec<[Definition<'db>; 1]> {
+    pub fn find_all(self, db: &'db dyn BaseDb, name: Ident<'db>) -> SmallVec<[Declaration<'db>; 1]> {
         match self {
             Scope::Item(item_scope) => item_scope.find_all(db, name),
             Scope::Body(body_scope) => body_scope.parent(db).find_all(db, name),
@@ -67,7 +65,7 @@ impl<'db> Scope<'db> {
         }
     }
 
-    pub fn find(self, db: &'db dyn BaseDb, name: Ident<'db>) -> Option<Definition<'db>> {
+    pub fn find(self, db: &'db dyn BaseDb, name: Ident<'db>) -> Option<Declaration<'db>> {
         match self {
             Scope::Item(item_scope) => item_scope.find(db, name),
             Scope::Body(body_scope) => body_scope.parent(db).find(db, name),
@@ -80,7 +78,7 @@ impl<'db> Scope<'db> {
         db: &'db dyn BaseDb,
         expr: ExprId<'db>,
         name: Ident<'db>,
-    ) -> Option<Definition<'db>> {
+    ) -> Option<Declaration<'db>> {
         match self {
             Scope::Item(item_scope) => item_scope.find(db, name),
             Scope::Body(expr_scope_root) | Scope::Expr(expr_scope_root, _) => {
@@ -89,19 +87,17 @@ impl<'db> Scope<'db> {
         }
     }
 
-    pub fn lookup_path(self, db: &'db dyn BaseDb, path: &[Ident<'db>]) -> Option<Definition<'db>> {
+    pub fn lookup_path(self, db: &'db dyn BaseDb, path: &[Ident<'db>]) -> Option<Item<'db>> {
         let mut path = path.iter();
         let start = path.next()?;
-        if let mut def @ Definition::Item(item) = self.find(db, *start)? {
-            let mut file = item.file(db);
+        if let Declaration::Item(mut def) = self.find(db, *start)? {
+            let mut file = def.file(db);
             'ident_loop: for ident in path {
-                let container = Container::try_from(item).ok()?;
+                let container = Container::try_from(def).ok()?;
                 for (name, new_def) in container.defs(db) {
                     if *ident == name {
                         def = new_def;
-                        if let Definition::Item(item) = new_def {
-                            file = item.file(db);
-                        }
+                        file = new_def.file(db);
                         continue 'ident_loop;
                     }
                 }
@@ -179,20 +175,44 @@ impl<'db> HasScope<'db> for ContractId<'db> {
     fn item_scope(self, db: &'db dyn BaseDb) -> ItemScope<'db> {
         let chain = inheritance_chain(db, self);
 
-        let mut items: BTreeMap<Ident<'_>, smallvec::SmallVec<[Definition<'_>; 1]>> =
+        let mut items: BTreeMap<Ident<'_>, smallvec::SmallVec<[Declaration<'_>; 1]>> =
             BTreeMap::new();
         for c in chain.iter() {
             let named_items = c
                 .items(db)
                 .iter()
-                .filter_map(|a| Some((a.name(db)?, Definition::Item((*a).into()))));
+                .filter_map(|a| Some((a.name(db)?, *a)));
             for (name, def) in named_items {
+                let vis = match def {
+                    hir_def::ContractItem::Function(function_id) => {
+                        function_id.info(db).vis
+                    },
+                    hir_def::ContractItem::Modifier(modifier_id) => {
+                        Visibility::Public
+                    },
+                    hir_def::ContractItem::StateVariable(state_variable_id) => {
+                        state_variable_id.info(db).vis
+                    },
+                    _ => {
+                        hir_def::Visibility::Public
+                    }
+                };
+                let visible = match vis {
+                    Visibility::Internal => true,
+                    Visibility::External => false,
+                    Visibility::Private => *c == self,
+                    Visibility::Public => true,
+                    Visibility::Unknown => true,
+                };
+                if !visible {
+                    continue;
+                }
                 match items.entry(name) {
                     btree_map::Entry::Vacant(vacant_entry) => {
-                        vacant_entry.insert([def].into_iter().collect());
+                        vacant_entry.insert(SmallVec::from_elem(Declaration::Item((def).into()), 1));
                     }
                     btree_map::Entry::Occupied(mut occupied_entry) => {
-                        occupied_entry.get_mut().push(def);
+                        occupied_entry.get_mut().push(Declaration::Item((def).into()));
                     }
                 }
             }
@@ -276,7 +296,7 @@ impl<'db> HasScope<'db> for SourceUnit<'db> {
             Some(prelude::prelude(db)),
             imports
                 .iter()
-                .map(|(name, defs)| (*name, defs.iter().map(|t| Definition::Item(*t)).collect()))
+                .map(|(name, defs)| (*name, defs.iter().map(|t| Declaration::Item(*t)).collect()))
                 .collect(),
         )
     }

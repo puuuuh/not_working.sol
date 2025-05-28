@@ -4,7 +4,7 @@ use salsa::tracked;
 use smallvec::SmallVec;
 use tracing::warn;
 
-use crate::scope::{HasScope, body::Definition};
+use crate::scope::{HasScope, body::Declaration};
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, salsa::Update)]
 pub enum LinearizationError {
@@ -80,7 +80,7 @@ fn inheritance_chain_cycle<'db>(
                 .origin(db)
                 .map(|c| c.scope(db))
                 .unwrap_or_else(|| lower_file(db, c.file(db)).scope(db));
-            if let Some(Definition::Item(Item::Contract(p))) = scope.lookup_path(db, path) {
+            if let Some(Item::Contract(p)) = scope.lookup_path(db, path) {
                 data[0].push(p);
                 data.push(inheritance_chain_cycle(db, p)?);
             }

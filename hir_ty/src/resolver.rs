@@ -10,7 +10,7 @@ use hir_def::{
 };
 use hir_nameres::{
     container::{self, Container},
-    scope::{body::Definition, Scope},
+    scope::{body::Declaration, Scope},
 };
 use hir_nameres::{inheritance::inheritance_chain, scope::HasScope};
 use indexmap::IndexMap;
@@ -329,7 +329,7 @@ impl<'db> TypeResolutionCtx<'db> {
                 let args_type = args_type.data(db);
                 let defs = self.scope.for_expr(db, expr);
                 for def in defs.find_all(db, *name_ref) {
-                    let Definition::Item(item) = def else {
+                    let Declaration::Item(item) = def else {
                         continue;
                     };
 
@@ -444,15 +444,17 @@ impl<'db> TypeResolutionCtx<'db> {
             }
             Expr::Ident { name_ref } => {
                 return Some(match self.scope.find_in_expr(db, expr, *name_ref)? {
-                    Definition::Item(item @ Item::StateVariable(state_variable)) => {
+                    Declaration::Item(item @ Item::StateVariable(state_variable)) => {
                         Ty::new_in(self.resolve_item_type(db, item), TypeModifier::StorageRef)
                     }
-                    Definition::Item(item) => Ty::new(self.resolve_item_ref(db, item)),
-                    Definition::Local(item) => {
+                    Declaration::Item(item) => {
+                        Ty::new(self.resolve_item_ref(db, item))
+                    } 
+                    Declaration::Local(item) => {
                         let ty_kind = self.resolve_type_ref(db, self.scope, item.ty(db));
                         Ty::new_in(ty_kind, item.location(db).into())
                     }
-                    Definition::Magic(magic) => Ty::new_intern(db, TyKind::Magic(magic)),
+                    Declaration::Magic(magic) => Ty::new_intern(db, TyKind::Magic(magic)),
                 })
             }
             Expr::Literal { data } => match data {
@@ -586,7 +588,7 @@ impl<'db> TypeResolutionCtx<'db> {
                 TyKind::Array(self.resolve_type_ref(db, scope, ty), 0)
             }
             TypeRefKind::Path(ref idents) => {
-                if let Some(Definition::Item(item)) = scope.lookup_path(db, idents) {
+                if let Some(item) = scope.lookup_path(db, idents) {
                     let kind = match item {
                         Item::Contract(contract_id) => TyKind::Contract(contract_id),
                         Item::Enum(enumeration_id) => TyKind::Enum(enumeration_id),
@@ -686,7 +688,7 @@ mod tests {
     use hir_def::{items::HirPrint, lower_file, FileExt, Item};
     use rowan::ast::AstNode;
     use salsa::{Database, Setter};
-    use tracing_subscriber::filter::LevelFilter;
+    use tracing_subscriber::{filter::LevelFilter};
 
     use crate::resolver::{resolve_all, resolve_file};
 
@@ -760,13 +762,14 @@ mapping(hw.Helloworld => uint256): mapping(Helloworld => uint256)
             /main.sol
             contract Test
             {
-                uint64 testvar = 1;
+                Test testvar = 1;
 
                 function test(uint256 a, bool b) returns(bool) {}
 
                 function test(uint256 a, uint256 b) returns(uint256) {}
 
                 function h$0elloWorld() {
+                    testvar;
                     uint256 arg = 1;
                     test(arg, arg);
                     test(arg, true);
@@ -776,7 +779,8 @@ mapping(hw.Helloworld => uint256): mapping(Helloworld => uint256)
         );
         check_types(
             fixture,
-            "1: uint256
+            "testvar: Test storage ref
+1: uint256
 arg: uint256
 arg: uint256
 test: function(uint256,uint256,) returns(uint256)
@@ -910,7 +914,7 @@ uint256: uint256
 
         check_types(
             fixture,
-            "tmp: BaseContract memory
+            "tmp: BaseContract storage ref
 true: bool
 tmp.extension: function(BaseContract memory,bool,) returns(uint256)
 tmp.extension(true): uint256
@@ -990,6 +994,43 @@ new First(): First memory
 address: address
 First: First
 First: First
+",
+        );
+    }
+
+    #[test]
+    fn method_call_with_storage_args_test() {
+        let fixture = TestFixture::parse(
+            r"
+            /main.sol
+
+            struct Argument {
+                uint256 t;
+            }
+
+            contract Test
+            {
+                Argument storageRef;
+
+                function tmp(Argument storage t) {
+
+                }
+
+                function hel$0loWorld() {
+                    tmp;
+                    tmp(storageRef);
+                }
+            }
+        ",
+        );
+
+        check_types(
+            fixture,
+            "tmp: function(Argument storage ptr,) returns(())
+storageRef: Argument storage ref
+tmp: function(Argument storage ptr,) returns(())
+tmp(storageRef): ()
+
 ",
         );
     }

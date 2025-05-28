@@ -13,7 +13,7 @@ use hir_def::{
 use hir_nameres::{
     container::Container,
     inheritance::inheritance_chain,
-    scope::body::{Definition, MagicDefinitionKind},
+    scope::body::{Declaration, MagicDefinitionKind},
 };
 use smallvec::SmallVec;
 
@@ -51,6 +51,7 @@ pub enum TyKind<'db> {
 }
 
 #[salsa::interned(debug)]
+#[derive(PartialOrd, Ord)]
 pub struct TyKindInterned<'db> {
     pub data: TyKind<'db>,
 }
@@ -108,13 +109,12 @@ impl<'db> TyKind<'db> {
     }
     pub fn can_coerce(&self, db: &'db dyn BaseDb, dst: TyKind<'db>) -> bool {
         match (self, dst) {
+            (a, b) if *a == b => true,
             (TyKind::Elementary(src), TyKind::Elementary(dst)) => match src {
                 hir_def::ElementaryTypeRef::Address { payable: false } => {
                     matches!(dst, hir_def::ElementaryTypeRef::Address { .. })
                 }
-                hir_def::ElementaryTypeRef::Address { payable: true } => {
-                    matches!(dst, hir_def::ElementaryTypeRef::Address { payable: true })
-                }
+                hir_def::ElementaryTypeRef::Address { payable: true } => false,
                 hir_def::ElementaryTypeRef::String => {
                     matches!(
                         dst,
@@ -152,8 +152,8 @@ impl<'db> TyKind<'db> {
                 (src_tuple.len() == dst_tuple.len())
                     && src_tuple.iter().zip(dst_tuple).all(|(src, dst)| src.can_coerce(db, dst))
             }
-            (TyKind::Contract(a), TyKind::Contract(b)) => inheritance_chain(db, *a).contains(&b),
-            _ => false,
+            (TyKind::Contract(a), TyKind::Contract(b)) => *a == b || inheritance_chain(db, *a).contains(&b),
+            (a, b) => false,
         }
     }
 
@@ -378,6 +378,7 @@ pub fn members<'db>(
                                 | hir_def::ContractItem::Struct(_)
                                 | hir_def::ContractItem::Enum(_)
                                 | hir_def::ContractItem::StateVariable(_)
+                                | hir_def::ContractItem::Function(_)
                         )
                     })
                     .flat_map(|item| {
@@ -478,7 +479,7 @@ impl<'db> Ty<'db> {
     }
 
     pub fn new_in(kind: TyKindInterned<'db>, modifier: TypeModifier) -> Self {
-        Self { ty_kind: kind, modifier: TypeModifier::Memory }
+        Self { ty_kind: kind, modifier: modifier }
     }
 
     pub fn kind(self, db: &'db dyn BaseDb) -> TyKind<'db> {
@@ -536,6 +537,9 @@ impl<'db> Ty<'db> {
             (a, b) if a == b => true,
             (_, TypeModifier::Memory) => true,
             (_, TypeModifier::StorageRef) => true,
+            // FIXME
+            (_, TypeModifier::Calldata) => true,
+            (TypeModifier::StorageRef, TypeModifier::StoragePointer) => true,
             _ => false,
         };
 

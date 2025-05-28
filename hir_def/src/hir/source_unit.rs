@@ -29,6 +29,7 @@ use super::statement::StatementId;
 use super::user_defined_value_type;
 
 #[salsa::tracked(debug)]
+#[derive(PartialOrd, Ord)]
 pub struct SourceUnit<'db> {
     #[id]
     pub file: File,

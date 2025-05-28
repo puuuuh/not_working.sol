@@ -19,6 +19,7 @@ use super::visibility::Visibility;
 use super::Item;
 
 #[salsa::tracked(debug)]
+#[derive(PartialOrd, Ord)]
 pub struct FunctionId<'db> {
     #[id]
     pub file: File,
@@ -26,8 +27,8 @@ pub struct FunctionId<'db> {
     #[id]
     pub name: Option<Ident<'db>>,
 
-    #[tracked]
-    pub info: Function<'db>,
+    #[tracked(returns(ref))]
+    pub info: FunctionSig<'db>,
 
     #[tracked]
     pub body_node: Option<AstPtr<nodes::Block>>,
@@ -82,7 +83,7 @@ impl HirPrint for FunctionId<'_> {
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Hash, salsa::Update)]
-pub struct Function<'db> {
+pub struct FunctionSig<'db> {
     pub args: Vec<VariableDeclaration<'db>>,
     pub returns: Option<Vec<VariableDeclaration<'db>>>,
     pub modifiers: Vec<ModifierInvocation<'db>>,
@@ -115,7 +116,7 @@ impl HirPrint for ModifierInvocation<'_> {
     }
 }
 
-impl HirPrint for Function<'_> {
+impl HirPrint for FunctionSig<'_> {
     fn write<T: Write>(&self, db: &dyn Database, w: &mut T, ident: usize) -> std::fmt::Result {
         w.write_str("(")?;
         for (i, a) in self.args.iter().enumerate() {

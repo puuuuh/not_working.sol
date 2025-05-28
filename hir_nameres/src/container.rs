@@ -4,7 +4,7 @@ use base_db::BaseDb;
 use hir_def::{ContractId, ContractItem, EnumerationId, Ident, Item, SourceUnit, StructureId};
 use vfs::File;
 
-use crate::scope::body::Definition;
+use crate::scope::body::Declaration;
 
 // Simple def container, exclude any overloadable entities
 #[derive(
@@ -26,7 +26,7 @@ impl<'db> TryFrom<Item<'db>> for Container<'db> {
 
 #[salsa::tracked]
 impl<'db> Container<'db> {
-    pub fn defs(self, db: &'db dyn BaseDb) -> Vec<(Ident<'db>, Definition<'db>)> {
+    pub fn defs(self, db: &'db dyn BaseDb) -> Vec<(Ident<'db>, Item<'db>)> {
         match self {
             Self::Item(item) => match item {
                 Item::Module(source_unit) => source_unit
@@ -35,14 +35,14 @@ impl<'db> Container<'db> {
                     .filter(|i| {
                         matches!(i, Item::Contract(_) | Item::Modifier(_) | Item::Module(_))
                     })
-                    .flat_map(|item| item.name(db).map(|name| (name, Definition::Item(*item))))
+                    .flat_map(|item| item.name(db).map(|name| (name, *item)))
                     .collect(),
                 Item::Contract(contract) => contract
                     .items(db)
                     .iter()
                     .filter(|i| matches!(i, ContractItem::Modifier(_)))
                     .flat_map(|item| {
-                        item.name(db).map(|name| (name, Definition::Item(Item::from(*item))))
+                        item.name(db).map(|name| (name, Item::from(*item)))
                     })
                     .collect(),
                 _ => {

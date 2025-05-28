@@ -3,7 +3,7 @@ use base_db::BaseDb;
 use hir_def::hir::Ident;
 use import::ImportResolutionError;
 use inheritance::LinearizationError;
-use scope::body::Definition;
+use scope::body::Declaration;
 use vfs::File;
 pub mod container;
 pub mod import;
@@ -21,5 +21,5 @@ pub struct NameresError {
 }
 
 pub trait HasDefs<'db> {
-    fn defs(self, db: &'db dyn BaseDb) -> Vec<(Ident<'db>, Definition<'db>)>;
+    fn defs(self, db: &'db dyn BaseDb) -> Vec<(Ident<'db>, Declaration<'db>)>;
 }

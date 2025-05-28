@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use base_db::{BaseDb, File};
 use hir_def::{lower_file, ContractItem, ContractType, FunctionId, Ident, Item, UsingId};
-use hir_nameres::scope::{body::Definition, HasScope, Scope};
+use hir_nameres::scope::{body::Declaration, HasScope, Scope};
 use smallvec::SmallVec;
 
 use crate::{
@@ -99,12 +99,12 @@ fn collect_usings_to<'db, 'a>(
             }
             if let Some(lib) = scope.lookup_path(db, &i.path.0) {
                 match lib {
-                    Definition::Item(Item::Function(f)) => {
+                    Item::Function(f) => {
                         if let Some(name) = f.name(db) {
                             tmp.entry(name).or_default().push(f);
                         }
                     }
-                    Definition::Item(Item::Contract(c)) => {
+                    Item::Contract(c) => {
                         if c.kind(db) == ContractType::Library {
                             for f in c.items(db).iter().filter_map(|c| match c {
                                 ContractItem::Function(f) => Some(f),

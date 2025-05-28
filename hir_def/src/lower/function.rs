@@ -4,7 +4,7 @@ use crate::hir::Item;
 use crate::hir::StateMutability;
 use crate::hir::VariableDeclaration;
 use crate::hir::Visibility;
-use crate::hir::{Function, FunctionId, ModifierInvocation};
+use crate::hir::{FunctionSig, FunctionId, ModifierInvocation};
 use crate::hir::{Ident, IdentPath};
 use crate::lower::LowerCtx;
 use crate::FileAstPtr;
@@ -131,7 +131,7 @@ impl<'db> LowerCtx<'db> {
             self.db,
             self.file,
             Some(name),
-            Function {
+            FunctionSig {
                 args: args.clone(),
                 returns: returns.clone(),
                 modifiers: mods,

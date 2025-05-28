@@ -8,6 +8,5 @@ edition = "2021"
 crate-type = ["lib"]
 
 [dependencies]
-salsa = { version = "0.16.0" }
-rowan = { version = "0.15.4" }
+rowan.workspace = true
 syntax.workspace = true

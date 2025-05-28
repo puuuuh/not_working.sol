@@ -13,6 +13,7 @@ use super::visibility::Visibility;
 use super::TypeRefId;
 
 #[tracked(debug)]
+#[derive(PartialOrd, Ord)]
 pub struct StateVariableId<'db> {
     #[id]
     pub file: File,

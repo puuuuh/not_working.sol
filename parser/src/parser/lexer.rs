@@ -241,10 +241,7 @@ impl Iterator for Lexer<'_> {
                     if !escape && c1 == c {
                         break;
                     }
-                    escape = false;
-                    if c1 == '\\' {
-                        escape = true
-                    }
+                    escape = c1 == '\\' && !escape;
                 }
                 SyntaxKind::STRING
             }

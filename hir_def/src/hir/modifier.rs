@@ -15,6 +15,7 @@ use syntax::ast::nodes::{self, Stmt};
 use vfs::File;
 
 #[tracked(debug)]
+#[derive(PartialOrd, Ord)]
 pub struct ModifierId<'db> {
     #[id]
     pub file: File,

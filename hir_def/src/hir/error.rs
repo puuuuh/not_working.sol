@@ -12,6 +12,7 @@ use vfs::File;
 use super::TypeRefId;
 
 #[tracked(debug)]
+#[derive(PartialOrd, Ord)]
 pub struct ErrorId<'db> {
     #[id]
     pub file: File,

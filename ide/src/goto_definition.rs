@@ -3,7 +3,7 @@ use hir_def::{
     hir::{FilePosition, Ident, Item},
     lower_file, FileExt, InFile,
 };
-use hir_nameres::scope::{body::Definition, HasScope};
+use hir_nameres::scope::{body::Declaration, HasScope};
 use hir_ty::{extensions::Extensions, member_kind::MemberKind, tys::TyKind};
 use rowan::ast::{AstNode, AstPtr};
 use syntax::{
@@ -57,8 +57,8 @@ pub fn goto_definition(db: &dyn BaseDb, pos: FilePosition) -> Option<Vec<Navigat
                         .find_in_expr(db, e, *name_ref)
                         .into_iter()
                         .flat_map(|defsite| match defsite {
-                            Definition::Item(item) => NavigationTarget::from_item(db, item),
-                            Definition::Local(variable_declaration) => {
+                            Declaration::Item(item) => NavigationTarget::from_item(db, item),
+                            Declaration::Local(variable_declaration) => {
                                 NavigationTarget::from_local(db, variable_declaration)
                             }
                             _ => None,
@@ -81,8 +81,8 @@ pub fn goto_definition(db: &dyn BaseDb, pos: FilePosition) -> Option<Vec<Navigat
             .find(db, Ident::new(db, token.text()))
             .into_iter()
             .flat_map(|defsite| match defsite {
-                Definition::Item(item) => NavigationTarget::from_item(db, item),
-                Definition::Local(variable_declaration) => {
+                Declaration::Item(item) => NavigationTarget::from_item(db, item),
+                Declaration::Local(variable_declaration) => {
                     NavigationTarget::from_local(db, variable_declaration)
                 }
                 _ => None,

@@ -6,7 +6,7 @@ use crate::{
     tys::{Ty, TyKind, TyKindInterned},
 };
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, salsa::Update)]
+#[derive(Debug, Clone, PartialEq, Ord, PartialOrd, Eq, Hash, salsa::Update)]
 pub struct Callable<'db> {
     pub args: TyKindInterned<'db>,
     pub returns: Ty<'db>,

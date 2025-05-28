@@ -37,7 +37,7 @@ pub enum MagicDefinitionKind {
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, salsa::Update)]
-pub enum Definition<'db> {
+pub enum Declaration<'db> {
     Item(Item<'db>),
     Local(VariableDeclaration<'db>),
     Magic(MagicDefinitionKind),
@@ -51,7 +51,7 @@ pub struct ExprScope {
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, salsa::Update)]
 pub struct ScopeData<'db> {
-    definitions: Vec<(Ident<'db>, Definition<'db>)>,
+    definitions: Vec<(Ident<'db>, Declaration<'db>)>,
     scopes: SmallVec<[ExprScope; 1]>,
 }
 
@@ -85,7 +85,7 @@ impl<'db> BodyScope<'db> {
         self,
         db: &'db dyn BaseDb,
         scope: usize,
-    ) -> BTreeMap<Ident<'db>, SmallVec<[Definition<'db>; 1]>> {
+    ) -> BTreeMap<Ident<'db>, SmallVec<[Declaration<'db>; 1]>> {
         let mut res = BTreeMap::new();
         let scope_data = self.data(db);
         let mut s = scope_data.scopes.get(scope).cloned();
@@ -115,7 +115,7 @@ impl<'db> BodyScope<'db> {
         db: &'db dyn BaseDb,
         expr: ExprId<'db>,
         name: Ident<'db>,
-    ) -> Option<Definition<'db>> {
+    ) -> Option<Declaration<'db>> {
         let scope = self.scope_by_salsa_id(db).get(&expr.as_id()).copied().unwrap_or_default();
         self.find(db, scope, name)
     }
@@ -126,7 +126,7 @@ impl<'db> BodyScope<'db> {
         db: &'db dyn BaseDb,
         scope: usize,
         name: Ident<'db>,
-    ) -> Option<Definition<'db>> {
+    ) -> Option<Declaration<'db>> {
         let scope_data = self.data(db);
         let mut s = scope_data.scopes.get(scope).cloned();
         while let Some(scope) = s {
@@ -147,7 +147,7 @@ impl<'db> BodyScope<'db> {
         db: &'db dyn BaseDb,
         scope: usize,
         name: Ident<'db>,
-    ) -> SmallVec<[Definition<'db>; 1]> {
+    ) -> SmallVec<[Declaration<'db>; 1]> {
         let mut res = SmallVec::new();
         let data = self.data(db);
         let mut s = data.scopes.get(scope).cloned();
@@ -169,7 +169,7 @@ impl<'db> BodyScope<'db> {
 pub struct ScopeResolver<'db> {
     db: &'db dyn Database,
     scopes: SmallVec<[ExprScope; 1]>,
-    definitions: Vec<(Ident<'db>, Definition<'db>)>,
+    definitions: Vec<(Ident<'db>, Declaration<'db>)>,
     scope_item_cnt: Vec<usize>,
     scope_by_salsa_id: BTreeMap<salsa::Id, usize>,
 }
@@ -184,7 +184,7 @@ fn resolve_body<'db>(
 ) -> BodyScope<'db> {
     let root_items: Vec<_> = args
         .into_iter()
-        .filter_map(|a| a.name(db).map(move |n| (n, Definition::Local(a))))
+        .filter_map(|a| a.name(db).map(move |n| (n, Declaration::Local(a))))
         .collect();
 
     let root_items_len = root_items.len();
@@ -215,7 +215,7 @@ fn resolve_body<'db>(
 }
 
 impl<'db> ScopeResolver<'db> {
-    fn add_item(&mut self, item: (Ident<'db>, Definition<'db>)) {
+    fn add_item(&mut self, item: (Ident<'db>, Declaration<'db>)) {
         self.definitions.push(item);
         if let Some(s) = self.scopes.last_mut() {
             s.range.end += 1;
@@ -257,7 +257,7 @@ impl<'db> Visitor<'db> for &mut ScopeResolver<'db> {
                 for item in returns
                     .iter()
                     .flatten()
-                    .filter_map(|a| a.name(self.db).map(|name| (name, Definition::Local(*a))))
+                    .filter_map(|a| a.name(self.db).map(|name| (name, Declaration::Local(*a))))
                 {
                     self.add_item(item);
                 }
@@ -275,7 +275,7 @@ impl<'db> Visitor<'db> for &mut ScopeResolver<'db> {
                 for item in items
                     .iter()
                     .flatten()
-                    .filter_map(|a| a.name(self.db).map(|name| (name, Definition::Local(*a))))
+                    .filter_map(|a| a.name(self.db).map(|name| (name, Declaration::Local(*a))))
                 {
                     self.add_item(item);
                 }

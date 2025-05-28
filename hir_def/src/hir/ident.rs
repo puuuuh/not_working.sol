@@ -36,6 +36,7 @@ impl<'db> IdentPath<'db> {
 }
 
 #[salsa::interned(debug)]
+#[derive(PartialOrd, Ord)]
 pub struct Ident<'db> {
     #[returns(ref)]
     pub data: String,

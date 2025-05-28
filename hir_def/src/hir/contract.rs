@@ -21,6 +21,7 @@ use syntax::ast::nodes::{self, Contract};
 use vfs::File;
 
 #[salsa::tracked(debug)]
+#[derive(PartialOrd, Ord)]
 pub struct ContractId<'db> {
     #[id]
     pub file: File,

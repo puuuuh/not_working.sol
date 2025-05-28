@@ -3,12 +3,19 @@ mod path;
 pub use crate::path::{AnchoredPath, VfsPath};
 use dashmap::{DashMap, Entry};
 use salsa::Database;
-use std::sync::Arc;
+use std::{fmt::Debug, sync::Arc};
 
-#[salsa::input(debug)]
+#[salsa::input]
+#[derive(PartialOrd, Ord)]
 pub struct File {
     pub exists: bool,
     pub content: Arc<str>,
+}
+
+impl Debug for File {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("File").field(&self.0).finish()
+    }
 }
 
 #[derive(Default)]

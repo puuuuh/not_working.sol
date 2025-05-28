@@ -11,6 +11,7 @@ use syntax::ast::nodes;
 use vfs::File;
 
 #[tracked(debug)]
+#[derive(PartialOrd, Ord)]
 pub struct StructureId<'db> {
     #[id]
     pub file: File,

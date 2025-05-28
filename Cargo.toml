@@ -25,15 +25,15 @@ base_db = { path = "./base_db" }
 vfs = { path = "./vfs" }
 lang_server = { path = "./lang_server" }
 
-rowan = { version = "0.15.4" }
-salsa = { package = "salsa", git = "https://github.com/salsa-rs/salsa" }
+rowan = { version = "0.16.1" }
+salsa = { package = "salsa", git = "https://github.com/salsa-rs/salsa", rev = "16226b3eebdb432666493bb48b3f0672b8692339" }
 ide = { path = "./ide" }
 variance = "0.1.3"
 num-bigint = { version = "0.4.4" }
 indexmap = "2.6.0"
 futures = "=0.3.30"
 tracing = "0.1.40"
-derive_more = { features = ["display"], version = "1.0.0" }
+derive_more = { features = ["display"], version = "2.0" }
 sorted-vec = "0.8.4"
 line-index = "0.1.2"
 camino = "1.1.9"
