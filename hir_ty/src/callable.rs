@@ -1,5 +1,6 @@
 use base_db::BaseDb;
 use hir_def::Item;
+use hir_nameres::scope::body::MagicDefinitionKind;
 
 use crate::{
     resolver::resolve_item_signature,
@@ -9,10 +10,112 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Ord, PartialOrd, Eq, Hash, salsa::Update)]
 pub struct Callable<'db> {
     pub args: TyKindInterned<'db>,
+    // last arg can be repeated many times
+    pub variadic: bool,
     pub returns: Ty<'db>,
 }
 
 impl<'db> Callable<'db> {
+    pub fn try_from_magic(db: &'db dyn BaseDb, t: MagicDefinitionKind) -> Option<Self> {
+        let (args, ret) = match t {
+            MagicDefinitionKind::Keccak256 => {
+                (
+                    TyKindInterned::tuple(db, vec![Ty::new_intern(db, TyKind::Elementary(hir_def::ElementaryTypeRef::Bytes))]),
+                    Ty::new(TyKindInterned::new(db, TyKind::Elementary(hir_def::ElementaryTypeRef::FixedBytes { size: 32 })))
+                )
+            },
+            MagicDefinitionKind::Sha256 => {
+                (
+                    TyKindInterned::tuple(db, vec![Ty::new_intern(db, TyKind::Elementary(hir_def::ElementaryTypeRef::Bytes))]),
+                    Ty::new(TyKindInterned::new(db, TyKind::Elementary(hir_def::ElementaryTypeRef::FixedBytes { size: 32 })))
+                )
+            },
+            MagicDefinitionKind::Gasleft => {
+                (
+                    TyKindInterned::tuple(db, vec![]),
+                    Ty::new(TyKindInterned::new(db, TyKind::Elementary(hir_def::ElementaryTypeRef::Integer { signed: false, size: 256 })))
+                )
+            },
+            MagicDefinitionKind::Assert => {
+                (
+                    TyKindInterned::tuple(db, vec![Ty::new_intern(db, TyKind::Elementary(hir_def::ElementaryTypeRef::Bool))]),
+                    Ty::new(TyKindInterned::new(db, TyKind::Tuple(vec![])))
+                )
+            },
+            MagicDefinitionKind::Require => {
+                (
+                    TyKindInterned::tuple(db, vec![Ty::new_intern(db, TyKind::Elementary(hir_def::ElementaryTypeRef::Bool))]),
+                    Ty::new(TyKindInterned::new(db, TyKind::Tuple(vec![])))
+                )
+            },
+            MagicDefinitionKind::RequireWithMessage =>  {
+                (
+                    TyKindInterned::tuple(db, vec![
+                        Ty::new_intern(db, TyKind::Elementary(hir_def::ElementaryTypeRef::Bool)),
+                        Ty::new_intern(db, TyKind::Elementary(hir_def::ElementaryTypeRef::String))
+                    ]),
+                    Ty::new(TyKindInterned::new(db, TyKind::Tuple(vec![])))
+                )
+            },
+            MagicDefinitionKind::Revert => {
+                (
+                    TyKindInterned::tuple(db, vec![]),
+                    Ty::new(TyKindInterned::new(db, TyKind::Tuple(vec![])))
+                )
+            },
+            MagicDefinitionKind::RevertWithMessage => {
+                (
+                    TyKindInterned::tuple(db, vec![
+                        Ty::new_intern(db, TyKind::Elementary(hir_def::ElementaryTypeRef::String)),
+                    ]),
+                    Ty::new(TyKindInterned::new(db, TyKind::Tuple(vec![])))
+                )
+            },
+            MagicDefinitionKind::AddMod => {
+                let uint = Ty::new_intern(db, TyKind::Elementary(hir_def::ElementaryTypeRef::Integer { signed: false, size: 256 }));
+                (
+                    TyKindInterned::tuple(db, vec![
+                        uint,
+                        uint,
+                        uint
+                    ]),
+                    uint
+                )
+            },
+            MagicDefinitionKind::MulMod => {
+                let uint = Ty::new_intern(db, TyKind::Elementary(hir_def::ElementaryTypeRef::Integer { signed: false, size: 256 }));
+                (
+                    TyKindInterned::tuple(db, vec![
+                        uint,
+                        uint,
+                        uint
+                    ]),
+                    uint
+                )
+            },
+            MagicDefinitionKind::Ripemd160 => {
+                (
+                    TyKindInterned::tuple(db, vec![Ty::new_intern(db, TyKind::Elementary(hir_def::ElementaryTypeRef::Bytes))]),
+                    Ty::new(TyKindInterned::new(db, TyKind::Elementary(hir_def::ElementaryTypeRef::Integer { signed: false, size: 160 })))
+                )
+            },
+            MagicDefinitionKind::Ecrecover =>  {
+                let bytes32 = Ty::new_intern(db, TyKind::Elementary(hir_def::ElementaryTypeRef::FixedBytes { size: 32 }));
+                let uint8 = Ty::new_intern(db, TyKind::Elementary(hir_def::ElementaryTypeRef::Integer { signed: false, size: 8 }));
+                (
+                    TyKindInterned::tuple(db, vec![bytes32, uint8, bytes32, bytes32]),
+                    Ty::new(TyKindInterned::new(db, TyKind::Elementary(hir_def::ElementaryTypeRef::Address { payable: false })))
+                )
+            }
+            _ => return None
+        };
+
+        return Some(Callable {
+            args,
+            variadic: false,
+            returns: ret,
+        })
+    }
     pub fn try_from_ty(db: &'db dyn BaseDb, t: Ty<'db>) -> Option<Self> {
         match t.kind(db) {
             TyKind::Function(callable) => Some(callable),
@@ -24,6 +127,7 @@ impl<'db> Callable<'db> {
     pub fn try_from_item(db: &'db dyn BaseDb, item: Item<'db>) -> Option<Self> {
         Some(match item {
             Item::Contract(contract_id) => Self {
+                variadic: false,
                 args: TyKindInterned::new(
                     db,
                     TyKind::Elementary(hir_def::ElementaryTypeRef::Address { payable: false }),
@@ -31,6 +135,7 @@ impl<'db> Callable<'db> {
                 returns: Ty::new_intern(db, TyKind::Contract(contract_id)),
             },
             Item::Enum(enumeration_id) => Self {
+                variadic: false,
                 args: TyKindInterned::new(
                     db,
                     TyKind::Elementary(hir_def::ElementaryTypeRef::Integer {
@@ -44,6 +149,7 @@ impl<'db> Callable<'db> {
                 let type_res = resolve_item_signature(db, item);
                 let basic_ty = type_res.type_ref(db, user_defined_value_type_id.ty(db));
                 Self {
+                    variadic: false,
                     args: basic_ty,
                     returns: Ty::new_intern(
                         db,
@@ -59,6 +165,7 @@ impl<'db> Callable<'db> {
                     .map(|p| Ty::new(type_res.type_ref(db, p.info(db).ty)))
                     .collect();
                 Self {
+                    variadic: false,
                     args: TyKindInterned::new(db, TyKind::Tuple(params)),
                     returns: Ty::new_intern(db, TyKind::Error),
                 }
@@ -71,6 +178,7 @@ impl<'db> Callable<'db> {
                     .map(|p| Ty::new(type_res.type_ref(db, p.info(db).ty)))
                     .collect();
                 Self {
+                    variadic: false,
                     args: TyKindInterned::new(db, TyKind::Tuple(params)),
                     returns: Ty::new_intern(db, TyKind::Event),
                 }
@@ -88,6 +196,7 @@ impl<'db> Callable<'db> {
                 if let Some(r) = &info.returns {
                     if r.len() == 1 {
                         return Some(Self {
+                            variadic: false,
                             args,
                             returns: Ty::new_in(
                                 type_res.type_ref(db, r[0].ty(db)),
@@ -103,7 +212,7 @@ impl<'db> Callable<'db> {
                     .map(|p| Ty::new_in(type_res.type_ref(db, p.ty(db)), p.location(db).into()))
                     .collect();
 
-                Self { args, returns: Ty::new_intern(db, TyKind::Tuple(returns)) }
+                Self { variadic: false, args, returns: Ty::new_intern(db, TyKind::Tuple(returns)) }
             }
             Item::Struct(structure_id) => {
                 let type_res = resolve_item_signature(db, item);
@@ -113,6 +222,7 @@ impl<'db> Callable<'db> {
                     .map(|p| Ty::new(type_res.type_ref(db, p.ty(db))))
                     .collect();
                 Self {
+                    variadic: false, 
                     args: TyKindInterned::new(db, TyKind::Tuple(params)),
                     returns: Ty::new_intern(db, TyKind::Struct(structure_id)),
                 }
@@ -131,6 +241,7 @@ impl<'db> Callable<'db> {
                     None => TyKind::Unknown,
                 };
                 Self {
+                    variadic: false, 
                     args: TyKindInterned::new(db, TyKind::Tuple(params)),
                     returns: Ty::new_intern(db, contract),
                 }
@@ -145,6 +256,7 @@ impl<'db> Callable<'db> {
                     .collect();
 
                 Self {
+                    variadic: false, 
                     args: TyKindInterned::new(db, TyKind::Tuple(params)),
                     returns: Ty::new_intern(db, TyKind::Unknown),
                 }

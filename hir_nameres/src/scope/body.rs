@@ -34,6 +34,19 @@ pub enum MagicDefinitionKind {
     Block,
     Msg,
     Tx,
+    Abi,
+    Keccak256,
+    Sha256,
+    Gasleft,
+    Assert,
+    Require,
+    RequireWithMessage,
+    Revert,
+    RevertWithMessage,
+    AddMod,
+    MulMod,
+    Ripemd160,
+    Ecrecover,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, salsa::Update)]

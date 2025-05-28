@@ -284,12 +284,20 @@ impl<'db> TypeResolutionCtx<'db> {
                 let owner_ty = self.resolve_expr(db, *owner);
                 let members = owner_ty.members(db);
                 for def in members.get(member_name).into_iter().flatten() {
-                    let MemberKind::Item(item) = def else {
-                        continue;
-                    };
-
-                    let Some(c) = Callable::try_from_item(db, *item) else {
-                        continue;
+                    let c= match def {
+                        MemberKind::Item(item) => {
+                            let Some(c) = Callable::try_from_item(db, *item) else {
+                                continue;
+                            };
+                            c
+                        },
+                        MemberKind::SynteticItem(ty) => {
+                            match ty.kind(db) {
+                                TyKind::Function(callable) => callable,
+                                _ => continue
+                            }
+                        },
+                        _ => continue
                     };
 
                     if args_type.can_coerce(db, c.args.data(db)) {
@@ -327,20 +335,26 @@ impl<'db> TypeResolutionCtx<'db> {
             }
             Expr::Ident { name_ref } => {
                 let args_type = args_type.data(db);
-                let defs = self.scope.for_expr(db, expr);
-                for def in defs.find_all(db, *name_ref) {
-                    let Declaration::Item(item) = def else {
-                        continue;
+                let defs = self.scope.for_expr(db, expr).find_all(db, *name_ref);
+                for def in defs.iter().copied() {
+                    let c= match def {
+                        Declaration::Item(item) => {
+                            let Some(c) = Callable::try_from_item(db, item) else {
+                                continue;
+                            };
+                            c
+                        },
+                        Declaration::Magic(magic_item) => {
+                            let Some(c) = Callable::try_from_magic(db, magic_item) else {
+                                continue;
+                            };
+                            c
+                        }
+                        _ => continue
                     };
 
-                    let ty = self.resolve_item_type(db, item);
-
-                    let Some(callable) = Callable::try_from_item(db, item) else {
-                        continue;
-                    };
-
-                    if args_type.can_coerce(db, callable.args.data(db)) {
-                        return Ty::new(ty);
+                    if args_type.can_coerce(db, c.args.data(db)) || defs.len() == 1 {
+                        return Ty::new_intern(db, TyKind::Function(c));
                     }
                 }
                 Ty::new(self.unknown)
@@ -389,7 +403,7 @@ impl<'db> TypeResolutionCtx<'db> {
                 match def {
                     MemberKind::Item(item) => {
                         return Some(match owner_ty.kind(db) {
-                            TyKind::Type(item) => Ty::new(self.resolve_item_ref(db, item)),
+                            TyKind::Type(owner) => Ty::new(self.resolve_item_ref(db, *item)),
                             _ => Ty::new(self.resolve_item_type(db, *item)),
                         })
                     }
@@ -483,12 +497,14 @@ impl<'db> TypeResolutionCtx<'db> {
                             Callable::try_from_item(db, Item::Constructor(c))
                         } else {
                             Some(Callable {
+                                variadic: false,
                                 args: TyKindInterned::new(db, TyKind::Tuple(vec![])),
                                 returns: Ty::new(res),
                             })
                         }
                     }
                     TyKind::Array(ty_kind_interned, _) => Some(Callable {
+                        variadic: false,
                         args: TyKindInterned::new(
                             db,
                             TyKind::Tuple(vec![Ty::new_intern(
@@ -502,6 +518,7 @@ impl<'db> TypeResolutionCtx<'db> {
                         returns: Ty::new(res),
                     }),
                     TyKind::Elementary(ElementaryTypeRef::Bytes) => Some(Callable {
+                        variadic: false,
                         args: TyKindInterned::new(
                             db,
                             TyKind::Tuple(vec![Ty::new_intern(
@@ -578,7 +595,7 @@ impl<'db> TypeResolutionCtx<'db> {
                     Ty::new_intern(db, TyKind::Tuple(returns))
                 };
                 let args = TyKindInterned::new(db, TyKind::Tuple(args));
-                return TyKindInterned::new(db, TyKind::Function(Callable { args, returns }));
+                return TyKindInterned::new(db, TyKind::Function(Callable { variadic: false, args, returns }));
             }
             TypeRefKind::Mapping { key_type, value_type, .. } => TyKind::Mapping(
                 self.resolve_type_ref(db, scope, key_type),
@@ -994,6 +1011,38 @@ new First(): First memory
 address: address
 First: First
 First: First
+",
+        );
+    }
+
+    #[test]
+    fn enum_variant() {
+        let fixture = TestFixture::parse(
+            r"
+            /main.sol
+
+            contract Test1 {
+                enum SomeEnum {
+                    Var1,
+                    Var2
+                }
+            }
+
+            contract Test
+            {
+                function hel$0loWorld() {
+                    Test1.SomeEnum.Var1;
+                }
+            }
+        ",
+        );
+
+        check_types(
+            fixture,
+            "Test1: type(Test1)
+Test1.SomeEnum: type(SomeEnum)
+Test1.SomeEnum.Var1: SomeEnum memory
+
 ",
         );
     }

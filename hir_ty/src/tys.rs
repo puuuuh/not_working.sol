@@ -29,6 +29,8 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, salsa::Update)]
 pub enum TyKind<'db> {
     Unknown,
+    // For functions like abi.encode
+    Any,
     // Callable
     Function(Callable<'db>),
     Modifier(Callable<'db>),
@@ -54,6 +56,12 @@ pub enum TyKind<'db> {
 #[derive(PartialOrd, Ord)]
 pub struct TyKindInterned<'db> {
     pub data: TyKind<'db>,
+}
+
+impl<'db> TyKindInterned<'db> {
+    pub fn tuple(db: &'db dyn BaseDb, tys: Vec<Ty<'db>>) -> Self {
+        Self::new(db, TyKind::Tuple(tys))
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, salsa::Update)]
@@ -109,6 +117,7 @@ impl<'db> TyKind<'db> {
     }
     pub fn can_coerce(&self, db: &'db dyn BaseDb, dst: TyKind<'db>) -> bool {
         match (self, dst) {
+            (_, TyKind::Any) => true,
             (a, b) if *a == b => true,
             (TyKind::Elementary(src), TyKind::Elementary(dst)) => match src {
                 hir_def::ElementaryTypeRef::Address { payable: false } => {
@@ -169,9 +178,20 @@ impl<'db> TyKind<'db> {
             TyKind::Unknown => {
                 *res += "{unknown}";
             }
+            TyKind::Any => {
+                *res += "{any}";
+            }
             TyKind::Function(callable) => {
                 *res += "function";
-                callable.args.data(db).human_readable_to(db, res);
+                let tmp = callable.args.data(db);
+                // FIXME
+                if matches!(tmp, TyKind::Tuple(_)) {
+                    tmp.human_readable_to(db, res);
+                } else {
+                    *res += "(";
+                    tmp.human_readable_to(db, res);
+                    *res += ")";
+                }
                 *res += " returns(";
                 callable.returns.human_readable_to(db, res);
                 *res += ")";
@@ -452,6 +472,47 @@ pub fn members<'db>(
                     );
                     &[("gasprice", uint), ("origin", address)][..]
                 }
+                MagicDefinitionKind::Abi => {
+                    let any = TyKindInterned::new(
+                        db,
+                        TyKind::Any
+                    );
+                    &[
+                        ("decode", Ty::new_intern(db, TyKind::Function(Callable {
+                            variadic: true,
+                            args: any,
+                            returns: Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Bytes)),
+                        }))), 
+                        ("encode", Ty::new_intern(db, TyKind::Function(Callable {
+                            variadic: true,
+                            args: any,
+                            returns: Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Bytes)),
+                        }))), 
+                        ("encodePacked", Ty::new_intern(db, TyKind::Function(Callable {
+                            variadic: true,
+                            args: any,
+                            returns: Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Bytes)),
+                        }))), 
+                        ("encodeWithSelector", Ty::new_intern(db, TyKind::Function(Callable {
+                            variadic: true,
+                            args: any,
+                            returns: Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Bytes)),
+                        }))),
+                        ("encodeCall", Ty::new_intern(db, TyKind::Function(Callable {
+                            variadic: true,
+                            args: any,
+                            returns: Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Bytes)),
+                        }))),
+                        ("encodeWithSignature", Ty::new_intern(db, TyKind::Function(Callable {
+                            variadic: true,
+                            args: TyKindInterned::new(db, TyKind::Tuple(vec![
+                                Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::FixedBytes {size: 4})),
+                                Ty::new(any)
+                            ])),
+                            returns: Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Bytes)),
+                        })))][..]
+                },
+                _ => return res
             };
             res.extend(fields.iter().map(|(name, ty)| {
                 (Ident::new(db, *name), SmallVec::from_elem(MemberKind::SynteticItem(*ty), 1))
