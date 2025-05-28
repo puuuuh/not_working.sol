@@ -284,26 +284,24 @@ impl<'db> TypeResolutionCtx<'db> {
                 let owner_ty = self.resolve_expr(db, *owner);
                 let members = owner_ty.members(db, self.extensions);
                 for def in members.get(member_name).into_iter().flatten() {
-                    let c= match def {
+                    let c = match def {
                         MemberKind::Item(item) => {
                             let Some(c) = Callable::try_from_item(db, *item) else {
                                 continue;
                             };
                             c
+                        }
+                        MemberKind::SynteticItem(ty) => match ty.kind(db) {
+                            TyKind::Callable(callable) => callable,
+                            _ => continue,
                         },
-                        MemberKind::SynteticItem(ty) => {
-                            match ty.kind(db) {
-                                TyKind::Callable(callable) => callable,
-                                _ => continue
-                            }
-                        },
-                        MemberKind::ExtensionFunction(f, c) => {
-                            c.clone()
-                        },
-                        _ => continue
+                        MemberKind::ExtensionFunction(f, c) => c.clone(),
+                        _ => continue,
                     };
 
-                    if args.len() == c.args.len() && args.iter().zip(&c.args).all(|(a, b)| a.can_coerce(db, *b)) {
+                    if args.len() == c.args.len()
+                        && args.iter().zip(&c.args).all(|(a, b)| a.can_coerce(db, *b))
+                    {
                         return Ty::new_intern(db, TyKind::Callable(c));
                     }
                 }
@@ -312,23 +310,25 @@ impl<'db> TypeResolutionCtx<'db> {
             Expr::Ident { name_ref } => {
                 let defs = self.scope.for_expr(db, expr).find_all(db, *name_ref);
                 for def in defs.iter().copied() {
-                    let c= match def {
+                    let c = match def {
                         Declaration::Item(item) => {
                             let Some(c) = Callable::try_from_item(db, item) else {
                                 continue;
                             };
                             c
-                        },
+                        }
                         Declaration::Magic(magic_item) => {
                             let Some(c) = Callable::try_from_magic(db, magic_item) else {
                                 continue;
                             };
                             c
                         }
-                        _ => continue
+                        _ => continue,
                     };
 
-                    if args.len() == c.args.len() && args.iter().zip(&c.args).all(|(a, b)| a.can_coerce(db, *b)) {
+                    if args.len() == c.args.len()
+                        && args.iter().zip(&c.args).all(|(a, b)| a.can_coerce(db, *b))
+                    {
                         return Ty::new_intern(db, TyKind::Callable(c));
                     }
                 }
@@ -377,21 +377,21 @@ impl<'db> TypeResolutionCtx<'db> {
 
                 match def {
                     MemberKind::Item(item) => {
-                                        return Some(match owner_ty.kind(db) {
-                                            TyKind::Type(owner) => Ty::new(self.resolve_item_ref(db, *item)),
-                                            _ => Ty::new(self.resolve_item_type(db, *item)),
-                                        })
-                                    }
+                        return Some(match owner_ty.kind(db) {
+                            TyKind::Type(owner) => Ty::new(self.resolve_item_ref(db, *item)),
+                            _ => Ty::new(self.resolve_item_type(db, *item)),
+                        })
+                    }
                     MemberKind::EnumVariant(e) => TyKind::Enum(e.parent(db)),
                     MemberKind::Field(f) => {
-                                        if let TyKind::Struct(s) = owner_ty.kind(db) {
-                                            return Some(Ty::new_in(
-                                                self.resolve_type_ref(db, Item::Struct(s).scope(db), f.ty(db)),
-                                                modifier,
-                                            ));
-                                        }
-                                        return None;
-                                    }
+                        if let TyKind::Struct(s) = owner_ty.kind(db) {
+                            return Some(Ty::new_in(
+                                self.resolve_type_ref(db, Item::Struct(s).scope(db), f.ty(db)),
+                                modifier,
+                            ));
+                        }
+                        return None;
+                    }
                     MemberKind::SynteticItem(t) => return Some(*t),
                     MemberKind::ExtensionFunction(f, c) => {
                         let mut c = c.clone();
@@ -437,9 +437,7 @@ impl<'db> TypeResolutionCtx<'db> {
                     Declaration::Item(item @ Item::StateVariable(state_variable)) => {
                         Ty::new_in(self.resolve_item_type(db, item), TypeModifier::StorageRef)
                     }
-                    Declaration::Item(item) => {
-                        Ty::new(self.resolve_item_ref(db, item))
-                    } 
+                    Declaration::Item(item) => Ty::new(self.resolve_item_ref(db, item)),
                     Declaration::Local(item) => {
                         let ty_kind = self.resolve_type_ref(db, self.scope, item.ty(db));
                         Ty::new_in(ty_kind, item.location(db).into())
@@ -475,17 +473,19 @@ impl<'db> TypeResolutionCtx<'db> {
                             Some(Callable {
                                 variadic: false,
                                 args: SmallVec::new(),
-                                returns: smallvec![Ty::new(res)]
+                                returns: smallvec![Ty::new(res)],
                             })
                         }
                     }
                     TyKind::Array(ty_kind_interned, _) => Some(Callable {
                         variadic: false,
-                        args: smallvec![
-                            Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Integer {
+                        args: smallvec![Ty::new_intern(
+                            db,
+                            TyKind::Elementary(ElementaryTypeRef::Integer {
                                 signed: false,
                                 size: 256,
-                            }))],
+                            })
+                        )],
                         returns: smallvec![Ty::new(res)],
                     }),
                     TyKind::Elementary(ElementaryTypeRef::Bytes) => Some(Callable {
@@ -497,7 +497,7 @@ impl<'db> TypeResolutionCtx<'db> {
                                 size: 256,
                             }),
                         )],
-                        returns: smallvec![Ty::new(res)]
+                        returns: smallvec![Ty::new(res)],
                     }),
                     _ => None,
                 }?;
@@ -558,7 +558,10 @@ impl<'db> TypeResolutionCtx<'db> {
                     })
                     .collect();
                 let args = args;
-                return TyKindInterned::new(db, TyKind::Callable(Callable { variadic: false, args, returns }));
+                return TyKindInterned::new(
+                    db,
+                    TyKind::Callable(Callable { variadic: false, args, returns }),
+                );
             }
             TypeRefKind::Mapping { key_type, value_type, .. } => TyKind::Mapping(
                 self.resolve_type_ref(db, scope, key_type),
@@ -668,7 +671,7 @@ mod tests {
     use hir_def::{items::HirPrint, lower_file, FileExt, Item};
     use rowan::ast::AstNode;
     use salsa::{Database, Setter};
-    use tracing_subscriber::{filter::LevelFilter};
+    use tracing_subscriber::filter::LevelFilter;
 
     use crate::resolver::{resolve_all, resolve_file};
 

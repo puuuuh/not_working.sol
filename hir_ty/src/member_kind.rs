@@ -1,6 +1,9 @@
 use hir_def::{EnumerationVariantId, FunctionId, Item, StructureFieldId, VariableDeclaration};
 
-use crate::{callable::Callable, tys::{Ty, TyKindInterned}};
+use crate::{
+    callable::Callable,
+    tys::{Ty, TyKindInterned},
+};
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, salsa::Update)]
 pub enum MemberKind<'db> {

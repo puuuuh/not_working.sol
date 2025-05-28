@@ -6,23 +6,23 @@ use hir_nameres::scope::{body::Declaration, HasScope, Scope};
 use smallvec::SmallVec;
 
 use crate::{
-    callable::Callable, resolver::{resolve_item, TypeResolutionCtx}, tys::{TyKind, TyKindInterned}
+    callable::Callable,
+    resolver::{resolve_item, TypeResolutionCtx},
+    tys::{TyKind, TyKindInterned},
 };
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash, Default, salsa::Update)]
 pub struct Extensions<'db> {
-    pub local: BTreeMap<TyKindInterned<'db>, BTreeMap<Ident<'db>, SmallVec<[(Callable<'db>, FunctionId<'db>); 1]>>>,
+    pub local: BTreeMap<
+        TyKindInterned<'db>,
+        BTreeMap<Ident<'db>, SmallVec<[(Callable<'db>, FunctionId<'db>); 1]>>,
+    >,
     pub wildcard: BTreeMap<Ident<'db>, SmallVec<[(Callable<'db>, FunctionId<'db>); 1]>>,
 }
 
 impl<'db> Extensions<'db> {
     pub fn empty<'a>() -> &'a Extensions<'a> {
-        const {
-            &Extensions {
-                local: BTreeMap::new(),
-                wildcard: BTreeMap::new(),
-            }
-        }
+        const { &Extensions { local: BTreeMap::new(), wildcard: BTreeMap::new() } }
     }
 
     pub fn for_item(db: &'db dyn BaseDb, item: Item<'db>) -> &'db Self {
@@ -121,7 +121,8 @@ fn collect_usings_to<'db, 'a>(
                                 _ => None,
                             }) {
                                 if let Some(name) = f.name(db) {
-                                    if let Some(c) = Callable::try_from_item(db, Item::Function(*f)) {
+                                    if let Some(c) = Callable::try_from_item(db, Item::Function(*f))
+                                    {
                                         tmp.entry(name).or_default().push((c, *f));
                                     }
                                 }

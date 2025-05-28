@@ -43,7 +43,11 @@ impl<'db> ItemScope<'db> {
     }
 
     #[salsa::tracked]
-    pub fn find_all(self, db: &'db dyn BaseDb, name: Ident<'db>) -> SmallVec<[Declaration<'db>; 1]> {
+    pub fn find_all(
+        self,
+        db: &'db dyn BaseDb,
+        name: Ident<'db>,
+    ) -> SmallVec<[Declaration<'db>; 1]> {
         let mut res: SmallVec<[Declaration<'db>; 1]> = Default::default();
 
         let mut t = Some(self);

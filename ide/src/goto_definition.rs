@@ -44,13 +44,15 @@ pub fn goto_definition(db: &dyn BaseDb, pos: FilePosition) -> Option<Vec<Navigat
                             .flat_map(|a| match a {
                                 MemberKind::Item(item) => NavigationTarget::from_item(db, item),
                                 MemberKind::Field(structure_field_id) => {
-                                                                NavigationTarget::from_field(db, structure_field_id)
-                                                            }
+                                    NavigationTarget::from_field(db, structure_field_id)
+                                }
                                 MemberKind::EnumVariant(enumeration_variant_id) => {
-                                                                NavigationTarget::from_variant(db, enumeration_variant_id)
-                                                            }
+                                    NavigationTarget::from_variant(db, enumeration_variant_id)
+                                }
                                 MemberKind::SynteticItem(ty) => None,
-                                MemberKind::ExtensionFunction(function_id, callable) => NavigationTarget::from_item(db, Item::Function(function_id)),
+                                MemberKind::ExtensionFunction(function_id, callable) => {
+                                    NavigationTarget::from_item(db, Item::Function(function_id))
+                                }
                             })
                             .collect()
                     }

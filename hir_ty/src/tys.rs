@@ -23,7 +23,10 @@ use std::{
 };
 
 use crate::{
-    callable::{Callable, CallableType}, extensions::Extensions, member_kind::MemberKind, resolver::resolve_item,
+    callable::{Callable, CallableType},
+    extensions::Extensions,
+    member_kind::MemberKind,
+    resolver::resolve_item,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, salsa::Update)]
@@ -155,7 +158,9 @@ impl<'db> TyKind<'db> {
                 (src_tuple.len() == dst_tuple.len())
                     && src_tuple.iter().zip(dst_tuple).all(|(src, dst)| src.can_coerce(db, dst))
             }
-            (TyKind::Contract(a), TyKind::Contract(b)) => *a == b || inheritance_chain(db, *a).contains(&b),
+            (TyKind::Contract(a), TyKind::Contract(b)) => {
+                *a == b || inheritance_chain(db, *a).contains(&b)
+            }
             (a, b) => false,
         }
     }
@@ -324,7 +329,9 @@ pub fn members<'db>(
         TyKind::Contract(contract_id) => {
             let chain = inheritance_chain(db, contract_id);
             for contract_id in chain {
-                if let Some(t) = ext.local.get(&TyKindInterned::new(db, TyKind::Contract(*contract_id))) {
+                if let Some(t) =
+                    ext.local.get(&TyKindInterned::new(db, TyKind::Contract(*contract_id)))
+                {
                     for (name, data) in t {
                         for (c, f) in data {
                             if c.args.first().copied() == Some(Ty::new(ty)) {
@@ -332,10 +339,14 @@ pub fn members<'db>(
                                 c.args.remove(0);
                                 match res.entry(*name) {
                                     Entry::Vacant(vacant_entry) => {
-                                        vacant_entry.insert(smallvec![MemberKind::ExtensionFunction(*f, c)]);
+                                        vacant_entry.insert(smallvec![
+                                            MemberKind::ExtensionFunction(*f, c)
+                                        ]);
                                     }
                                     Entry::Occupied(mut occupied_entry) => {
-                                        occupied_entry.get_mut().push(MemberKind::ExtensionFunction(*f, c));
+                                        occupied_entry
+                                            .get_mut()
+                                            .push(MemberKind::ExtensionFunction(*f, c));
                                     }
                                 }
                             }
@@ -365,7 +376,7 @@ pub fn members<'db>(
                             occupied_entry.get_mut().push(item);
                         }
                     }
-                };
+                }
             }
         }
         TyKind::Array(ty_kind_interned, _) => {
@@ -498,46 +509,100 @@ pub fn members<'db>(
                     &[("gasprice", uint), ("origin", address)][..]
                 }
                 MagicDefinitionKind::Abi => {
-                    let any = Ty::new_intern(
-                        db,
-                        TyKind::Any
-                    );
+                    let any = Ty::new_intern(db, TyKind::Any);
                     &[
-                        ("decode", Ty::new_intern(db, TyKind::Callable(Callable {
-                            variadic: true,
-                            args: smallvec![any],
-                            returns: smallvec![any]
-                        }))), 
-                        ("encode", Ty::new_intern(db, TyKind::Callable(Callable {
-                            variadic: true,
-                            args: smallvec![any],
-                            returns: smallvec![Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Bytes))]
-                        }))), 
-                        ("encodePacked", Ty::new_intern(db, TyKind::Callable(Callable {
-                            variadic: true,
-                            args: smallvec![any],
-                            returns: smallvec![Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Bytes))]
-                        }))), 
-                        ("encodeWithSelector", Ty::new_intern(db, TyKind::Callable(Callable {
-                            variadic: true,
-                            args: smallvec![any],
-                            returns: smallvec![Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Bytes))]
-                        }))),
-                        ("encodeCall", Ty::new_intern(db, TyKind::Callable(Callable {
-                            variadic: true,
-                            args: smallvec![any],
-                            returns: smallvec![Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Bytes))]
-                        }))),
-                        ("encodeWithSignature", Ty::new_intern(db, TyKind::Callable(Callable {
-                            variadic: true,
-                            args: smallvec![
-                                Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::FixedBytes {size: 4})),
-                                any
-                            ],
-                            returns: smallvec![Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Bytes))]
-                        })))][..]
-                },
-                _ => return res
+                        (
+                            "decode",
+                            Ty::new_intern(
+                                db,
+                                TyKind::Callable(Callable {
+                                    variadic: true,
+                                    args: smallvec![any],
+                                    returns: smallvec![any],
+                                }),
+                            ),
+                        ),
+                        (
+                            "encode",
+                            Ty::new_intern(
+                                db,
+                                TyKind::Callable(Callable {
+                                    variadic: true,
+                                    args: smallvec![any],
+                                    returns: smallvec![Ty::new_intern(
+                                        db,
+                                        TyKind::Elementary(ElementaryTypeRef::Bytes)
+                                    )],
+                                }),
+                            ),
+                        ),
+                        (
+                            "encodePacked",
+                            Ty::new_intern(
+                                db,
+                                TyKind::Callable(Callable {
+                                    variadic: true,
+                                    args: smallvec![any],
+                                    returns: smallvec![Ty::new_intern(
+                                        db,
+                                        TyKind::Elementary(ElementaryTypeRef::Bytes)
+                                    )],
+                                }),
+                            ),
+                        ),
+                        (
+                            "encodeWithSelector",
+                            Ty::new_intern(
+                                db,
+                                TyKind::Callable(Callable {
+                                    variadic: true,
+                                    args: smallvec![any],
+                                    returns: smallvec![Ty::new_intern(
+                                        db,
+                                        TyKind::Elementary(ElementaryTypeRef::Bytes)
+                                    )],
+                                }),
+                            ),
+                        ),
+                        (
+                            "encodeCall",
+                            Ty::new_intern(
+                                db,
+                                TyKind::Callable(Callable {
+                                    variadic: true,
+                                    args: smallvec![any],
+                                    returns: smallvec![Ty::new_intern(
+                                        db,
+                                        TyKind::Elementary(ElementaryTypeRef::Bytes)
+                                    )],
+                                }),
+                            ),
+                        ),
+                        (
+                            "encodeWithSignature",
+                            Ty::new_intern(
+                                db,
+                                TyKind::Callable(Callable {
+                                    variadic: true,
+                                    args: smallvec![
+                                        Ty::new_intern(
+                                            db,
+                                            TyKind::Elementary(ElementaryTypeRef::FixedBytes {
+                                                size: 4
+                                            })
+                                        ),
+                                        any
+                                    ],
+                                    returns: smallvec![Ty::new_intern(
+                                        db,
+                                        TyKind::Elementary(ElementaryTypeRef::Bytes)
+                                    )],
+                                }),
+                            ),
+                        ),
+                    ][..]
+                }
+                _ => return res,
             };
             res.extend(fields.iter().map(|(name, ty)| {
                 (Ident::new(db, *name), SmallVec::from_elem(MemberKind::SynteticItem(*ty), 1))
@@ -635,7 +700,7 @@ impl<'db> Ty<'db> {
     pub fn members(
         self,
         db: &'db dyn BaseDb,
-        mut ext: &'db Extensions<'db>
+        mut ext: &'db Extensions<'db>,
     ) -> &'db BTreeMap<Ident<'db>, SmallVec<[MemberKind<'db>; 1]>> {
         if !matches!(self.kind(db), TyKind::Contract(_)) {
             ext = Extensions::empty();

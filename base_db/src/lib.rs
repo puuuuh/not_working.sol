@@ -47,11 +47,14 @@ pub struct TestDatabase {
 
 impl Default for TestDatabase {
     fn default() -> Self {
-        let db = Self { storage: salsa::Storage::new(Some(Box::new({
+        let db = Self {
+            storage: salsa::Storage::new(Some(Box::new({
                 move |event| {
                     debug!("Event: {event:?}");
                 }
-            }))), vfs: Default::default() };
+            }))),
+            vfs: Default::default(),
+        };
         Project::new(&db, VfsPath::from_virtual("".to_owned()));
         db
     }

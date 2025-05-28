@@ -4,7 +4,9 @@ pub mod item;
 use base_db::BaseDb;
 pub use body::BodyScope;
 use hir_def::{
-    lower_file, Constructor, ConstructorId, ContractId, EnumerationId, ErrorId, EventId, ExprId, FunctionId, Ident, IdentPath, ImportId, Item, ModifierId, PragmaId, SourceUnit, StateVariableId, StatementId, StructureId, UserDefinedValueTypeId, UsingId, Visibility
+    Constructor, ConstructorId, ContractId, EnumerationId, ErrorId, EventId, ExprId, FunctionId,
+    Ident, IdentPath, ImportId, Item, ModifierId, PragmaId, SourceUnit, StateVariableId,
+    StatementId, StructureId, UserDefinedValueTypeId, UsingId, Visibility, lower_file,
 };
 pub use item::ItemScope;
 
@@ -57,7 +59,11 @@ impl<'db> Scope<'db> {
         }
     }
 
-    pub fn find_all(self, db: &'db dyn BaseDb, name: Ident<'db>) -> SmallVec<[Declaration<'db>; 1]> {
+    pub fn find_all(
+        self,
+        db: &'db dyn BaseDb,
+        name: Ident<'db>,
+    ) -> SmallVec<[Declaration<'db>; 1]> {
         match self {
             Scope::Item(item_scope) => item_scope.find_all(db, name),
             Scope::Body(body_scope) => body_scope.parent(db).find_all(db, name),
@@ -178,24 +184,15 @@ impl<'db> HasScope<'db> for ContractId<'db> {
         let mut items: BTreeMap<Ident<'_>, smallvec::SmallVec<[Declaration<'_>; 1]>> =
             BTreeMap::new();
         for c in chain.iter() {
-            let named_items = c
-                .items(db)
-                .iter()
-                .filter_map(|a| Some((a.name(db)?, *a)));
+            let named_items = c.items(db).iter().filter_map(|a| Some((a.name(db)?, *a)));
             for (name, def) in named_items {
                 let vis = match def {
-                    hir_def::ContractItem::Function(function_id) => {
-                        function_id.info(db).vis
-                    },
-                    hir_def::ContractItem::Modifier(modifier_id) => {
-                        Visibility::Public
-                    },
+                    hir_def::ContractItem::Function(function_id) => function_id.info(db).vis,
+                    hir_def::ContractItem::Modifier(modifier_id) => Visibility::Public,
                     hir_def::ContractItem::StateVariable(state_variable_id) => {
                         state_variable_id.info(db).vis
-                    },
-                    _ => {
-                        hir_def::Visibility::Public
                     }
+                    _ => hir_def::Visibility::Public,
                 };
                 let visible = match vis {
                     Visibility::Internal => true,
@@ -209,7 +206,8 @@ impl<'db> HasScope<'db> for ContractId<'db> {
                 }
                 match items.entry(name) {
                     btree_map::Entry::Vacant(vacant_entry) => {
-                        vacant_entry.insert(SmallVec::from_elem(Declaration::Item((def).into()), 1));
+                        vacant_entry
+                            .insert(SmallVec::from_elem(Declaration::Item((def).into()), 1));
                     }
                     btree_map::Entry::Occupied(mut occupied_entry) => {
                         occupied_entry.get_mut().push(Declaration::Item((def).into()));

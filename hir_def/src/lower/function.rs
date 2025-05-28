@@ -4,7 +4,7 @@ use crate::hir::Item;
 use crate::hir::StateMutability;
 use crate::hir::VariableDeclaration;
 use crate::hir::Visibility;
-use crate::hir::{FunctionSig, FunctionId, ModifierInvocation};
+use crate::hir::{FunctionId, FunctionSig, ModifierInvocation};
 use crate::hir::{Ident, IdentPath};
 use crate::lower::LowerCtx;
 use crate::FileAstPtr;

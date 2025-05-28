@@ -10,10 +10,8 @@ use crate::{
 
 #[derive(Debug, Clone, PartialEq, Ord, PartialOrd, Eq, Hash, salsa::Update)]
 pub enum CallableType<'db> {
-    ExtensionFn {
-        this: Ty<'db>
-    },
-    Plain
+    ExtensionFn { this: Ty<'db> },
+    Plain,
 }
 
 #[derive(Debug, Clone, PartialEq, Ord, PartialOrd, Eq, Hash, salsa::Update)]
@@ -27,7 +25,7 @@ pub struct Callable<'db> {
 impl<'db> Callable<'db> {
     pub fn return_ty(self, db: &'db dyn BaseDb) -> Ty<'db> {
         if self.returns.len() == 1 {
-            return self.returns[0]
+            return self.returns[0];
         }
 
         Ty::new_intern(db, TyKind::Tuple(self.returns))
@@ -35,95 +33,116 @@ impl<'db> Callable<'db> {
 
     pub fn try_from_magic(db: &'db dyn BaseDb, t: MagicDefinitionKind) -> Option<Self> {
         let (args, returns) = match t {
-            MagicDefinitionKind::Keccak256 => {
-                (
-                    smallvec![Ty::new_intern(db, TyKind::Elementary(hir_def::ElementaryTypeRef::Bytes))],
-                    smallvec![Ty::new(TyKindInterned::new(db, TyKind::Elementary(hir_def::ElementaryTypeRef::FixedBytes { size: 32 })))]
-                )
-            },
-            MagicDefinitionKind::Sha256 => {
-                (
-                    smallvec![Ty::new_intern(db, TyKind::Elementary(hir_def::ElementaryTypeRef::Bytes))],
-                    smallvec![Ty::new(TyKindInterned::new(db, TyKind::Elementary(hir_def::ElementaryTypeRef::FixedBytes { size: 32 })))]
-                )
-            },
-            MagicDefinitionKind::Gasleft => {
-                (
-                    smallvec![],
-                    smallvec![Ty::new(TyKindInterned::new(db, TyKind::Elementary(hir_def::ElementaryTypeRef::Integer { signed: false, size: 256 })))]
-                )
-            },
-            MagicDefinitionKind::Assert => {
-                (
-                    smallvec![Ty::new_intern(db, TyKind::Elementary(hir_def::ElementaryTypeRef::Bool))],
-                    smallvec![]
-                )
-            },
-            MagicDefinitionKind::Require => {
-                (
-                    smallvec![Ty::new_intern(db, TyKind::Elementary(hir_def::ElementaryTypeRef::Bool))],
-                    smallvec![]
-                )
-            },
-            MagicDefinitionKind::RequireWithMessage =>  {
-                (
-                    smallvec![
-                        Ty::new_intern(db, TyKind::Elementary(hir_def::ElementaryTypeRef::Bool)),
-                        Ty::new_intern(db, TyKind::Elementary(hir_def::ElementaryTypeRef::String))
-                    ],
-                    smallvec![]
-                )
-            },
-            MagicDefinitionKind::Revert => {
-                (
-                    smallvec![],
-                    smallvec![]
-                )
-            },
-            MagicDefinitionKind::RevertWithMessage => {
-                (
-                    smallvec![
-                        Ty::new_intern(db, TyKind::Elementary(hir_def::ElementaryTypeRef::String)),
-                    ],
-                    smallvec![]
-                )
-            },
+            MagicDefinitionKind::Keccak256 => (
+                smallvec![Ty::new_intern(
+                    db,
+                    TyKind::Elementary(hir_def::ElementaryTypeRef::Bytes)
+                )],
+                smallvec![Ty::new(TyKindInterned::new(
+                    db,
+                    TyKind::Elementary(hir_def::ElementaryTypeRef::FixedBytes { size: 32 })
+                ))],
+            ),
+            MagicDefinitionKind::Sha256 => (
+                smallvec![Ty::new_intern(
+                    db,
+                    TyKind::Elementary(hir_def::ElementaryTypeRef::Bytes)
+                )],
+                smallvec![Ty::new(TyKindInterned::new(
+                    db,
+                    TyKind::Elementary(hir_def::ElementaryTypeRef::FixedBytes { size: 32 })
+                ))],
+            ),
+            MagicDefinitionKind::Gasleft => (
+                smallvec![],
+                smallvec![Ty::new(TyKindInterned::new(
+                    db,
+                    TyKind::Elementary(hir_def::ElementaryTypeRef::Integer {
+                        signed: false,
+                        size: 256
+                    })
+                ))],
+            ),
+            MagicDefinitionKind::Assert => (
+                smallvec![Ty::new_intern(db, TyKind::Elementary(hir_def::ElementaryTypeRef::Bool))],
+                smallvec![],
+            ),
+            MagicDefinitionKind::Require => (
+                smallvec![Ty::new_intern(db, TyKind::Elementary(hir_def::ElementaryTypeRef::Bool))],
+                smallvec![],
+            ),
+            MagicDefinitionKind::RequireWithMessage => (
+                smallvec![
+                    Ty::new_intern(db, TyKind::Elementary(hir_def::ElementaryTypeRef::Bool)),
+                    Ty::new_intern(db, TyKind::Elementary(hir_def::ElementaryTypeRef::String))
+                ],
+                smallvec![],
+            ),
+            MagicDefinitionKind::Revert => (smallvec![], smallvec![]),
+            MagicDefinitionKind::RevertWithMessage => (
+                smallvec![Ty::new_intern(
+                    db,
+                    TyKind::Elementary(hir_def::ElementaryTypeRef::String)
+                ),],
+                smallvec![],
+            ),
             MagicDefinitionKind::AddMod => {
-                let uint = Ty::new_intern(db, TyKind::Elementary(hir_def::ElementaryTypeRef::Integer { signed: false, size: 256 }));
-                (
-                    smallvec![uint, uint, uint],
-                    smallvec![uint]
-                )
-            },
+                let uint = Ty::new_intern(
+                    db,
+                    TyKind::Elementary(hir_def::ElementaryTypeRef::Integer {
+                        signed: false,
+                        size: 256,
+                    }),
+                );
+                (smallvec![uint, uint, uint], smallvec![uint])
+            }
             MagicDefinitionKind::MulMod => {
-                let uint = Ty::new_intern(db, TyKind::Elementary(hir_def::ElementaryTypeRef::Integer { signed: false, size: 256 }));
-                (
-                    smallvec![uint, uint, uint],
-                    smallvec![uint]
-                )
-            },
-            MagicDefinitionKind::Ripemd160 => {
-                (
-                    smallvec![Ty::new_intern(db, TyKind::Elementary(hir_def::ElementaryTypeRef::Bytes))],
-                    smallvec![Ty::new(TyKindInterned::new(db, TyKind::Elementary(hir_def::ElementaryTypeRef::Integer { signed: false, size: 160 })))]
-                )
-            },
-            MagicDefinitionKind::Ecrecover =>  {
-                let bytes32 = Ty::new_intern(db, TyKind::Elementary(hir_def::ElementaryTypeRef::FixedBytes { size: 32 }));
-                let uint8 = Ty::new_intern(db, TyKind::Elementary(hir_def::ElementaryTypeRef::Integer { signed: false, size: 8 }));
+                let uint = Ty::new_intern(
+                    db,
+                    TyKind::Elementary(hir_def::ElementaryTypeRef::Integer {
+                        signed: false,
+                        size: 256,
+                    }),
+                );
+                (smallvec![uint, uint, uint], smallvec![uint])
+            }
+            MagicDefinitionKind::Ripemd160 => (
+                smallvec![Ty::new_intern(
+                    db,
+                    TyKind::Elementary(hir_def::ElementaryTypeRef::Bytes)
+                )],
+                smallvec![Ty::new(TyKindInterned::new(
+                    db,
+                    TyKind::Elementary(hir_def::ElementaryTypeRef::Integer {
+                        signed: false,
+                        size: 160
+                    })
+                ))],
+            ),
+            MagicDefinitionKind::Ecrecover => {
+                let bytes32 = Ty::new_intern(
+                    db,
+                    TyKind::Elementary(hir_def::ElementaryTypeRef::FixedBytes { size: 32 }),
+                );
+                let uint8 = Ty::new_intern(
+                    db,
+                    TyKind::Elementary(hir_def::ElementaryTypeRef::Integer {
+                        signed: false,
+                        size: 8,
+                    }),
+                );
                 (
                     smallvec![bytes32, uint8, bytes32, bytes32],
-                    smallvec![Ty::new(TyKindInterned::new(db, TyKind::Elementary(hir_def::ElementaryTypeRef::Address { payable: false })))]
+                    smallvec![Ty::new(TyKindInterned::new(
+                        db,
+                        TyKind::Elementary(hir_def::ElementaryTypeRef::Address { payable: false })
+                    ))],
                 )
             }
-            _ => return None
+            _ => return None,
         };
 
-        return Some(Callable {
-            args,
-            variadic: false,
-            returns,
-        })
+        return Some(Callable { args, variadic: false, returns });
     }
     pub fn try_from_ty(db: &'db dyn BaseDb, t: Ty<'db>) -> Option<Self> {
         match t.kind(db) {
@@ -137,24 +156,22 @@ impl<'db> Callable<'db> {
         Some(match item {
             Item::Contract(contract_id) => Self {
                 variadic: false,
-                args: smallvec![Ty::new_intern(db, TyKind::Elementary(hir_def::ElementaryTypeRef::Address {
-                    payable: false,
-                }))],
-                returns: smallvec![Ty::new_intern(
+                args: smallvec![Ty::new_intern(
                     db,
-                    TyKind::Contract(contract_id),
+                    TyKind::Elementary(hir_def::ElementaryTypeRef::Address { payable: false })
                 )],
+                returns: smallvec![Ty::new_intern(db, TyKind::Contract(contract_id),)],
             },
             Item::Enum(enumeration_id) => Self {
                 variadic: false,
-                args: smallvec![Ty::new_intern(db, TyKind::Elementary(hir_def::ElementaryTypeRef::Integer {
-                    signed: false,
-                    size: 256,
-                }))],
-                returns: smallvec![Ty::new_intern(
+                args: smallvec![Ty::new_intern(
                     db,
-                    TyKind::Enum(enumeration_id),
+                    TyKind::Elementary(hir_def::ElementaryTypeRef::Integer {
+                        signed: false,
+                        size: 256,
+                    })
                 )],
+                returns: smallvec![Ty::new_intern(db, TyKind::Enum(enumeration_id),)],
             },
             Item::UserDefinedValueType(user_defined_value_type_id) => {
                 let type_res = resolve_item_signature(db, item);
@@ -178,7 +195,7 @@ impl<'db> Callable<'db> {
                 Self {
                     variadic: false,
                     args: params,
-                    returns: smallvec![Ty::new_intern(db, TyKind::Event)]
+                    returns: smallvec![Ty::new_intern(db, TyKind::Event)],
                 }
             }
             Item::Event(event_id) => {
@@ -191,7 +208,7 @@ impl<'db> Callable<'db> {
                 Self {
                     variadic: false,
                     args: params,
-                    returns: smallvec![Ty::new_intern(db, TyKind::Event)]
+                    returns: smallvec![Ty::new_intern(db, TyKind::Event)],
                 }
             }
             Item::Function(function_id) => {
@@ -220,7 +237,7 @@ impl<'db> Callable<'db> {
                     .map(|p| Ty::new(type_res.type_ref(db, p.ty(db))))
                     .collect();
                 Self {
-                    variadic: false, 
+                    variadic: false,
                     args: params,
                     returns: smallvec![Ty::new_intern(db, TyKind::Struct(structure_id))],
                 }
@@ -239,7 +256,7 @@ impl<'db> Callable<'db> {
                     None => TyKind::Unknown,
                 };
                 Self {
-                    variadic: false, 
+                    variadic: false,
                     args: params,
                     returns: smallvec![Ty::new_intern(db, contract)],
                 }
@@ -254,9 +271,9 @@ impl<'db> Callable<'db> {
                     .collect();
 
                 Self {
-                    variadic: false, 
+                    variadic: false,
                     args: params,
-                    returns: smallvec![Ty::new_intern(db, TyKind::Unknown)]
+                    returns: smallvec![Ty::new_intern(db, TyKind::Unknown)],
                 }
             }
             _ => return None,

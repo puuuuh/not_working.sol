@@ -41,9 +41,7 @@ impl<'db> Container<'db> {
                     .items(db)
                     .iter()
                     .filter(|i| matches!(i, ContractItem::Modifier(_)))
-                    .flat_map(|item| {
-                        item.name(db).map(|name| (name, Item::from(*item)))
-                    })
+                    .flat_map(|item| item.name(db).map(|name| (name, Item::from(*item))))
                     .collect(),
                 _ => {
                     vec![]
