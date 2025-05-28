@@ -36,20 +36,21 @@ pub fn goto_definition(db: &dyn BaseDb, pos: FilePosition) -> Option<Vec<Navigat
                     hir_def::hir::Expr::MemberAccess { owner, member_name } => {
                         let expr_map = type_inference.expr_map(db);
                         let owner_ty = expr_map.get(owner)?;
-                        let members = owner_ty.members(db);
+                        let members = owner_ty.members(db, Extensions::for_item(db, item));
                         let container = members.get(member_name)?;
                         container
                             .into_iter()
-                            .copied()
+                            .cloned()
                             .flat_map(|a| match a {
                                 MemberKind::Item(item) => NavigationTarget::from_item(db, item),
                                 MemberKind::Field(structure_field_id) => {
-                                    NavigationTarget::from_field(db, structure_field_id)
-                                }
+                                                                NavigationTarget::from_field(db, structure_field_id)
+                                                            }
                                 MemberKind::EnumVariant(enumeration_variant_id) => {
-                                    NavigationTarget::from_variant(db, enumeration_variant_id)
-                                }
+                                                                NavigationTarget::from_variant(db, enumeration_variant_id)
+                                                            }
                                 MemberKind::SynteticItem(ty) => None,
+                                MemberKind::ExtensionFunction(function_id, callable) => NavigationTarget::from_item(db, Item::Function(function_id)),
                             })
                             .collect()
                     }

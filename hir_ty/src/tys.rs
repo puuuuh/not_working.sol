@@ -15,7 +15,7 @@ use hir_nameres::{
     inheritance::inheritance_chain,
     scope::body::{Declaration, MagicDefinitionKind},
 };
-use smallvec::SmallVec;
+use smallvec::{smallvec, SmallVec};
 
 use std::{
     collections::{btree_map::Entry, BTreeMap},
@@ -23,7 +23,7 @@ use std::{
 };
 
 use crate::{
-    callable::Callable, extensions::Extensions, member_kind::MemberKind, resolver::resolve_item,
+    callable::{Callable, CallableType}, extensions::Extensions, member_kind::MemberKind, resolver::resolve_item,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, salsa::Update)]
@@ -32,7 +32,7 @@ pub enum TyKind<'db> {
     // For functions like abi.encode
     Any,
     // Callable
-    Function(Callable<'db>),
+    Callable(Callable<'db>),
     Modifier(Callable<'db>),
 
     Error,
@@ -45,7 +45,7 @@ pub enum TyKind<'db> {
     Enum(EnumerationId<'db>),
     Array(TyKindInterned<'db>, usize),
     Mapping(TyKindInterned<'db>, TyKindInterned<'db>),
-    Tuple(Vec<Ty<'db>>),
+    Tuple(SmallVec<[Ty<'db>; 2]>),
     // Reference to an item, not an instance (ContractName.Struct, for example)
     Type(Item<'db>),
 
@@ -56,12 +56,6 @@ pub enum TyKind<'db> {
 #[derive(PartialOrd, Ord)]
 pub struct TyKindInterned<'db> {
     pub data: TyKind<'db>,
-}
-
-impl<'db> TyKindInterned<'db> {
-    pub fn tuple(db: &'db dyn BaseDb, tys: Vec<Ty<'db>>) -> Self {
-        Self::new(db, TyKind::Tuple(tys))
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, salsa::Update)]
@@ -108,7 +102,7 @@ impl<'db> TyKind<'db> {
             TyKind::Elementary(ElementaryTypeRef::String | ElementaryTypeRef::Bytes) => true,
             TyKind::Unknown
             | TyKind::Elementary(_)
-            | TyKind::Function(_)
+            | TyKind::Callable(_)
             | TyKind::Modifier(_)
             | TyKind::Tuple(_)
             | TyKind::Type(_) => false,
@@ -181,24 +175,35 @@ impl<'db> TyKind<'db> {
             TyKind::Any => {
                 *res += "{any}";
             }
-            TyKind::Function(callable) => {
+            TyKind::Callable(callable) => {
                 *res += "function";
-                let tmp = callable.args.data(db);
                 // FIXME
-                if matches!(tmp, TyKind::Tuple(_)) {
-                    tmp.human_readable_to(db, res);
-                } else {
-                    *res += "(";
-                    tmp.human_readable_to(db, res);
-                    *res += ")";
+                *res += "(";
+                for (i, a) in callable.args.iter().enumerate() {
+                    if i > 0 {
+                        *res += ", ";
+                    }
+                    a.human_readable_to(db, res);
                 }
+                *res += ")";
                 *res += " returns(";
-                callable.returns.human_readable_to(db, res);
+                for (i, a) in callable.returns.iter().enumerate() {
+                    if i > 0 {
+                        *res += ", ";
+                    }
+                    a.human_readable_to(db, res);
+                }
                 *res += ")";
             }
             TyKind::Modifier(callable) => {
-                *res += "modifier";
-                callable.args.data(db).human_readable_to(db, res);
+                *res += "modifier(";
+                for (i, a) in callable.args.iter().enumerate() {
+                    if i > 0 {
+                        *res += ", ";
+                    }
+                    a.human_readable_to(db, res);
+                }
+                *res += ")";
             }
             TyKind::Struct(structure_id) => {
                 *res += structure_id.name(db).data(db);
@@ -294,6 +299,7 @@ pub fn members<'db>(
     db: &'db dyn BaseDb,
     ty: TyKindInterned<'db>,
     modifier: TypeModifier,
+    ext: &'db Extensions<'db>,
 ) -> BTreeMap<Ident<'db>, SmallVec<[MemberKind<'db>; 1]>> {
     let mut res = BTreeMap::new();
     let modifier = match modifier {
@@ -301,23 +307,42 @@ pub fn members<'db>(
         a => a,
     };
     match ty.data(db) {
-        TyKind::Type(Item::Error(_)) | TyKind::Type(Item::Event(_)) | TyKind::Function(_) => {
+        TyKind::Type(Item::Error(_)) | TyKind::Type(Item::Event(_)) | TyKind::Callable(_) => {
             res.insert(
                 Ident::new(db, "selector".to_owned()),
-                SmallVec::from_slice(&[MemberKind::SynteticItem(Ty::new_intern(
+                smallvec![MemberKind::SynteticItem(Ty::new_intern(
                     db,
                     TyKind::Elementary(ElementaryTypeRef::FixedBytes { size: 32 }),
-                ))]),
+                ))],
             );
         }
         TyKind::Struct(structure_id) => {
             for f in structure_id.fields(db) {
-                res.insert(f.name(db), SmallVec::from_slice(&[MemberKind::Field(f)]));
+                res.insert(f.name(db), smallvec![MemberKind::Field(f)]);
             }
         }
         TyKind::Contract(contract_id) => {
             let chain = inheritance_chain(db, contract_id);
             for contract_id in chain {
+                if let Some(t) = ext.local.get(&TyKindInterned::new(db, TyKind::Contract(*contract_id))) {
+                    for (name, data) in t {
+                        for (c, f) in data {
+                            if c.args.first().copied() == Some(Ty::new(ty)) {
+                                let mut c = c.clone();
+                                c.args.remove(0);
+                                match res.entry(*name) {
+                                    Entry::Vacant(vacant_entry) => {
+                                        vacant_entry.insert(smallvec![MemberKind::ExtensionFunction(*f, c)]);
+                                    }
+                                    Entry::Occupied(mut occupied_entry) => {
+                                        occupied_entry.get_mut().push(MemberKind::ExtensionFunction(*f, c));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 for (name, item) in contract_id
                     .items(db)
                     .iter()
@@ -340,16 +365,16 @@ pub fn members<'db>(
                             occupied_entry.get_mut().push(item);
                         }
                     }
-                }
+                };
             }
         }
         TyKind::Array(ty_kind_interned, _) => {
             res.insert(
                 Ident::new(db, "length".to_owned()),
-                SmallVec::from_slice(&[MemberKind::SynteticItem(Ty::new_intern(
+                smallvec![MemberKind::SynteticItem(Ty::new_intern(
                     db,
                     TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 256 }),
-                ))]),
+                ))],
             );
         }
         TyKind::Type(item) => match item {
@@ -417,7 +442,7 @@ pub fn members<'db>(
             }
             Item::Enum(enumeration_id) => {
                 for f in enumeration_id.fields(db) {
-                    res.insert(f.name(db), SmallVec::from_slice(&[MemberKind::EnumVariant(f)]));
+                    res.insert(f.name(db), smallvec![MemberKind::EnumVariant(f)]);
                 }
             }
             _ => Default::default(),
@@ -473,43 +498,43 @@ pub fn members<'db>(
                     &[("gasprice", uint), ("origin", address)][..]
                 }
                 MagicDefinitionKind::Abi => {
-                    let any = TyKindInterned::new(
+                    let any = Ty::new_intern(
                         db,
                         TyKind::Any
                     );
                     &[
-                        ("decode", Ty::new_intern(db, TyKind::Function(Callable {
+                        ("decode", Ty::new_intern(db, TyKind::Callable(Callable {
                             variadic: true,
-                            args: any,
-                            returns: Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Bytes)),
+                            args: smallvec![any],
+                            returns: smallvec![any]
                         }))), 
-                        ("encode", Ty::new_intern(db, TyKind::Function(Callable {
+                        ("encode", Ty::new_intern(db, TyKind::Callable(Callable {
                             variadic: true,
-                            args: any,
-                            returns: Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Bytes)),
+                            args: smallvec![any],
+                            returns: smallvec![Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Bytes))]
                         }))), 
-                        ("encodePacked", Ty::new_intern(db, TyKind::Function(Callable {
+                        ("encodePacked", Ty::new_intern(db, TyKind::Callable(Callable {
                             variadic: true,
-                            args: any,
-                            returns: Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Bytes)),
+                            args: smallvec![any],
+                            returns: smallvec![Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Bytes))]
                         }))), 
-                        ("encodeWithSelector", Ty::new_intern(db, TyKind::Function(Callable {
+                        ("encodeWithSelector", Ty::new_intern(db, TyKind::Callable(Callable {
                             variadic: true,
-                            args: any,
-                            returns: Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Bytes)),
+                            args: smallvec![any],
+                            returns: smallvec![Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Bytes))]
                         }))),
-                        ("encodeCall", Ty::new_intern(db, TyKind::Function(Callable {
+                        ("encodeCall", Ty::new_intern(db, TyKind::Callable(Callable {
                             variadic: true,
-                            args: any,
-                            returns: Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Bytes)),
+                            args: smallvec![any],
+                            returns: smallvec![Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Bytes))]
                         }))),
-                        ("encodeWithSignature", Ty::new_intern(db, TyKind::Function(Callable {
+                        ("encodeWithSignature", Ty::new_intern(db, TyKind::Callable(Callable {
                             variadic: true,
-                            args: TyKindInterned::new(db, TyKind::Tuple(vec![
+                            args: smallvec![
                                 Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::FixedBytes {size: 4})),
-                                Ty::new(any)
-                            ])),
-                            returns: Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Bytes)),
+                                any
+                            ],
+                            returns: smallvec![Ty::new_intern(db, TyKind::Elementary(ElementaryTypeRef::Bytes))]
                         })))][..]
                 },
                 _ => return res
@@ -610,8 +635,12 @@ impl<'db> Ty<'db> {
     pub fn members(
         self,
         db: &'db dyn BaseDb,
+        mut ext: &'db Extensions<'db>
     ) -> &'db BTreeMap<Ident<'db>, SmallVec<[MemberKind<'db>; 1]>> {
-        members(db, self.ty_kind, self.modifier)
+        if !matches!(self.kind(db), TyKind::Contract(_)) {
+            ext = Extensions::empty();
+        }
+        members(db, self.ty_kind, self.modifier, ext)
     }
 }
 

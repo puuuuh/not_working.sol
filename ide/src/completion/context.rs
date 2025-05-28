@@ -70,7 +70,7 @@ impl<'db> CompletionCtx<'db> {
     pub fn completions(&'db self) -> Option<Vec<Completion>> {
         Some(match self.kind()? {
             CompletionKind::DotAccess { receiver, receiver_ty } => {
-                let c = receiver_ty.members(self.db);
+                let c = receiver_ty.members(self.db, Extensions::empty());
                 c.iter()
                     .map(|a| Completion {
                         label: a.0.data(self.db).clone(),

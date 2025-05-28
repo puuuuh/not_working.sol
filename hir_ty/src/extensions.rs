@@ -6,23 +6,31 @@ use hir_nameres::scope::{body::Declaration, HasScope, Scope};
 use smallvec::SmallVec;
 
 use crate::{
-    resolver::{resolve_item, TypeResolutionCtx},
-    tys::{TyKind, TyKindInterned},
+    callable::Callable, resolver::{resolve_item, TypeResolutionCtx}, tys::{TyKind, TyKindInterned}
 };
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Default, Hash, salsa::Update)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash, Default, salsa::Update)]
 pub struct Extensions<'db> {
-    pub local: BTreeMap<TyKindInterned<'db>, BTreeMap<Ident<'db>, SmallVec<[FunctionId<'db>; 1]>>>,
-    pub wildcard: BTreeMap<Ident<'db>, SmallVec<[FunctionId<'db>; 1]>>,
+    pub local: BTreeMap<TyKindInterned<'db>, BTreeMap<Ident<'db>, SmallVec<[(Callable<'db>, FunctionId<'db>); 1]>>>,
+    pub wildcard: BTreeMap<Ident<'db>, SmallVec<[(Callable<'db>, FunctionId<'db>); 1]>>,
 }
 
 impl<'db> Extensions<'db> {
-    pub fn for_item(db: &'db dyn BaseDb, item: Item<'db>) -> Self {
+    pub fn empty<'a>() -> &'a Extensions<'a> {
+        const {
+            &Extensions {
+                local: BTreeMap::new(),
+                wildcard: BTreeMap::new(),
+            }
+        }
+    }
+
+    pub fn for_item(db: &'db dyn BaseDb, item: Item<'db>) -> &'db Self {
         for_item(db, item)
     }
 }
 
-#[salsa::tracked]
+#[salsa::tracked(returns(ref))]
 fn for_item<'db>(db: &'db dyn BaseDb, item: Item<'db>) -> Extensions<'db> {
     let mut res = for_file(db, item.file(db));
     let parent = match item {
@@ -101,7 +109,9 @@ fn collect_usings_to<'db, 'a>(
                 match lib {
                     Item::Function(f) => {
                         if let Some(name) = f.name(db) {
-                            tmp.entry(name).or_default().push(f);
+                            if let Some(c) = Callable::try_from_item(db, Item::Function(f)) {
+                                tmp.entry(name).or_default().push((c, f));
+                            }
                         }
                     }
                     Item::Contract(c) => {
@@ -111,7 +121,9 @@ fn collect_usings_to<'db, 'a>(
                                 _ => None,
                             }) {
                                 if let Some(name) = f.name(db) {
-                                    tmp.entry(name).or_default().push(*f);
+                                    if let Some(c) = Callable::try_from_item(db, Item::Function(*f)) {
+                                        tmp.entry(name).or_default().push((c, *f));
+                                    }
                                 }
                             }
                         }
