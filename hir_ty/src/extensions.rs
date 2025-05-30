@@ -7,7 +7,7 @@ use smallvec::SmallVec;
 
 use crate::{
     callable::Callable,
-    resolver::{resolve_item, TypeResolutionCtx},
+    resolver::{resolve_item, resolve_item_signature, TypeResolutionCtx},
     tys::{TyKind, TyKindInterned},
 };
 
@@ -82,7 +82,7 @@ fn collect_usings_to<'db, 'a>(
     res: &mut Extensions<'db>,
 ) {
     for u in usings {
-        let type_resolution = resolve_item(db, Item::Using(u));
+        let type_resolution = resolve_item_signature(db, Item::Using(u));
         let using_data = u.data(db);
 
         let ty = if let Some(t) = using_data.type_name {

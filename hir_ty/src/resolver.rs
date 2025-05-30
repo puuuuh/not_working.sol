@@ -142,8 +142,6 @@ impl<'db> TypeResolutionCtx<'db> {
             _ => {}
         }
 
-        ctx.extensions = Extensions::for_item(db, item);
-
         ctx
     }
 
@@ -211,6 +209,8 @@ impl<'db> TypeResolutionCtx<'db> {
 
     pub fn resolve_body(&mut self, db: &'db dyn BaseDb) {
         cov_mark::hit!(hir_ty_resolve_item);
+        self.extensions = Extensions::for_item(db, self.item);
+
         let item = self.item;
         let scope = self.scope;
         match item {
@@ -280,6 +280,27 @@ impl<'db> TypeResolutionCtx<'db> {
         args: SmallVec<[Ty<'db>; 2]>,
     ) -> Ty<'db> {
         match expr.kind(db) {
+            Expr::Type { ty } => {
+                if args.len() != 1 {
+                    return Ty::new(self.unknown)
+                }
+                let res = self.resolve_type_ref(db, self.scope.for_expr(db, expr), *ty);
+                Ty::new_intern(db, TyKind::Callable(Callable {
+                    args: smallvec![Ty::new_intern(db, TyKind::Any)],
+                    variadic: false,
+                    returns: smallvec![Ty::new(res)],
+                }))
+            }
+            Expr::ElementaryTypeName { data } => {
+                if args.len() != 1 {
+                    return Ty::new(self.unknown)
+                }
+                Ty::new_intern(db, TyKind::Callable(Callable {
+                    args: smallvec![Ty::new_intern(db, TyKind::Any)],
+                    variadic: false,
+                    returns: smallvec![Ty::new_intern(db, TyKind::Elementary(*data))],
+                }))
+            }
             Expr::MemberAccess { owner, member_name } => {
                 let owner_ty = self.resolve_expr(db, *owner);
                 let members = owner_ty.members(db, self.extensions);
@@ -766,11 +787,11 @@ mapping(hw.Helloworld => uint256): mapping(Helloworld => uint256)
 1: uint256
 arg: uint256
 arg: uint256
-test: function(uint256,uint256,) returns(uint256)
+test: function(uint256, uint256) returns(uint256)
 test(arg,arg): uint256
 true: bool
 arg: uint256
-test: function(uint256,bool,) returns(bool)
+test: function(uint256, bool) returns(bool)
 test(arg,true): bool
 
 uint256: uint256
@@ -899,7 +920,7 @@ uint256: uint256
             fixture,
             "tmp: BaseContract storage ref
 true: bool
-tmp.extension: function(BaseContract memory,bool,) returns(uint256)
+tmp.extension: function(bool) returns(uint256)
 tmp.extension(true): uint256
 
 ",
@@ -940,10 +961,10 @@ tmp.extension(true): uint256
         check_types(
             fixture,
             "tmp: First memory
-tmp.getInterface: function(First memory,) returns(ITestInterface memory)
+tmp.getInterface: function() returns(ITestInterface memory)
 tmp.getInterface(): ITestInterface memory
 help: address
-tmp.getInterface().interfaceMember: function(address,) returns(address)
+tmp.getInterface().interfaceMember: function(address) returns(address)
 tmp.getInterface().interfaceMember(help): address
 
 address: address
@@ -1041,10 +1062,37 @@ Test1.SomeEnum.Var1: SomeEnum memory
 
         check_types(
             fixture,
-            "tmp: function(Argument storage ptr,) returns(())
+            "tmp: function(Argument storage ptr) returns()
 storageRef: Argument storage ref
-tmp: function(Argument storage ptr,) returns(())
+tmp: function(Argument storage ptr) returns()
 tmp(storageRef): ()
+
+",
+        );
+    }
+
+    #[test]
+    fn type_cast() {
+        let fixture = TestFixture::parse(
+            r"
+            /main.sol
+
+            contract Test
+            {
+                address storageRef;
+
+                function hel$0loWorld() {
+                    uint256(123);
+                }
+            }
+        ",
+        );
+
+        check_types(
+            fixture,
+            "123: uint256
+uint256: {unknown}
+uint256(123): {unknown}
 
 ",
         );
