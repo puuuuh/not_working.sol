@@ -1091,8 +1091,8 @@ tmp(storageRef): ()
         check_types(
             fixture,
             "123: uint256
-uint256: {unknown}
-uint256(123): {unknown}
+uint256: function({any} memory) returns(uint256)
+uint256(123): uint256
 
 ",
         );

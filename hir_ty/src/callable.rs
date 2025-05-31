@@ -144,6 +144,7 @@ impl<'db> Callable<'db> {
 
         return Some(Callable { args, variadic: false, returns });
     }
+
     pub fn try_from_ty(db: &'db dyn BaseDb, t: Ty<'db>) -> Option<Self> {
         match t.kind(db) {
             TyKind::Callable(callable) => Some(callable),
@@ -152,6 +153,7 @@ impl<'db> Callable<'db> {
             _ => None,
         }
     }
+
     pub fn try_from_item(db: &'db dyn BaseDb, item: Item<'db>) -> Option<Self> {
         Some(match item {
             Item::Contract(contract_id) => Self {

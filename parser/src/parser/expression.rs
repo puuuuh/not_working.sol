@@ -73,7 +73,24 @@ impl<'a> Parser<'a> {
 
     pub(crate) fn try_expr_bp(&mut self, min_bp: u8) -> bool {
         let start = self.builder.checkpoint();
-        match self.current() {
+        let Some((kind, text)) = self.current_full() else {
+            return false;
+        };
+        match kind {
+            IDENT if Self::is_elementary_type(text) => {
+                self.builder.start_node_at(start, ELEMENTARY_TYPE.into());
+                'parse: {
+                    match peek!([IDENT, ADDRESS_KW], 'parse, self) {
+                        ADDRESS_KW => {
+                            self.bump(ELEMENTARY_TYPE_IDENT);
+                            self.eat(PAYABLE_KW);
+                        }
+                        _ => {
+                            self.bump(ELEMENTARY_TYPE_IDENT);
+                        }
+                    }
+                }
+            }
             IDENT => {
                 self.builder.start_node_at(start, IDENT_EXPR.into());
                 self.name_ref();

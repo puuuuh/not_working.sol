@@ -4,7 +4,7 @@ use syntax::SyntaxKind;
 use syntax::SyntaxKind::*;
 
 impl<'a> Parser<'a> {
-    fn is_elementary_type(text: &str) -> bool {
+    pub(crate) fn is_elementary_type(text: &str) -> bool {
         if matches!(text, "bool" | "string" | "bytes" | "int" | "uint" | "fixed" | "ufixed") {
             return true;
         }
@@ -103,7 +103,7 @@ impl<'a> Parser<'a> {
         self.builder.finish_node();
     }
 
-    fn elementary_type_name(&mut self) {
+    pub fn elementary_type_name(&mut self) {
         self.builder.start_node(ELEMENTARY_TYPE.into());
         'parse: {
             match peek!([IDENT, ADDRESS_KW], 'parse, self) {
