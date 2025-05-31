@@ -53,9 +53,9 @@ impl<'a> Parser<'a> {
         let start = self.builder.checkpoint();
         let mut ok = false;
         'parse: {
-            match peek!([ELEMENTARY_TYPE, ADDRESS_KW, FUNCTION_KW, MAPPING_KW, IDENT], 'parse, self)
+            match peek!([ELEMENTARY_TYPE_IDENT, FUNCTION_KW, MAPPING_KW, IDENT], 'parse, self)
             {
-                ELEMENTARY_TYPE | ADDRESS_KW => {
+                ELEMENTARY_TYPE_IDENT => {
                     self.elementary_type_name();
                 }
                 FUNCTION_KW => self.function_type_name(),
@@ -106,14 +106,12 @@ impl<'a> Parser<'a> {
     pub fn elementary_type_name(&mut self) {
         self.builder.start_node(ELEMENTARY_TYPE.into());
         'parse: {
-            match peek!([IDENT, ADDRESS_KW], 'parse, self) {
-                ADDRESS_KW => {
-                    self.bump(ELEMENTARY_TYPE_IDENT);
-                    self.eat(PAYABLE_KW);
-                }
-                _ => {
-                    self.bump(ELEMENTARY_TYPE_IDENT);
-                }
+            peek!(ELEMENTARY_TYPE_IDENT, 'parse, self);
+            if let Some((_, "address")) = self.current_full() {
+                self.bump(ELEMENTARY_TYPE_IDENT);
+                self.eat(PAYABLE_KW);
+            } else {
+                self.bump(ELEMENTARY_TYPE_IDENT);
             }
         }
         self.builder.finish_node();

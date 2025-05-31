@@ -17,8 +17,8 @@ pub enum CallableType<'db> {
 #[derive(Debug, Clone, PartialEq, Ord, PartialOrd, Eq, Hash, salsa::Update)]
 pub struct Callable<'db> {
     pub args: SmallVec<[Ty<'db>; 4]>,
-    // last arg can be repeated 0+ times
-    pub variadic: bool,
+    // Function can accept any arguments, for abi module
+    pub any_args: bool,
     pub returns: SmallVec<[Ty<'db>; 2]>,
 }
 
@@ -142,7 +142,7 @@ impl<'db> Callable<'db> {
             _ => return None,
         };
 
-        return Some(Callable { args, variadic: false, returns });
+        return Some(Callable { args, any_args: false, returns });
     }
 
     pub fn try_from_ty(db: &'db dyn BaseDb, t: Ty<'db>) -> Option<Self> {
@@ -157,7 +157,7 @@ impl<'db> Callable<'db> {
     pub fn try_from_item(db: &'db dyn BaseDb, item: Item<'db>) -> Option<Self> {
         Some(match item {
             Item::Contract(contract_id) => Self {
-                variadic: false,
+                any_args: false,
                 args: smallvec![Ty::new_intern(
                     db,
                     TyKind::Elementary(hir_def::ElementaryTypeRef::Address { payable: false })
@@ -165,7 +165,7 @@ impl<'db> Callable<'db> {
                 returns: smallvec![Ty::new_intern(db, TyKind::Contract(contract_id),)],
             },
             Item::Enum(enumeration_id) => Self {
-                variadic: false,
+                any_args: false,
                 args: smallvec![Ty::new_intern(
                     db,
                     TyKind::Elementary(hir_def::ElementaryTypeRef::Integer {
@@ -179,7 +179,7 @@ impl<'db> Callable<'db> {
                 let type_res = resolve_item_signature(db, item);
                 let basic_ty = type_res.type_ref(db, user_defined_value_type_id.ty(db));
                 Self {
-                    variadic: false,
+                    any_args: false,
                     args: smallvec![Ty::new(basic_ty)],
                     returns: smallvec![Ty::new_intern(
                         db,
@@ -195,7 +195,7 @@ impl<'db> Callable<'db> {
                     .map(|p| Ty::new(type_res.type_ref(db, p.info(db).ty)))
                     .collect();
                 Self {
-                    variadic: false,
+                    any_args: false,
                     args: params,
                     returns: smallvec![Ty::new_intern(db, TyKind::Event)],
                 }
@@ -208,7 +208,7 @@ impl<'db> Callable<'db> {
                     .map(|p| Ty::new(type_res.type_ref(db, p.info(db).ty)))
                     .collect();
                 Self {
-                    variadic: false,
+                    any_args: false,
                     args: params,
                     returns: smallvec![Ty::new_intern(db, TyKind::Event)],
                 }
@@ -229,7 +229,7 @@ impl<'db> Callable<'db> {
                     .map(|p| Ty::new_in(type_res.type_ref(db, p.ty(db)), p.location(db).into()))
                     .collect();
 
-                Self { variadic: false, args, returns }
+                Self { any_args: false, args, returns }
             }
             Item::Struct(structure_id) => {
                 let type_res = resolve_item_signature(db, item);
@@ -239,7 +239,7 @@ impl<'db> Callable<'db> {
                     .map(|p| Ty::new(type_res.type_ref(db, p.ty(db))))
                     .collect();
                 Self {
-                    variadic: false,
+                    any_args: false,
                     args: params,
                     returns: smallvec![Ty::new_intern(db, TyKind::Struct(structure_id))],
                 }
@@ -258,7 +258,7 @@ impl<'db> Callable<'db> {
                     None => TyKind::Unknown,
                 };
                 Self {
-                    variadic: false,
+                    any_args: false,
                     args: params,
                     returns: smallvec![Ty::new_intern(db, contract)],
                 }
@@ -273,7 +273,7 @@ impl<'db> Callable<'db> {
                     .collect();
 
                 Self {
-                    variadic: false,
+                    any_args: false,
                     args: params,
                     returns: smallvec![Ty::new_intern(db, TyKind::Unknown)],
                 }

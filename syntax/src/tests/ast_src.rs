@@ -129,7 +129,6 @@ pub(crate) const KINDS_SRC: KindsSrc<'_> = KindsSrc {
         "revert",
         "global",
         "type",
-        "address",
         "unchecked",
         "payable",
     ],

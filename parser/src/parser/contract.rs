@@ -42,7 +42,7 @@ impl<'a> Parser<'a> {
                         TYPE_KW,
                         IDENT,
                         MAPPING_KW,
-                        ELEMENTARY_TYPE,
+                        ELEMENTARY_TYPE_IDENT,
                     ])
                     .is_some()
                 {
@@ -57,7 +57,7 @@ impl<'a> Parser<'a> {
 
     pub(crate) fn contract_body_item(&mut self) {
         'parse: {
-            match peek!([CONSTRUCTOR_KW, EVENT_KW, ERROR_KW, USING_KW, FUNCTION_KW, MODIFIER_KW, FALLBACK_KW, RECEIVE_KW, STRUCT_KW, ENUM_KW, TYPE_KW, IDENT, MAPPING_KW, ELEMENTARY_TYPE], 'parse, self)
+            match peek!([CONSTRUCTOR_KW, EVENT_KW, ERROR_KW, USING_KW, FUNCTION_KW, MODIFIER_KW, FALLBACK_KW, RECEIVE_KW, STRUCT_KW, ENUM_KW, TYPE_KW, IDENT, MAPPING_KW, ELEMENTARY_TYPE_IDENT], 'parse, self)
             {
                 CONSTRUCTOR_KW => {
                     self.constructor();

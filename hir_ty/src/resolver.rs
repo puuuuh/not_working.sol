@@ -287,7 +287,7 @@ impl<'db> TypeResolutionCtx<'db> {
                 let res = self.resolve_type_ref(db, self.scope.for_expr(db, expr), *ty);
                 Ty::new_intern(db, TyKind::Callable(Callable {
                     args: smallvec![Ty::new_intern(db, TyKind::Any)],
-                    variadic: false,
+                    any_args: false,
                     returns: smallvec![Ty::new(res)],
                 }))
             }
@@ -297,7 +297,7 @@ impl<'db> TypeResolutionCtx<'db> {
                 }
                 Ty::new_intern(db, TyKind::Callable(Callable {
                     args: smallvec![Ty::new_intern(db, TyKind::Any)],
-                    variadic: false,
+                    any_args: false,
                     returns: smallvec![Ty::new_intern(db, TyKind::Elementary(*data))],
                 }))
             }
@@ -320,9 +320,7 @@ impl<'db> TypeResolutionCtx<'db> {
                         _ => continue,
                     };
 
-                    if args.len() == c.args.len()
-                        && args.iter().zip(&c.args).all(|(a, b)| a.can_coerce(db, *b))
-                    {
+                    if c.any_args || args.len() == c.args.len() && args.iter().zip(&c.args).all(|(a, b)| a.can_coerce(db, *b)) {
                         return Ty::new_intern(db, TyKind::Callable(c));
                     }
                 }
@@ -347,9 +345,7 @@ impl<'db> TypeResolutionCtx<'db> {
                         _ => continue,
                     };
 
-                    if args.len() == c.args.len()
-                        && args.iter().zip(&c.args).all(|(a, b)| a.can_coerce(db, *b))
-                    {
+                    if c.any_args || args.len() == c.args.len() && args.iter().zip(&c.args).all(|(a, b)| a.can_coerce(db, *b)) {
                         return Ty::new_intern(db, TyKind::Callable(c));
                     }
                 }
@@ -492,14 +488,14 @@ impl<'db> TypeResolutionCtx<'db> {
                             Callable::try_from_item(db, Item::Constructor(c))
                         } else {
                             Some(Callable {
-                                variadic: false,
+                                any_args: false,
                                 args: SmallVec::new(),
                                 returns: smallvec![Ty::new(res)],
                             })
                         }
                     }
                     TyKind::Array(ty_kind_interned, _) => Some(Callable {
-                        variadic: false,
+                        any_args: false,
                         args: smallvec![Ty::new_intern(
                             db,
                             TyKind::Elementary(ElementaryTypeRef::Integer {
@@ -510,7 +506,7 @@ impl<'db> TypeResolutionCtx<'db> {
                         returns: smallvec![Ty::new(res)],
                     }),
                     TyKind::Elementary(ElementaryTypeRef::Bytes) => Some(Callable {
-                        variadic: false,
+                        any_args: false,
                         args: smallvec![Ty::new_intern(
                             db,
                             TyKind::Elementary(ElementaryTypeRef::Integer {
@@ -581,7 +577,7 @@ impl<'db> TypeResolutionCtx<'db> {
                 let args = args;
                 return TyKindInterned::new(
                     db,
-                    TyKind::Callable(Callable { variadic: false, args, returns }),
+                    TyKind::Callable(Callable { any_args: false, args, returns }),
                 );
             }
             TypeRefKind::Mapping { key_type, value_type, .. } => TyKind::Mapping(
@@ -1083,6 +1079,7 @@ tmp(storageRef): ()
 
                 function hel$0loWorld() {
                     uint256(123);
+                    address(uint200(123));
                 }
             }
         ",
@@ -1093,6 +1090,11 @@ tmp(storageRef): ()
             "123: uint256
 uint256: function({any} memory) returns(uint256)
 uint256(123): uint256
+uint200(123): uint200
+123: uint256
+uint200: function({any} memory) returns(uint200)
+address: function({any} memory) returns(address)
+address(uint200(123)): address
 
 ",
         );

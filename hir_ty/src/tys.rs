@@ -516,7 +516,7 @@ pub fn members<'db>(
                             Ty::new_intern(
                                 db,
                                 TyKind::Callable(Callable {
-                                    variadic: true,
+                                    any_args: true,
                                     args: smallvec![any],
                                     returns: smallvec![any],
                                 }),
@@ -527,7 +527,7 @@ pub fn members<'db>(
                             Ty::new_intern(
                                 db,
                                 TyKind::Callable(Callable {
-                                    variadic: true,
+                                    any_args: true,
                                     args: smallvec![any],
                                     returns: smallvec![Ty::new_intern(
                                         db,
@@ -541,7 +541,7 @@ pub fn members<'db>(
                             Ty::new_intern(
                                 db,
                                 TyKind::Callable(Callable {
-                                    variadic: true,
+                                    any_args: true,
                                     args: smallvec![any],
                                     returns: smallvec![Ty::new_intern(
                                         db,
@@ -555,7 +555,7 @@ pub fn members<'db>(
                             Ty::new_intern(
                                 db,
                                 TyKind::Callable(Callable {
-                                    variadic: true,
+                                    any_args: true,
                                     args: smallvec![any],
                                     returns: smallvec![Ty::new_intern(
                                         db,
@@ -569,7 +569,7 @@ pub fn members<'db>(
                             Ty::new_intern(
                                 db,
                                 TyKind::Callable(Callable {
-                                    variadic: true,
+                                    any_args: true,
                                     args: smallvec![any],
                                     returns: smallvec![Ty::new_intern(
                                         db,
@@ -583,7 +583,7 @@ pub fn members<'db>(
                             Ty::new_intern(
                                 db,
                                 TyKind::Callable(Callable {
-                                    variadic: true,
+                                    any_args: true,
                                     args: smallvec![
                                         Ty::new_intern(
                                             db,

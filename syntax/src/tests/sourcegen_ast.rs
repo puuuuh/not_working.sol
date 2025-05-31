@@ -414,7 +414,7 @@ fn generate_syntax_kinds(grammar: KindsSrc<'_>) -> String {
             fn is_elementary_type(text: &str) -> bool {
                 if matches!(
                     text,
-                    "bool" | "string" | "bytes" | "int" | "uint" | "fixed" | "ufixed"
+                    "address" | "bool" | "string" | "bytes" | "int" | "uint" | "fixed" | "ufixed"
                 ) {
                     return true;
                 }
@@ -460,7 +460,7 @@ fn generate_syntax_kinds(grammar: KindsSrc<'_>) -> String {
             pub fn from_contextual_keyword(ident: &str) -> Option<SyntaxKind> {
                 let kw = match ident {
                     #(#contextual_keywords_values => #contextual_keywords,)*
-                    _ if Self::is_elementary_type(ident) => ELEMENTARY_TYPE,
+                    _ if Self::is_elementary_type(ident) => ELEMENTARY_TYPE_IDENT,
                     _ => return None,
                 };
                 Some(kw)
