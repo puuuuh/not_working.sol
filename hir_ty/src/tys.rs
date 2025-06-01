@@ -34,6 +34,7 @@ pub enum TyKind<'db> {
     Unknown,
     // For functions like abi.encode
     Any,
+    Literal(LiteralKind),
     // Callable
     Callable(Callable<'db>),
     Modifier(Callable<'db>),
@@ -50,9 +51,20 @@ pub enum TyKind<'db> {
     Mapping(TyKindInterned<'db>, TyKindInterned<'db>),
     Tuple(SmallVec<[Ty<'db>; 2]>),
     // Reference to an item, not an instance (ContractName.Struct, for example)
-    Type(Item<'db>),
+    ItemRef(Item<'db>),
+    MetaType(TyKindInterned<'db>),
 
     Magic(MagicDefinitionKind),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, salsa::Update)]
+pub enum LiteralKind {
+    String {
+        len: usize,
+    },
+    Int {
+        len: usize,
+    }
 }
 
 #[salsa::interned(debug)]
@@ -108,7 +120,7 @@ impl<'db> TyKind<'db> {
             | TyKind::Callable(_)
             | TyKind::Modifier(_)
             | TyKind::Tuple(_)
-            | TyKind::Type(_) => false,
+            | TyKind::ItemRef(_) => false,
             _ => true,
         }
     }
@@ -160,6 +172,18 @@ impl<'db> TyKind<'db> {
             }
             (TyKind::Contract(a), TyKind::Contract(b)) => {
                 *a == b || inheritance_chain(db, *a).contains(&b)
+            }
+            (TyKind::Literal(LiteralKind::Int { len }), TyKind::Elementary(ElementaryTypeRef::FixedBytes { size })) => {
+                *len <= (size as usize * 8)
+            }
+            (TyKind::Literal(LiteralKind::Int { len }), TyKind::Elementary(ElementaryTypeRef::Integer { signed, size })) => {
+                *len <= size as _
+            }
+            (TyKind::Literal(LiteralKind::String { len }), TyKind::Elementary(ElementaryTypeRef::Bytes)) => {
+                true
+            }
+            (TyKind::Literal(LiteralKind::String { len }), TyKind::Elementary(ElementaryTypeRef::FixedBytes { size })) => {
+                *len <= size as _
             }
             (a, b) => false,
         }
@@ -282,9 +306,14 @@ impl<'db> TyKind<'db> {
                 }
                 *res += ")";
             }
-            TyKind::Type(item) => {
-                *res += "type(";
+            TyKind::ItemRef(item) => {
+                *res += "TypeRef(";
                 *res += item.name(db).map(|item| item.data(db).as_str()).unwrap_or("{unnamed}");
+                *res += ")";
+            }
+            TyKind::MetaType(item) => {
+                *res += "MetaType(";
+                item.data(db).human_readable_to(db, res);
                 *res += ")";
             }
             TyKind::UserDefinedValueType(user_defined_value_type_id) => {
@@ -293,6 +322,14 @@ impl<'db> TyKind<'db> {
                 *res += ")";
             }
             TyKind::Magic(kind) => *res += "magic",
+            TyKind::Literal(literal) => {
+                *res += "literal(";
+                *res += match literal {
+                    LiteralKind::String { len } => "string",
+                    LiteralKind::Int { len } => "int",
+                };
+                *res += ")"
+            }
         }
     }
 }
@@ -315,7 +352,7 @@ pub fn members<'db>(
         a => a,
     };
     match ty.data(db) {
-        TyKind::Type(Item::Error(_)) | TyKind::Type(Item::Event(_)) | TyKind::Callable(_) => {
+        TyKind::ItemRef(Item::Error(_) | Item::Event(_)) | TyKind::Callable(_) => {
             res.insert(
                 Ident::new(db, "selector".to_owned()),
                 smallvec![MemberKind::SynteticItem(Ty::new_intern(
@@ -382,7 +419,7 @@ pub fn members<'db>(
                 }
             }
         }
-        TyKind::Array(ty_kind_interned, _) => {
+        TyKind::Array(_, _) | TyKind::Elementary(ElementaryTypeRef::Bytes) => {
             res.insert(
                 Ident::new(db, "length".to_owned()),
                 smallvec![MemberKind::SynteticItem(Ty::new_intern(
@@ -391,7 +428,7 @@ pub fn members<'db>(
                 ))],
             );
         }
-        TyKind::Type(item) => match item {
+        TyKind::ItemRef(item) => match item {
             Item::Module(source_unit) => {
                 for (name, item) in source_unit
                     .items(db)

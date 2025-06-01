@@ -30,6 +30,14 @@ impl<'db> LowerCtx<'db> {
                 .map(Literal::Number)
                 .unwrap_or(Literal::Error),
             nodes::Literal::BoolLiteral(d) => Literal::Boolean(d.true_token().is_some()),
+            nodes::Literal::AddressLiteral(a) => {
+                let mut buf = [0u8; 20];
+                if let Some(data) = a.address_token() {
+                    hex::decode_to_slice(&data.text()[2..], &mut buf);
+                }
+
+                Literal::Address(buf)
+            }
         }
     }
 }

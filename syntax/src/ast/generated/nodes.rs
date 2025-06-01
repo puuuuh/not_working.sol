@@ -139,6 +139,14 @@ impl BoolLiteral {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct AddressLiteral {
+    pub(crate) syntax: SyntaxNode,
+}
+impl AddressLiteral {
+    pub fn address_token(&self) -> Option<SyntaxToken> { support::token(&self.syntax, T![address]) }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ElementaryType {
     pub(crate) syntax: SyntaxNode,
 }
@@ -1112,6 +1120,7 @@ pub enum Literal {
     DecimalNumberLiteral(DecimalNumberLiteral),
     HexNumberLiteral(HexNumberLiteral),
     BoolLiteral(BoolLiteral),
+    AddressLiteral(AddressLiteral),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -1374,6 +1383,18 @@ impl AstNode for HexNumberLiteral {
 impl AstNode for BoolLiteral {
     type Language = SolidityLang;
     fn can_cast(kind: SyntaxKind) -> bool { kind == BOOL_LITERAL }
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        if Self::can_cast(syntax.kind()) {
+            Some(Self { syntax })
+        } else {
+            None
+        }
+    }
+    fn syntax(&self) -> &SyntaxNode { &self.syntax }
+}
+impl AstNode for AddressLiteral {
+    type Language = SolidityLang;
+    fn can_cast(kind: SyntaxKind) -> bool { kind == ADDRESS_LITERAL }
     fn cast(syntax: SyntaxNode) -> Option<Self> {
         if Self::can_cast(syntax.kind()) {
             Some(Self { syntax })
@@ -2382,6 +2403,9 @@ impl From<HexNumberLiteral> for Literal {
 impl From<BoolLiteral> for Literal {
     fn from(node: BoolLiteral) -> Literal { Literal::BoolLiteral(node) }
 }
+impl From<AddressLiteral> for Literal {
+    fn from(node: AddressLiteral) -> Literal { Literal::AddressLiteral(node) }
+}
 impl AstNode for Literal {
     type Language = SolidityLang;
     fn can_cast(kind: SyntaxKind) -> bool {
@@ -2392,6 +2416,7 @@ impl AstNode for Literal {
                 | DECIMAL_NUMBER_LITERAL
                 | HEX_NUMBER_LITERAL
                 | BOOL_LITERAL
+                | ADDRESS_LITERAL
         )
     }
     fn cast(syntax: SyntaxNode) -> Option<Self> {
@@ -2403,6 +2428,7 @@ impl AstNode for Literal {
             }
             HEX_NUMBER_LITERAL => Literal::HexNumberLiteral(HexNumberLiteral { syntax }),
             BOOL_LITERAL => Literal::BoolLiteral(BoolLiteral { syntax }),
+            ADDRESS_LITERAL => Literal::AddressLiteral(AddressLiteral { syntax }),
             _ => return None,
         };
         Some(res)
@@ -2414,6 +2440,7 @@ impl AstNode for Literal {
             Literal::DecimalNumberLiteral(it) => &it.syntax,
             Literal::HexNumberLiteral(it) => &it.syntax,
             Literal::BoolLiteral(it) => &it.syntax,
+            Literal::AddressLiteral(it) => &it.syntax,
         }
     }
 }
@@ -3186,6 +3213,11 @@ impl std::fmt::Display for HexNumberLiteral {
     }
 }
 impl std::fmt::Display for BoolLiteral {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(self.syntax(), f)
+    }
+}
+impl std::fmt::Display for AddressLiteral {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         std::fmt::Display::fmt(self.syntax(), f)
     }

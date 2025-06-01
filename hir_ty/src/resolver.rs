@@ -24,7 +24,7 @@ use crate::{
     extensions::Extensions,
     member_kind::MemberKind,
     type_check::{self, check_item},
-    tys::{unknown, Ty, TyKind, TyKindInterned, TypeModifier},
+    tys::{unknown, LiteralKind, Ty, TyKind, TyKindInterned, TypeModifier},
 };
 
 use hir_def::hir::HasSyntax;
@@ -32,10 +32,10 @@ use rowan::ast::AstNode;
 
 #[salsa::tracked(debug)]
 pub struct TypeResolution<'db> {
-    #[returns_ref]
+    #[returns(ref)]
     #[tracked]
     pub expr_map: IndexMapUpdate<ExprId<'db>, Ty<'db>>,
-    #[returns_ref]
+    #[returns(ref)]
     #[tracked]
     pub typeref_map: IndexMapUpdate<TypeRefId<'db>, TyKindInterned<'db>>,
 }
@@ -134,7 +134,6 @@ impl<'db> TypeResolutionCtx<'db> {
 
         let t = item.file(db);
 
-        // Skip extensions for items without body
         match item {
             Item::Import(_) | Item::Pragma(_) | Item::Using(_) | Item::Module(_) => {
                 return ctx;
@@ -211,9 +210,7 @@ impl<'db> TypeResolutionCtx<'db> {
         cov_mark::hit!(hir_ty_resolve_item);
         self.extensions = Extensions::for_item(db, self.item);
 
-        let item = self.item;
-        let scope = self.scope;
-        match item {
+        match self.item {
             Item::Function(function_id) => {
                 if let Some((body, map)) = function_id.body(db) {
                     walk_stmt(db, body, self);
@@ -255,7 +252,6 @@ impl<'db> TypeResolutionCtx<'db> {
         expr: ExprId<'db>,
         args: SmallVec<[Ty<'db>; 2]>,
     ) -> Ty<'db> {
-        self.expr_map.swap_remove(&expr);
         let t = self.resolve_method_inner(db, expr, args);
         self.expr_map.insert(expr, t);
 
@@ -284,7 +280,7 @@ impl<'db> TypeResolutionCtx<'db> {
                 if args.len() != 1 {
                     return Ty::new(self.unknown)
                 }
-                let res = self.resolve_type_ref(db, self.scope.for_expr(db, expr), *ty);
+                let res =  self.resolve_type_ref(db, self.scope.for_expr(db, expr), *ty);
                 Ty::new_intern(db, TyKind::Callable(Callable {
                     args: smallvec![Ty::new_intern(db, TyKind::Any)],
                     any_args: false,
@@ -395,7 +391,7 @@ impl<'db> TypeResolutionCtx<'db> {
                 match def {
                     MemberKind::Item(item) => {
                         return Some(match owner_ty.kind(db) {
-                            TyKind::Type(owner) => Ty::new(self.resolve_item_ref(db, *item)),
+                            TyKind::ItemRef(owner) => Ty::new(self.resolve_item_ref(db, *item)),
                             _ => Ty::new(self.resolve_item_type(db, *item)),
                         })
                     }
@@ -463,15 +459,18 @@ impl<'db> TypeResolutionCtx<'db> {
                 })
             }
             Expr::Literal { data } => match data {
+                hir_def::hir::Literal::Address(_) => {
+                    TyKind::Elementary(ElementaryTypeRef::Address { payable: false })
+                }
                 hir_def::hir::Literal::String(items) => {
-                    TyKind::Elementary(ElementaryTypeRef::String)
+                    TyKind::Literal(LiteralKind::String { len: items.iter().map(|a| a.len()).sum() })
                 }
                 hir_def::hir::Literal::Number(big_int) => {
-                    TyKind::Elementary(ElementaryTypeRef::Integer { signed: false, size: 256 })
+                    TyKind::Literal(LiteralKind::Int { len: big_int.bits() as _ })
                 }
                 hir_def::hir::Literal::Boolean(_) => TyKind::Elementary(ElementaryTypeRef::Bool),
                 hir_def::hir::Literal::HexString(items) => {
-                    TyKind::Elementary(ElementaryTypeRef::String)
+                    TyKind::Literal(LiteralKind::String { len: items.iter().map(|a| a.len()).sum() })
                 }
                 hir_def::hir::Literal::UnicodeStringLiteral() => {
                     TyKind::Elementary(ElementaryTypeRef::String)
@@ -599,8 +598,8 @@ impl<'db> TypeResolutionCtx<'db> {
                                 user_defined_value_type_id.ty(db),
                             );
                         }
-                        Item::Error(error_id) => TyKind::Type(item),
-                        Item::Event(event_id) => TyKind::Type(item),
+                        Item::Error(error_id) => TyKind::ItemRef(item),
+                        Item::Event(event_id) => TyKind::ItemRef(item),
                         Item::Struct(structure_id) => TyKind::Struct(structure_id),
                         _ => {
                             emit_typeref_error(
@@ -627,7 +626,7 @@ impl<'db> TypeResolutionCtx<'db> {
         match item {
             Item::Function(function_id) => self.resolve_item_type(db, item),
             Item::Modifier(modifier_id) => self.resolve_item_type(db, item),
-            _ => TyKindInterned::new(db, TyKind::Type(item)),
+            _ => TyKindInterned::new(db, TyKind::ItemRef(item)),
         }
     }
 
@@ -701,14 +700,14 @@ mod tests {
         let item = lower_file(&db, file).source_map(&db).find_pos(pos);
         let types = resolve_item(&db, item.unwrap());
         let mut res = String::new();
-        for (expr, ty) in types.expr_map(&db).0 {
+        for (expr, ty) in &types.expr_map(&db).0 {
             expr.write(&db, &mut res, 0).unwrap();
             res += ": ";
             res += &ty.human_readable(&db);
             res += "\n";
         }
         res += "\n";
-        for (type_ref, ty) in types.typeref_map(&db).0 {
+        for (type_ref, ty) in &types.typeref_map(&db).0 {
             type_ref.write(&db, &mut res, 0).unwrap();
             res += ": ";
             res += &ty.data(&db).human_readable(&db);
@@ -743,7 +742,7 @@ mod tests {
         );
         check_types(
             fixture,
-            "\"aa\": string memory
+            "\"aa\": literal(string) memory
 tmp: Helloworld memory
 tmp.unknown: {unknown}
 
@@ -780,14 +779,14 @@ mapping(hw.Helloworld => uint256): mapping(Helloworld => uint256)
         check_types(
             fixture,
             "testvar: Test storage ref
-1: uint256
-arg: uint256
-arg: uint256
+1: literal(int) memory
 test: function(uint256, uint256) returns(uint256)
-test(arg,arg): uint256
-true: bool
 arg: uint256
+arg: uint256
+test(arg,arg): uint256
 test: function(uint256, bool) returns(bool)
+arg: uint256
+true: bool
 test(arg,true): bool
 
 uint256: uint256
@@ -819,7 +818,7 @@ uint256: uint256
         );
         check_types(
             fixture,
-            "1: uint256
+            "1: literal(int) memory
 test: TestStruct memory
 test.field: uint256
 
@@ -915,8 +914,8 @@ uint256: uint256
         check_types(
             fixture,
             "tmp: BaseContract storage ref
-true: bool
 tmp.extension: function(bool) returns(uint256)
+true: bool
 tmp.extension(true): uint256
 
 ",
@@ -959,8 +958,8 @@ tmp.extension(true): uint256
             "tmp: First memory
 tmp.getInterface: function() returns(ITestInterface memory)
 tmp.getInterface(): ITestInterface memory
-help: address
 tmp.getInterface().interfaceMember: function(address) returns(address)
+help: address
 tmp.getInterface().interfaceMember(help): address
 
 address: address
@@ -1022,8 +1021,8 @@ First: First
 
         check_types(
             fixture,
-            "Test1: type(Test1)
-Test1.SomeEnum: type(SomeEnum)
+            "Test1: TypeRef(Test1)
+Test1.SomeEnum: TypeRef(SomeEnum)
 Test1.SomeEnum.Var1: SomeEnum memory
 
 ",
@@ -1059,8 +1058,8 @@ Test1.SomeEnum.Var1: SomeEnum memory
         check_types(
             fixture,
             "tmp: function(Argument storage ptr) returns()
-storageRef: Argument storage ref
 tmp: function(Argument storage ptr) returns()
+storageRef: Argument storage ref
 tmp(storageRef): ()
 
 ",
@@ -1087,13 +1086,13 @@ tmp(storageRef): ()
 
         check_types(
             fixture,
-            "123: uint256
-uint256: function({any} memory) returns(uint256)
+            "uint256: function({any} memory) returns(uint256)
+123: literal(int) memory
 uint256(123): uint256
-uint200(123): uint200
-123: uint256
-uint200: function({any} memory) returns(uint200)
 address: function({any} memory) returns(address)
+uint200: function({any} memory) returns(uint200)
+123: literal(int) memory
+uint200(123): uint200
 address(uint200(123)): address
 
 ",

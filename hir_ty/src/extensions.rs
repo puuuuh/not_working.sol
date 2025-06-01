@@ -17,12 +17,11 @@ pub struct Extensions<'db> {
         TyKindInterned<'db>,
         BTreeMap<Ident<'db>, SmallVec<[(Callable<'db>, FunctionId<'db>); 1]>>,
     >,
-    pub wildcard: BTreeMap<Ident<'db>, SmallVec<[(Callable<'db>, FunctionId<'db>); 1]>>,
 }
 
 impl<'db> Extensions<'db> {
     pub fn empty<'a>() -> &'a Extensions<'a> {
-        const { &Extensions { local: BTreeMap::new(), wildcard: BTreeMap::new() } }
+        const { &Extensions { local: BTreeMap::new() } }
     }
 
     pub fn for_item(db: &'db dyn BaseDb, item: Item<'db>) -> &'db Self {
@@ -36,9 +35,7 @@ fn for_item<'db>(db: &'db dyn BaseDb, item: Item<'db>) -> Extensions<'db> {
     let parent = match item {
         Item::Contract(contract_id) => Some(contract_id),
         Item::Enum(enumeration_id) => enumeration_id.origin(db),
-        Item::UserDefinedValueType(user_defined_value_type_id) => {
-            user_defined_value_type_id.origin(db)
-        }
+        Item::UserDefinedValueType(user_defined_value_type_id) => user_defined_value_type_id.origin(db),
         Item::Error(error_id) => error_id.origin(db),
         Item::Event(event_id) => event_id.origin(db),
         Item::Function(function_id) => function_id.origin(db),
@@ -97,8 +94,8 @@ fn collect_usings_to<'db, 'a>(
         } else {
             None
         };
-        let mut tmp =
-            if let Some(ty) = ty { res.local.entry(ty).or_default() } else { &mut res.wildcard };
+
+        let wildcard = ty.is_none();
 
         for i in using_data.items {
             if i.as_name.is_some() {
@@ -108,22 +105,25 @@ fn collect_usings_to<'db, 'a>(
             if let Some(lib) = scope.lookup_path(db, &i.path.0) {
                 match lib {
                     Item::Function(f) => {
-                        if let Some(name) = f.name(db) {
-                            if let Some(c) = Callable::try_from_item(db, Item::Function(f)) {
-                                tmp.entry(name).or_default().push((c, f));
+                        if let Some((name, c)) = f.name(db).zip(Callable::try_from_item(db, Item::Function(f))) {
+                            if let Some(receiver) = c.args.first() {
+                                if ty.is_none() || Some(receiver.ty_kind) == ty {
+                                    res.local.entry(receiver.ty_kind).or_default().entry(name).or_default().push((c, f));
+                                } else {
+                                    // FIXME
+                                }
                             }
                         }
                     }
-                    Item::Contract(c) => {
-                        if c.kind(db) == ContractType::Library {
-                            for f in c.items(db).iter().filter_map(|c| match c {
-                                ContractItem::Function(f) => Some(f),
-                                _ => None,
-                            }) {
-                                if let Some(name) = f.name(db) {
-                                    if let Some(c) = Callable::try_from_item(db, Item::Function(*f))
-                                    {
-                                        tmp.entry(name).or_default().push((c, *f));
+                    Item::Contract(c) if c.kind( db) == ContractType::Library => {
+                        for f in c.items(db).iter().filter_map(|c| match c {
+                            ContractItem::Function(f) => Some(f),
+                            _ => None,
+                        }) {
+                            if let Some((name, c)) = f.name(db).zip(Callable::try_from_item(db, Item::Function(*f))) {
+                                if let Some(receiver) = c.args.first() {
+                                    if ty.is_none() || Some(receiver.ty_kind) == ty {
+                                        res.local.entry(receiver.ty_kind).or_default().entry(name).or_default().push((c, *f));
                                     }
                                 }
                             }

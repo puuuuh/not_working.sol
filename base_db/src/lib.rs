@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 pub use crate::input::Project;
 use rowan::TextSize;
-use tracing::debug;
 use vfs::Vfs;
 pub use vfs::{AnchoredPath, File, VfsPath};
 
@@ -48,11 +47,7 @@ pub struct TestDatabase {
 impl Default for TestDatabase {
     fn default() -> Self {
         let db = Self {
-            storage: salsa::Storage::new(Some(Box::new({
-                move |event| {
-                    debug!("Event: {event:?}");
-                }
-            }))),
+            storage: salsa::Storage::new(None),
             vfs: Default::default(),
         };
         Project::new(&db, VfsPath::from_virtual("".to_owned()));

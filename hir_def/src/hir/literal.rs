@@ -4,6 +4,7 @@ use num_bigint::BigInt;
 
 #[derive(Clone, Eq, Debug, PartialEq, Hash, salsa::Update)]
 pub enum Literal {
+    Address([u8; 20]),
     String(Vec<Vec<u8>>),
     Number(BigInt),
     Boolean(bool),
@@ -33,6 +34,10 @@ impl Display for Literal {
             }
             Literal::UnicodeStringLiteral() => {
                 f.write_str("Unicode string literal(unimplemented)")?;
+            }
+            Literal::Address(addr) => {
+                f.write_str("0x");
+                f.write_str(&hex::encode(addr))?;
             }
             Literal::Error => {
                 f.write_str("{invalid literal}")?;

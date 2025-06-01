@@ -42,6 +42,10 @@ impl<'a> Parser<'a> {
                     self.builder.start_node(BOOL_LITERAL.into());
                     self.bump_any();
                 }
+                ADDRESS => {
+                    self.builder.start_node(ADDRESS_LITERAL.into());
+                    self.bump_any();
+                }
                 _ => unreachable!(),
             }
             self.builder.finish_node();

@@ -62,6 +62,8 @@ Literal =
 | DecimalNumberLiteral
 | HexNumberLiteral
 | BoolLiteral
+| AddressLiteral
+
 
 StringLiteral =
   'string'*
@@ -79,8 +81,12 @@ BoolLiteral =
   'true'
 | 'false'
 
+AddressLiteral =
+  'address'
+
 ElementaryType =
   'elementary_type_ident' 'payable'?
+
 
 //*************************//
 //          Items          //

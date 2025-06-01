@@ -149,7 +149,7 @@ impl<'db> Callable<'db> {
         match t.kind(db) {
             TyKind::Callable(callable) => Some(callable),
             TyKind::Modifier(callable) => Some(callable),
-            TyKind::Type(item) => Self::try_from_item(db, item),
+            TyKind::ItemRef(item) => Self::try_from_item(db, item),
             _ => None,
         }
     }

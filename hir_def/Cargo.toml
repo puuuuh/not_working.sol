@@ -22,5 +22,6 @@ derive_more.workspace = true
 sorted-vec.workspace = true
 smallvec.workspace = true
 line-index = "0.1.2"
+hex = "0.4.3"
 
 [dev-dependencies]

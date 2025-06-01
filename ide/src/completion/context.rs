@@ -129,8 +129,10 @@ fn classify_member_kind<'db>(db: &'db dyn BaseDb, data: &MemberKind) -> super::C
                 hir_ty::tys::TyKind::Array(ty_kind_interned, _) => super::CompletionKind::Class,
                 hir_ty::tys::TyKind::Mapping(ty_kind_interned, ty_kind_interned1) => super::CompletionKind::Class,
                 hir_ty::tys::TyKind::Tuple(small_vec) => super::CompletionKind::Class,
-                hir_ty::tys::TyKind::Type(item) => classify_item(&item),
+                hir_ty::tys::TyKind::ItemRef(item) => classify_item(&item),
                 hir_ty::tys::TyKind::Magic(magic_definition_kind) => classify_magic_definition(&magic_definition_kind),
+                hir_ty::tys::TyKind::MetaType(ty_kind_interned) => super::CompletionKind::Constant,
+                hir_ty::tys::TyKind::Literal(literal_kind) => super::CompletionKind::Value,
             }
         },
     }

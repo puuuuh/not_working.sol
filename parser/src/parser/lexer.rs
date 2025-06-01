@@ -1,4 +1,4 @@
-use std::str::Chars;
+use std::{str::Chars};
 use syntax::syntax_kind::SyntaxKind;
 
 pub const USER_DEFINABLE_OP: &[SyntaxKind] = &[
@@ -247,6 +247,7 @@ impl Iterator for Lexer<'_> {
             }
             '0' => {
                 let mut hex = false;
+                let mut digits = 0;
                 if let Some('x') = self.peek() {
                     self.consume();
                     len += 'x'.len_utf8();
@@ -257,12 +258,17 @@ impl Iterator for Lexer<'_> {
                     {
                         self.consume();
                         len += 'x'.len_utf8();
+                        digits += (c1 == '_') as usize;
                     } else {
                         break;
                     }
                 }
                 if hex {
-                    SyntaxKind::HEX_NUMBER
+                    if digits == 40 {
+                        SyntaxKind::ADDRESS
+                    } else {
+                        SyntaxKind::HEX_NUMBER
+                    }
                 } else {
                     SyntaxKind::DECIMAL_NUMBER
                 }

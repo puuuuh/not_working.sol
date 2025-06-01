@@ -486,6 +486,7 @@ fn generate_syntax_kinds(grammar: KindsSrc<'_>) -> String {
             [hex_string] => { $crate::SyntaxKind::HEX_STRING };
             [decimal_number] => { $crate::SyntaxKind::DECIMAL_NUMBER };
             [hex_number] => { $crate::SyntaxKind::HEX_NUMBER };
+            [address] => { $crate::SyntaxKind::ADDRESS };
         }
     };
 
