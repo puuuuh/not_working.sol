@@ -6,8 +6,10 @@ use hir_def::{
     lower_file, Expr, ExprId, FileExt, FilePosition, Ident, IdentPath, Item, StatementId,
 };
 use hir_nameres::container::Container;
+use hir_nameres::scope::body::{Declaration, MagicDefinitionKind};
 use hir_nameres::scope::{HasScope, Scope};
 use hir_ty::extensions::Extensions;
+use hir_ty::member_kind::MemberKind;
 use hir_ty::tys::Ty;
 use rowan::ast::{AstNode, AstPtr};
 use rowan::{TextRange, TextSize};
@@ -51,6 +53,89 @@ fn prev_token(token: &SyntaxToken) -> Option<SyntaxToken> {
     prev
 }
 
+fn classify_item(item: &Item) -> super::CompletionKind {
+    match item {
+        Item::Contract(contract_id) => super::CompletionKind::Class,
+        Item::Enum(enumeration_id) => super::CompletionKind::Enum,
+        Item::UserDefinedValueType(user_defined_value_type_id) => super::CompletionKind::Item,
+        Item::Error(error_id) => super::CompletionKind::Class,
+        Item::Event(event_id) => super::CompletionKind::Event,
+        Item::Function(function_id) => super::CompletionKind::Function,
+        Item::StateVariable(state_variable_id) => super::CompletionKind::Variable,
+        Item::Struct(structure_id) => super::CompletionKind::Struct,
+        Item::Constructor(constructor_id) => super::CompletionKind::Constructor,
+        Item::Modifier(modifier_id) => super::CompletionKind::Method,
+        Item::Module(source_unit) => super::CompletionKind::Module,
+        _ => super::CompletionKind::Value
+    }
+}
+
+fn classify_declaration(decl: &Declaration) -> super::CompletionKind {
+    match decl {
+        Declaration::Item(item) => classify_item(item),
+        Declaration::Local(variable_declaration) => super::CompletionKind::Variable,
+        Declaration::Magic(magic_definition_kind) => classify_magic_definition(magic_definition_kind),
+    }
+}
+
+fn classify_magic_definition(def: &MagicDefinitionKind) -> super::CompletionKind {
+    match def {
+        MagicDefinitionKind::Block => super::CompletionKind::Value,
+        MagicDefinitionKind::Msg => super::CompletionKind::Value,
+        MagicDefinitionKind::Tx => super::CompletionKind::Value,
+        MagicDefinitionKind::Abi => super::CompletionKind::Module,
+        MagicDefinitionKind::Keccak256 => super::CompletionKind::Function,
+        MagicDefinitionKind::Sha256 => super::CompletionKind::Function,
+        MagicDefinitionKind::Gasleft => super::CompletionKind::Function,
+        MagicDefinitionKind::Assert => super::CompletionKind::Function,
+        MagicDefinitionKind::Require => super::CompletionKind::Function,
+        MagicDefinitionKind::RequireWithMessage => super::CompletionKind::Function,
+        MagicDefinitionKind::Revert => super::CompletionKind::Function,
+        MagicDefinitionKind::RevertWithMessage =>super::CompletionKind::Function,
+        MagicDefinitionKind::AddMod =>super::CompletionKind::Function,
+        MagicDefinitionKind::MulMod => super::CompletionKind::Function,
+        MagicDefinitionKind::Ripemd160 => super::CompletionKind::Function,
+        MagicDefinitionKind::Ecrecover => super::CompletionKind::Function,
+    }
+}
+
+fn classify_member_kind<'db>(db: &'db dyn BaseDb, data: &MemberKind) -> super::CompletionKind {
+    match data {
+        MemberKind::Item(item) => {
+            classify_item(item)
+        },
+        MemberKind::ExtensionFunction(function_id, callable) => {
+            super::CompletionKind::Function
+        },
+        MemberKind::Field(structure_field_id) => {
+            super::CompletionKind::Field
+        },
+        MemberKind::EnumVariant(enumeration_variant_id) => {
+            super::CompletionKind::EnumMember
+        },
+        MemberKind::SynteticItem(ty) => {
+            match ty.kind(db) {
+                hir_ty::tys::TyKind::Unknown => super::CompletionKind::Value,
+                hir_ty::tys::TyKind::Any => super::CompletionKind::Value,
+                hir_ty::tys::TyKind::Callable(callable) => super::CompletionKind::Function,
+                hir_ty::tys::TyKind::Modifier(callable) => super::CompletionKind::Function,
+                hir_ty::tys::TyKind::Error => super::CompletionKind::Class,
+                hir_ty::tys::TyKind::Struct(structure_id) => super::CompletionKind::Struct,
+                hir_ty::tys::TyKind::Event => super::CompletionKind::Class,
+                hir_ty::tys::TyKind::Contract(contract_id) => super::CompletionKind::Class,
+                hir_ty::tys::TyKind::Elementary(elementary_type_ref) => super::CompletionKind::Class,
+                hir_ty::tys::TyKind::UserDefinedValueType(user_defined_value_type_id) => super::CompletionKind::Class,
+                hir_ty::tys::TyKind::Enum(enumeration_id) => super::CompletionKind::Enum,
+                hir_ty::tys::TyKind::Array(ty_kind_interned, _) => super::CompletionKind::Class,
+                hir_ty::tys::TyKind::Mapping(ty_kind_interned, ty_kind_interned1) => super::CompletionKind::Class,
+                hir_ty::tys::TyKind::Tuple(small_vec) => super::CompletionKind::Class,
+                hir_ty::tys::TyKind::Type(item) => classify_item(&item),
+                hir_ty::tys::TyKind::Magic(magic_definition_kind) => classify_magic_definition(&magic_definition_kind),
+            }
+        },
+    }
+}
+
 impl<'db> CompletionCtx<'db> {
     pub fn new(db: &'db dyn BaseDb, pos: FilePosition) -> Option<Self> {
         let source_unit = lower_file(db, pos.file);
@@ -72,12 +157,17 @@ impl<'db> CompletionCtx<'db> {
             CompletionKind::DotAccess { receiver, receiver_ty } => {
                 let c = receiver_ty.members(self.db, Extensions::empty());
                 c.iter()
-                    .map(|a| Completion {
-                        label: a.0.data(self.db).clone(),
-                        src_range: self.pos,
-                        text: a.0.data(self.db).clone(),
-                        kind: super::CompletionKind::Item,
+                    .flat_map(|(ident, data)| {
+                        data.iter().map(|elem| (*ident, elem))
                     })
+                    .map(|(name, elem)| {
+                        Completion {
+                            label: name.data(self.db).clone(),
+                            src_range: self.pos,
+                            text: name.data(self.db).clone(),
+                            kind: classify_member_kind(self.db, elem)
+                        }
+                })
                     .collect()
             }
             CompletionKind::Path { receiver } => {
@@ -89,7 +179,7 @@ impl<'db> CompletionCtx<'db> {
                         label: a.0.data(self.db).clone(),
                         src_range: self.pos,
                         text: a.0.data(self.db).clone(),
-                        kind: super::CompletionKind::Item,
+                        kind: classify_item(&a.1)
                     })
                     .collect()
             }
@@ -119,7 +209,7 @@ impl<'db> CompletionCtx<'db> {
                         label: a.0.data(self.db).clone(),
                         src_range: self.pos,
                         text: a.0.data(self.db).clone(),
-                        kind: super::CompletionKind::Item,
+                        kind: classify_declaration(a.1.first().unwrap()),
                     })
                     .collect()
             }

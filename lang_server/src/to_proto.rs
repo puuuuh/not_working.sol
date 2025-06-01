@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use async_lsp::lsp_types::{
-    CompletionItem, CompletionTextEdit, Diagnostic, Position, Range, TextEdit,
+    CompletionItem, CompletionItemKind, CompletionTextEdit, Diagnostic, Position, Range, TextEdit
 };
 use ide::completion::Completion;
 use line_index::{LineIndex, WideEncoding};
@@ -30,10 +30,38 @@ pub fn completion_item(line_index: &line_index::LineIndex, src: Completion) -> C
             src.text.clone(),
         ))
     });
+    let kind = match src.kind {
+        ide::completion::CompletionKind::Item => CompletionItemKind::CLASS,
+        ide::completion::CompletionKind::Variable => CompletionItemKind::VARIABLE,
+        ide::completion::CompletionKind::Text => CompletionItemKind::TEXT,
+        ide::completion::CompletionKind::Method => CompletionItemKind::METHOD,
+        ide::completion::CompletionKind::Function => CompletionItemKind::FUNCTION,
+        ide::completion::CompletionKind::Constructor => CompletionItemKind::CONSTRUCTOR,
+        ide::completion::CompletionKind::Field => CompletionItemKind::FIELD,
+        ide::completion::CompletionKind::Class => CompletionItemKind::CLASS,
+        ide::completion::CompletionKind::Interface => CompletionItemKind::INTERFACE,
+        ide::completion::CompletionKind::Module => CompletionItemKind::MODULE,
+        ide::completion::CompletionKind::Property => CompletionItemKind::PROPERTY,
+        ide::completion::CompletionKind::Unit => CompletionItemKind::UNIT,
+        ide::completion::CompletionKind::Value => CompletionItemKind::VALUE,
+        ide::completion::CompletionKind::Enum => CompletionItemKind::ENUM,
+        ide::completion::CompletionKind::Keyword => CompletionItemKind::KEYWORD,
+        ide::completion::CompletionKind::Snippet => CompletionItemKind::SNIPPET,
+        ide::completion::CompletionKind::Color => CompletionItemKind::COLOR,
+        ide::completion::CompletionKind::File => CompletionItemKind::FILE,
+        ide::completion::CompletionKind::Reference => CompletionItemKind::REFERENCE,
+        ide::completion::CompletionKind::Folder => CompletionItemKind::FOLDER,
+        ide::completion::CompletionKind::EnumMember => CompletionItemKind::ENUM_MEMBER,
+        ide::completion::CompletionKind::Constant => CompletionItemKind::CONSTANT,
+        ide::completion::CompletionKind::Struct => CompletionItemKind::STRUCT,
+        ide::completion::CompletionKind::Event => CompletionItemKind::EVENT,
+        ide::completion::CompletionKind::Operator => CompletionItemKind::OPERATOR,
+        ide::completion::CompletionKind::TypeParameter => CompletionItemKind::TYPE_PARAMETER,
+    };
     CompletionItem {
         label: src.label,
         label_details: None,
-        kind: None,
+        kind: Some(kind),
         detail: None,
         documentation: None,
         deprecated: None,

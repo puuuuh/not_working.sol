@@ -184,14 +184,17 @@ impl<'db> TyKind<'db> {
                 *res += "function";
                 // FIXME
                 *res += "(";
-                for (i, a) in callable.args.iter().enumerate() {
-                    if i > 0 {
-                        *res += ", ";
+                if callable.any_args {
+                    *res += "...";
+                } else {
+                    for (i, a) in callable.args.iter().enumerate() {
+                        if i > 0 {
+                            *res += ", ";
+                        }
+                        a.human_readable_to(db, res);
                     }
-                    a.human_readable_to(db, res);
                 }
-                *res += ")";
-                *res += " returns(";
+                *res += ") returns(";
                 for (i, a) in callable.returns.iter().enumerate() {
                     if i > 0 {
                         *res += ", ";

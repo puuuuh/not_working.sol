@@ -197,7 +197,7 @@ impl<'db> Callable<'db> {
                 Self {
                     any_args: false,
                     args: params,
-                    returns: smallvec![Ty::new_intern(db, TyKind::Event)],
+                    returns: smallvec![Ty::new_intern(db, TyKind::Error)],
                 }
             }
             Item::Event(event_id) => {
