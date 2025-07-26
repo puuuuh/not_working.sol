@@ -2,11 +2,7 @@ use std::{cmp::Reverse, collections::BTreeMap};
 
 use base_db::{BaseDb, File};
 use hir_def::{
-    hir::{BinaryOp, ElementaryTypeRef, Expr, ExprId, Ident, Item, Statement, StatementId},
-    lower_file,
-    walk::{walk_stmt, Visitor},
-    ContractId, ContractItem, ContractType, DataLocation, FileAstPtr, FunctionId, InFile,
-    IndexMapUpdate, TypeRefId, TypeRefKind,
+    hir::{BinaryOp, ElementaryTypeRef, Expr, ExprId, Ident, Item, Statement, StatementId}, lower_file, walk::{walk_stmt, Visitor}, ContractId, ContractItem, ContractType, DataLocation, FileAstPtr, FunctionId, InFile, IndexMapUpdate, TypeRefId, TypeRefKind
 };
 use hir_nameres::{
     container::{self, Container},

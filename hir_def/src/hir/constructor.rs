@@ -21,10 +21,7 @@ use super::{HasFile, SourceUnit};
 #[tracked(debug)]
 #[derive(PartialOrd, Ord)]
 pub struct ConstructorId<'db> {
-    #[id]
     pub file: File,
-
-    #[id]
     pub info: Constructor<'db>,
 
     #[tracked]
@@ -56,7 +53,7 @@ impl<'db> ConstructorId<'db> {
             res,
             ItemSourceMap::new(
                 db,
-                (crate::IndexMapUpdate(lowerer.exprs), crate::IndexMapUpdate(lowerer.stmts)),
+                (lowerer.exprs, lowerer.stmts),
             ),
         ))
     }

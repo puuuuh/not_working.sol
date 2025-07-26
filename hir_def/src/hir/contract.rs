@@ -12,7 +12,7 @@ use crate::hir::user_defined_value_type::UserDefinedValueTypeId;
 use crate::hir::using::UsingId;
 use crate::hir::Item;
 use crate::items::HirPrint;
-use crate::{impl_major_item, lazy_field, AstPtr, IndexMapUpdate};
+use crate::{impl_major_item, lazy_field, AstPtr};
 use base_db::BaseDb;
 use salsa::Database;
 use std::fmt::Write;
@@ -23,10 +23,7 @@ use vfs::File;
 #[salsa::tracked(debug)]
 #[derive(PartialOrd, Ord)]
 pub struct ContractId<'db> {
-    #[id]
     pub file: File,
-
-    #[id]
     pub name: Ident<'db>,
 
     #[tracked]

@@ -6,7 +6,6 @@ use std::thread::current;
 
 use base_db::BaseDb;
 use either::Either;
-use hir_def::IndexMapUpdate;
 use hir_def::hir::EnumerationVariantId;
 use hir_def::hir::ExprId;
 use hir_def::hir::FunctionId;

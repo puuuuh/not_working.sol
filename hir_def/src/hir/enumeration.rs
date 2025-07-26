@@ -12,10 +12,7 @@ use vfs::File;
 #[salsa::tracked(debug)]
 #[derive(PartialOrd, Ord)]
 pub struct EnumerationId<'db> {
-    #[id]
     pub file: File,
-
-    #[id]
     pub name: Ident<'db>,
 
     #[tracked]

@@ -42,8 +42,8 @@ pub(crate) struct LowerCtx<'a> {
     missing_typeref: TypeRefId<'a>,
     missing_expr: ExprId<'a>,
     pub(crate) spans: Vec<(TextRange, Item<'a>)>,
-    pub(crate) exprs: IndexMap<AstPtr<Expr>, ExprId<'a>>,
-    pub(crate) stmts: IndexMap<AstPtr<Stmt>, StatementId<'a>>,
+    pub(crate) exprs: IndexMapUpdate<AstPtr<Expr>, ExprId<'a>>,
+    pub(crate) stmts: IndexMapUpdate<AstPtr<Stmt>, StatementId<'a>>,
 }
 
 impl<'a> LowerCtx<'a> {
@@ -76,7 +76,7 @@ impl<'a> LowerCtx<'a> {
     }
 
     pub fn lower_item(&mut self, i: nodes::Item) -> Item<'a> {
-        match i {
+        let i = match i {
             nodes::Item::Pragma(pragma) => Item::Pragma(self.lower_pragma(pragma)),
             nodes::Item::Import(import) => Item::Import(self.lower_import(import)),
             nodes::Item::Using(using) => Item::Using(self.lower_using(using)),
@@ -94,7 +94,9 @@ impl<'a> LowerCtx<'a> {
             }
             nodes::Item::ErrorDefinition(e) => Item::Error(self.lower_error(e)),
             nodes::Item::EventDefinition(e) => Item::Event(self.lower_event(e)),
-        }
+        };
+        i.clear_origin(self.db);
+        i
     }
 
     pub fn lower_pragma(&mut self, s: nodes::Pragma) -> PragmaId<'a> {

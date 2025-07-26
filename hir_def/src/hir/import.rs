@@ -23,10 +23,7 @@ pub struct SymbolAlias<'db> {
 #[salsa::tracked(debug)]
 #[derive(PartialOrd, Ord)]
 pub struct ImportId<'db> {
-    #[id]
     pub file: File,
-
-    #[id]
     pub kind: ImportKind<'db>,
 
     #[tracked]

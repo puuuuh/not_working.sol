@@ -19,7 +19,6 @@ use super::{TypeRefId, TypeRefKind};
 #[derive(PartialOrd, Ord)]
 pub struct ExprId<'db> {
     #[returns(ref)]
-    #[id]
     pub kind: Expr<'db>,
 
     #[tracked]

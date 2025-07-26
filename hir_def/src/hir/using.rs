@@ -12,7 +12,6 @@ use vfs::File;
 #[tracked(debug)]
 #[derive(PartialOrd, Ord)]
 pub struct UsingId<'db> {
-    #[id]
     pub file: File,
 
     #[tracked]

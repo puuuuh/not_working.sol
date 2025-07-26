@@ -135,8 +135,8 @@ impl<T: Hash + Eq, T1: PartialOrd + Hash> Hash for IndexMapUpdate<T, T1> {
 
 unsafe impl<K, V> Update for IndexMapUpdate<K, V>
 where
-    K: Hash + Eq,
-    V: PartialOrd<V>,
+    K: Hash + Eq + Update,
+    V: PartialOrd<V> + Update,
 {
     unsafe fn maybe_update(old_pointer: *mut Self, new_value: Self) -> bool {
         let old_map: &mut IndexMapUpdate<K, V> = unsafe { &mut *old_pointer };

@@ -21,10 +21,7 @@ use super::Item;
 #[salsa::tracked(debug)]
 #[derive(PartialOrd, Ord)]
 pub struct FunctionId<'db> {
-    #[id]
     pub file: File,
-
-    #[id]
     pub name: Option<Ident<'db>>,
 
     #[tracked(returns(ref))]
@@ -59,7 +56,7 @@ impl<'db> FunctionId<'db> {
             res,
             ItemSourceMap::new(
                 db,
-                (crate::IndexMapUpdate(lowerer.exprs), crate::IndexMapUpdate(lowerer.stmts)),
+                (lowerer.exprs, lowerer.stmts),
             ),
         ))
     }

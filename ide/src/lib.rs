@@ -124,3 +124,99 @@ impl AnalysisHost {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use salsa::{tracked, Database, DatabaseImpl, Durability};
+    use tracing::Level;
+
+    #[test]
+    fn repro() {
+        #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
+        struct BadHash(String);
+
+        impl std::hash::Hash for BadHash {
+            fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+                0.hash(state);
+            }
+        }
+
+        #[salsa::input(debug)]
+        struct Input {
+            field: String
+        }
+
+        #[salsa::interned(debug)]
+        struct Interned {
+            field: String
+        }
+
+        #[salsa::tracked(debug)]
+        struct Output<'db> {
+            pub id: String,
+
+            #[tracked]
+            field: Interned<'db>
+        }
+
+
+        #[salsa::tracked]
+        fn outer_query<'db>(db: &'db dyn Database, non_durable_input: Input, input: Input) -> Vec<Output<'db>> {
+            let res: Vec<Output<'_>> = inner_query(db, input)
+                .into_iter()
+                .map(|i| Output::new(db, input.field(db), i))
+                .collect();
+            res
+        }
+
+        #[salsa::tracked ]
+        fn intern_low_durable<'db>(db: &'db dyn Database, input: Input) -> Vec<Interned<'db>> {
+            input.field(db);
+            (0..10).map(|i| {
+                Interned::new(db, format!("i1_{i}"))
+            }).collect()
+        }
+
+        #[salsa::tracked]
+        fn inner_query<'db>(db: &'db dyn Database, input: Input) -> Vec<Interned<'db>> {
+            let res: Vec<Interned<'db>> = (0..10).map(|i| {
+                Interned::new(db, format!("{}_{i}", input.field(db)))
+            }).collect();
+            res
+        }
+
+
+        tracing_subscriber::fmt()
+            .with_max_level(Level::DEBUG)
+            .with_ansi(false)
+            .with_writer(std::io::stderr)
+            .init();
+        let mut db = DatabaseImpl::default();
+        let i1 = Input::builder("i1".to_owned()).durability(Durability::HIGH).new(&db);
+        let i2 = Input::builder("i2".to_owned()).durability(Durability::LOW).new(&db);
+        let i3 = Input::builder("i3".to_owned()).durability(Durability::LOW).new(&db);
+        let i4 = Input::builder("i4".to_owned()).durability(Durability::LOW).new(&db);
+        let i5 = Input::builder("i5".to_owned()).durability(Durability::LOW).new(&db);
+        let i6 = Input::builder("i6".to_owned()).durability(Durability::LOW).new(&db);
+        let i7 = Input::builder("i7".to_owned()).durability(Durability::LOW).new(&db);
+
+        let a = intern_low_durable(&db, i7);
+        let b = outer_query(&db, i7, i1);
+
+        outer_query(&db, i7, i2);
+        db.synthetic_write(Durability::LOW);
+
+        outer_query(&db, i7, i3);
+        db.synthetic_write(Durability::LOW);
+
+        outer_query(&db, i7, i4);
+        db.synthetic_write(Durability::LOW);
+
+        outer_query(&db, i7, i5);
+        db.synthetic_write(Durability::LOW);
+        outer_query(&db, i7, i6);
+        for a in outer_query(&db, i7, i1) {
+            dbg!(a.field(&db).field(&db));
+        }
+    }
+}

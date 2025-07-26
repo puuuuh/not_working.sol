@@ -13,10 +13,7 @@ use vfs::File;
 #[tracked(debug)]
 #[derive(PartialOrd, Ord)]
 pub struct StructureId<'db> {
-    #[id]
     pub file: File,
-
-    #[id]
     pub name: Ident<'db>,
 
     #[tracked]
@@ -51,7 +48,6 @@ impl HirPrint for StructureId<'_> {
 
 #[tracked(debug)]
 pub struct StructureFieldId<'db> {
-    #[id]
     pub name: Ident<'db>,
     #[tracked]
     pub ty: TypeRefId<'db>,

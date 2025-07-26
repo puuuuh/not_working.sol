@@ -14,10 +14,7 @@ use super::TypeRefId;
 #[tracked(debug)]
 #[derive(PartialOrd, Ord)]
 pub struct ErrorId<'db> {
-    #[id]
     pub file: File,
-
-    #[id]
     pub name: Ident<'db>,
 
     #[tracked]

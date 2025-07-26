@@ -13,10 +13,7 @@ use vfs::File;
 #[tracked(debug)]
 #[derive(PartialOrd, Ord)]
 pub struct UserDefinedValueTypeId<'db> {
-    #[id]
     pub file: File,
-
-    #[id]
     pub name: Ident<'db>,
 
     #[tracked]

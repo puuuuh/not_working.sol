@@ -15,7 +15,6 @@ use super::{HasFile, StatementId};
 
 #[salsa::tracked(debug)]
 pub struct VariableDeclaration<'db> {
-    #[id]
     pub ty: TypeRefId<'db>,
 
     #[tracked]

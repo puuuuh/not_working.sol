@@ -26,7 +26,7 @@ vfs = { path = "./vfs" }
 lang_server = { path = "./lang_server" }
 
 rowan = { version = "0.16.1" }
-salsa = { package = "salsa", git = "https://github.com/salsa-rs/salsa", rev = "9489764ad99a8bfb4fc528eb0f6a6abbaac3e128" }
+salsa = { package = "salsa", git = "https://github.com/salsa-rs/salsa" }
 ide = { path = "./ide" }
 variance = "0.1.3"
 num-bigint = { version = "0.4.4" }

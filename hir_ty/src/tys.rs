@@ -179,7 +179,7 @@ impl<'db> TyKind<'db> {
             (TyKind::Literal(LiteralKind::Int { len }), TyKind::Elementary(ElementaryTypeRef::Integer { signed, size })) => {
                 *len <= size as _
             }
-            (TyKind::Literal(LiteralKind::String { len }), TyKind::Elementary(ElementaryTypeRef::Bytes)) => {
+            (TyKind::Literal(LiteralKind::String { len }), TyKind::Elementary(ElementaryTypeRef::Bytes | ElementaryTypeRef::String)) => {
                 true
             }
             (TyKind::Literal(LiteralKind::String { len }), TyKind::Elementary(ElementaryTypeRef::FixedBytes { size })) => {

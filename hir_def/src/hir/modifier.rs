@@ -17,10 +17,7 @@ use vfs::File;
 #[tracked(debug)]
 #[derive(PartialOrd, Ord)]
 pub struct ModifierId<'db> {
-    #[id]
     pub file: File,
-
-    #[id]
     pub name: Ident<'db>,
 
     #[tracked]
@@ -55,7 +52,7 @@ impl<'db> ModifierId<'db> {
             res,
             ItemSourceMap::new(
                 db,
-                (crate::IndexMapUpdate(lowerer.exprs), crate::IndexMapUpdate(lowerer.stmts)),
+                (lowerer.exprs, lowerer.stmts),
             ),
         ))
     }

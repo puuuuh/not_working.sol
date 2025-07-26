@@ -31,7 +31,6 @@ use super::user_defined_value_type;
 #[salsa::tracked(debug)]
 #[derive(PartialOrd, Ord)]
 pub struct SourceUnit<'db> {
-    #[id]
     pub file: File,
 
     #[tracked]
@@ -257,6 +256,25 @@ impl<'db> Item<'db> {
             Item::Constructor(constructor_id) => None,
             Item::Modifier(modifier_id) => modifier_id.body(db),
             Item::Module(source_unit) => None,
+        }
+    }
+
+    pub fn clear_origin(self, db: &'db dyn BaseDb) {
+        match self {
+            Item::Using(using_id) => using_id.set_origin(db, None),
+            Item::Contract(contract_id) => contract_id.set_origin(db, None),
+            Item::Enum(enumeration_id) => enumeration_id.set_origin(db, None),
+            Item::UserDefinedValueType(user_defined_value_type_id) => user_defined_value_type_id.set_origin(db, None),
+            Item::Error(error_id) => error_id.set_origin(db, None),
+            Item::Event(event_id) => event_id.set_origin(db, None),
+            Item::Function(function_id) => function_id.set_origin(db, None),
+            Item::StateVariable(state_variable_id) => state_variable_id.set_origin(db, None),
+            Item::Struct(structure_id) => structure_id.set_origin(db, None),
+            Item::Constructor(constructor_id) => constructor_id.set_origin(db, None),
+            Item::Modifier(modifier_id) => modifier_id.set_origin(db, None),
+            Item::Module(_)
+                | Item::Import(_)
+                | Item::Pragma(_) => {},
         }
     }
 }
